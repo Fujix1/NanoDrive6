@@ -2,7 +2,7 @@
 #define COMMON_H
 
 #define ND_VERSION "6"
-#define ND_FIRM "1.3"
+#define ND_FIRM "1.31"
 
 // Current hardware setup
 #define CHIP0 CHIP_YM2612
