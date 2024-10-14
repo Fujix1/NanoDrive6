@@ -16,6 +16,10 @@ https://github.com/lovyan03/LovyanGFX
 - PNGdec by Larry Bank: Apache 2.0 license
 https://github.com/bitbank2/PNGdec
 
+# PCB
+
+![pcb](https://github.com/user-attachments/assets/ec0ef72e-edaa-413a-92b3-2d8dc88f904d)
+
 
 # Thanks to
 
