@@ -156,7 +156,7 @@ bool NDFile::readFile(String path) {
   }
   vgm.size = _vgmFile.size();
   _vgmFile.read(vgm.vgmData, vgm.size);
-  Serial.printf("File name: %s\n", _vgmFile.name());
+  Serial.printf("File name: %s\n", _vgmFile.path());
   _vgmFile.close();
 
   // check file
