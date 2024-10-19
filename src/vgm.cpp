@@ -373,6 +373,7 @@ si5351Freq_t VGM::normalizeFreq(uint32_t freq, t_chip chip) {
     case CHIP_YM2612: {
       switch (freq) {
         case 8000000:
+        case 0x807a1200:
           return SI5351_8000;
           break;
         case 7670453:
