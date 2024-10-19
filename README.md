@@ -16,6 +16,12 @@ https://github.com/lovyan03/LovyanGFX
 - PNGdec by Larry Bank: Apache 2.0 license
 https://github.com/bitbank2/PNGdec
 
+# PCB
+
+![pcb](https://github.com/user-attachments/assets/ec0ef72e-edaa-413a-92b3-2d8dc88f904d)
+
+
+![ESP32S3_NanoDrive](https://github.com/user-attachments/assets/f880bc37-d055-4cf4-a9db-40e6c198ecdf)
 
 # Thanks to
 
