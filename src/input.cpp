@@ -122,7 +122,7 @@ Button Input::_readButton() {
     return btnRIGHT;
   else if (VAL_2 - 70 <= in && in < VAL_2 + 50)
     return btnLEFT;
-  else if (VAL_3 - 90 <= in && in < VAL_3 + 50)
+  else if (VAL_3 - 90 <= in && in < VAL_3 + 100)
     return btnDOWN;
   else if (VAL_4 - 100 <= in && in < VAL_4 + 200)
     return btnUP;
