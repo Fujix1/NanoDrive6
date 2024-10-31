@@ -235,7 +235,7 @@ void dispTimerHandler(void* param) {
 void drawBG() {
   frameBuffer.fillSprite(C_BASEBG);
   frameBuffer.fillRect(0, 0, LCD_W, 19, C_HEADER);
-  frameBuffer.fillRect(0, 75, LCD_W, 125, C_DARK);
+  // frameBuffer.fillRect(0, 75, LCD_W, 125, C_DARK);
   frameBuffer.fillRoundRect(1, 279, LCD_W - 2, 40, 2, C_DARK);
   frameBuffer.pushImage(8, 211, ICONS_WIDTH, ICONS_HEIGHT, icons);
   frameBuffer.fillRoundRect(6, 283, 17, 14, 2, C_FOOTER_ACTIVE);
@@ -433,16 +433,22 @@ bool openPNG(String dirName, String fileName, bool AA = false, bool toSprite = t
 
       // リサイズ
       float w, h;
-      if (sprPng.width() > sprPng.height()) {
+      // 640x400 の場合比率保持
+      if (sprPng.width() == 640 && sprPng.height() == 400) {
+        w = (float)(LCD_W + 1) / png.getWidth();
+        h = 0.2646;
+        sprPngResized.fillSprite(TFT_BLACK);
+      } else if (sprPng.width() > sprPng.height()) {
         // 横長
         w = (float)(LCD_W + 1) / png.getWidth();
         h = 127.0 / png.getHeight();
+        sprPngResized.fillSprite(C_HEADER);
       } else {
         // 縦長画像
         w = 94.5 / png.getWidth();
         h = 127.0 / png.getHeight();
+        sprPngResized.fillSprite(C_HEADER);
       }
-      sprPngResized.fillSprite(C_HEADER);
 
       if (AA) {
         sprPng.pushRotateZoomWithAA(&sprPngResized, 84.5, 63, 0, w, h);
