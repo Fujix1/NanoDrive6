@@ -34,11 +34,12 @@ typedef enum {
   CHIP_YM2610,
   CHIP_YM3812,
   CHIP_AY8910,
+  CHIP_YMF262,
 } t_chip;
 
 // チップ名
 const std::vector<String> CHIP_LABEL = {"",       "SN76489", "SN76489", "YM2612", "YM2151", "YM2203",
-                                        "YM2203", "YM2608",  "YM2610",  "YM3812", "AY8910"};
+                                        "YM2203", "YM2608",  "YM2610",  "YM3812", "AY8910", "YMF262"};
 
 class VGM {
  public:
@@ -79,6 +80,7 @@ class VGM {
   int32_t _vgmDelay = 0;
   uint16_t _vgmLoop = 0;
   uint64_t _vgmSamples;
+  uint64_t _vgmStart = 0;
   uint32_t _pcmpos = 0;
 
   u32_t _xgmSamplePos[4] = {0, 0, 0, 0};

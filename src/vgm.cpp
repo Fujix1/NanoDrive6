@@ -91,6 +91,7 @@ bool VGM::ready() {
   dataOffset = (version >= 0x150) ? get_ui32_at(0x34) + 0x34 : 0x40;
   _pos = dataOffset;
 
+  // Setup Clocks
   uint32_t sn76489_clock = get_ui32_at(0x0c);
   if (sn76489_clock) {
     if (CHIP0 == CHIP_SN76489_0) {
@@ -140,15 +141,16 @@ bool VGM::ready() {
     } else if (CHIP1 == CHIP_AY8910) {
       freq[1] = normalizeFreq(ay8910_clock, CHIP_AY8910);
     }
+    if (CHIP0 == CHIP_YM2203_0) {
+      freq[0] = normalizeFreq(ay8910_clock, CHIP_AY8910);
+    }
   }
 
   uint32_t ym2203_clock = (version >= 0x151 && dataOffset >= 0x78) ? get_ui32_at(0x44) : 0;
-  // Serial.printf("ym2203_clock: %d\n", ym2203_clock);
-
   if (ym2203_clock) {
     if (ym2203_clock & 0x40000000) {  // check the second chip
-      if (CHIP0 == CHIP_YM2203_1) {
-        freq[0] = normalizeFreq(ym2203_clock, CHIP_YM2203_1);
+      if (CHIP0 == CHIP_YM2203_0) {
+        freq[0] = normalizeFreq(ym2203_clock, CHIP_YM2203_0);
       }
       if (CHIP1 == CHIP_YM2203_1) {
         freq[1] = normalizeFreq(ym2203_clock, CHIP_YM2203_1);
@@ -156,16 +158,20 @@ bool VGM::ready() {
     } else {
       if (CHIP0 == CHIP_YM2203_0) {
         freq[0] = normalizeFreq(ym2203_clock, CHIP_YM2203_0);
-      }
-      if (CHIP1 == CHIP_YM2203_0) {
-        freq[1] = normalizeFreq(ym2203_clock, CHIP_YM2203_0);
+      } else if (CHIP1 == CHIP_YM2203_1) {
+        freq[1] = normalizeFreq(ym2203_clock, CHIP_YM2203_1);
       }
 
       // Use YM2612 as YM2203
       if (CHIP0 == CHIP_YM2612) {
         freq[0] = normalizeFreq(ym2203_clock, CHIP_YM2612);
+      } else if (CHIP1 == CHIP_YM2612) {
+        freq[1] = normalizeFreq(ym2203_clock, CHIP_YM2612);
       }
-      if (CHIP1 == CHIP_YM2612) {
+      // Use YM2610 as YM2203
+      if (CHIP0 == CHIP_YM2610) {
+        freq[0] = normalizeFreq(ym2203_clock, CHIP_YM2610);
+      } else if (CHIP1 == CHIP_YM2610) {
         freq[1] = normalizeFreq(ym2203_clock, CHIP_YM2612);
       }
     }
@@ -178,6 +184,32 @@ bool VGM::ready() {
     }
     if (CHIP1 == CHIP_YM2151) {
       freq[1] = normalizeFreq(ym2151_clock, CHIP_YM2151);
+    }
+  }
+
+  uint32_t ym3812_clock = get_ui32_at(0x50);
+  if (ym3812_clock) {
+    if (CHIP0 == CHIP_YM3812) {
+      freq[0] = normalizeFreq(ym3812_clock, CHIP_YM3812);
+    }
+    if (CHIP1 == CHIP_YM3812) {
+      freq[1] = normalizeFreq(ym3812_clock, CHIP_YM3812);
+    }
+    if (CHIP0 == CHIP_YMF262) {
+      freq[0] = normalizeFreq(ym3812_clock, CHIP_YM3812);
+    }
+    if (CHIP0 == CHIP_YMF262) {
+      freq[1] = normalizeFreq(ym3812_clock, CHIP_YM3812);
+    }
+  }
+
+  uint32_t ymf262_clock = get_ui32_at(0x5c);
+  if (ymf262_clock) {
+    if (CHIP0 == CHIP_YMF262) {
+      freq[0] = normalizeFreq(ymf262_clock, CHIP_YMF262);
+    }
+    if (CHIP1 == CHIP_YMF262) {
+      freq[1] = normalizeFreq(ymf262_clock, CHIP_YMF262);
     }
   }
 
@@ -225,6 +257,7 @@ bool VGM::ready() {
   updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
               gd3.date, chip[0], chip[1], FORMAT_LABEL[vgm.format], 0, n, ndFile.files[ndFile.currentDir].size()});
 
+  _vgmStart = micros();
   return true;
 }
 
@@ -276,6 +309,7 @@ String VGM::_digGD3() {
 }
 
 //----------------------------------------------------------------------
+// 周波数の実際の値を設定
 si5351Freq_t VGM::normalizeFreq(uint32_t freq, t_chip chip) {
   switch (chip) {
     case CHIP_AY8910: {
@@ -435,9 +469,80 @@ si5351Freq_t VGM::normalizeFreq(uint32_t freq, t_chip chip) {
     }
 
     case CHIP_YM2610: {
+      switch (freq) {
+        case 8000000:
+        case 0x807a1200:
+          return SI5351_8000;
+          break;
+        case 7670453:
+          return SI5351_7670;
+          break;
+        case 1500000:  // YM2203 @ 1.5MHz
+          return SI5351_3000;
+          break;
+        case 3000000:  // YM2203 @ 3MHz
+          return SI5351_6000;
+          break;
+        case 3579580:  // YM2203 @ 3.579MHz
+        case 3579545:
+          return SI5351_7159;
+          break;
+        case 3993600:
+          return SI5351_8000;
+          break;
+        case 4000000:
+        case 1077741824:  // デュアル 4MHz
+          return SI5351_8000;
+          break;
+        default:
+          return SI5351_7670;
+      }
       break;
     }
     case CHIP_YM3812: {
+      switch (freq) {
+        case 3500000:
+          return SI5351_3500;
+          break;
+        case 3000000:
+          return SI5351_3000;
+          break;
+        case 4000000:
+        case 0x40000000 + 4000000:
+          return SI5351_4000;
+          break;
+        case 1789772:
+        case 0x40000000 + 1789772:
+          return SI5351_1789;
+          break;
+        case 3579580:
+        case 3579545:
+        case 0x40000000 + 3579580:
+        case 0x40000000 + 3579545:
+          return SI5351_3579;
+          break;
+        case 2578000:
+          return SI5351_2578;
+          break;
+        case 2000000:
+        case 0x40000000 + 2000000:
+          return SI5351_2000;
+          break;
+        default:
+          return SI5351_3579;
+          break;
+      }
+      break;
+    }
+    case CHIP_YMF262: {
+      switch (freq) {
+        case 0xda7a64:
+          return SI5351_14318;
+          break;
+        default:
+          return SI5351_14318;
+          break;
+      }
       break;
     }
   }
@@ -520,49 +625,29 @@ void VGM::vgmProcess() {
     case 0xA0:  // AY8910, YM2203 PSG, YM2149, YMZ294D
       reg = get_ui8();
       dat = get_ui8();
-      FM.setRegister(reg, dat, -1);
-      _vgmSamples++;
-      _vgmDelay -= 1 * ONE_CYCLE;
+      FM.setRegister(reg, dat, 0);
       break;
 
     case 0x30:  // SN76489 CHIP 2
       FM.write(get_ui8(), 2, freq[chipSlot[CHIP_SN76489_1]]);
-      _vgmSamples++;
-      _vgmDelay -= (32000000 / freq[chipSlot[CHIP_SN76489_1]]) * 1000 + ONE_CYCLE - 1600 - 1800;
+
       break;
 
     case 0x50:  // SN76489 CHIP 1
       FM.write(get_ui8(), 1, freq[chipSlot[CHIP_SN76489_0]]);
-      _vgmSamples++;
-      _vgmDelay -= (32000000 / freq[chipSlot[CHIP_SN76489_0]]) * 1000 + ONE_CYCLE - 1600 - 1800;
+
       break;
 
     case 0x52:  // YM2612 port 0, write value dd to register aa
       reg = get_ui8();
       dat = get_ui8();
       FM.setYM2612(0, reg, dat, 0);
-      _vgmSamples++;
-
-      if (reg == 0x2a) {
-        // DAC data strem
-        _vgmDelay -= ONE_CYCLE - 1600 - 300;
-      } else if (reg >= 0x21 && reg <= 0x9e) {
-        _vgmDelay -= ONE_CYCLE - 1600 - 1800;
-      } else if (reg >= 0xa0 && reg <= 0xb6) {
-        _vgmDelay -= ONE_CYCLE - 1600 + 4000 - 1800;
-      }
       break;
 
     case 0x53:  // YM2612 port 1, write value dd to register aa
       reg = get_ui8();
       dat = get_ui8();
       FM.setYM2612(1, reg, dat, 0);
-      _vgmSamples++;
-      if (reg >= 0x30 && reg <= 0x9e) {
-        _vgmDelay -= ONE_CYCLE - 1600 - 1800;
-      } else if (reg >= 0xa0 && reg <= 0xb6) {
-        _vgmDelay -= ONE_CYCLE - 1600 + 4000 - 1800;
-      }
       break;
 
     case 0x54:  // YM2151
@@ -570,33 +655,36 @@ void VGM::vgmProcess() {
       reg = get_ui8();
       dat = get_ui8();
       FM.setRegisterOPM(reg, dat, 0);
-      _vgmSamples++;
-      _vgmDelay -= 1.28 * ONE_CYCLE;
       break;
 
     case 0x55:  // YM2203_0
       reg = get_ui8();
       dat = get_ui8();
-      // FM.setRegister(reg, dat, 1);
       FM.setRegister(reg, dat, 0);
-      _vgmSamples++;
-      _vgmDelay -= 1.25 * ONE_CYCLE;
       break;
 
     case 0xA5:  // YM2203_1
       reg = get_ui8();
       dat = get_ui8();
       FM.setRegister(reg, dat, 1);
-      _vgmSamples++;
-      _vgmDelay -= 1.25 * ONE_CYCLE;
       break;
 
     case 0x5A:  // YM3812
       reg = get_ui8();
       dat = get_ui8();
-      // FM.setRegister(reg, dat, 0);
-      _vgmSamples++;
-      _vgmDelay -= 1;
+      FM.setRegisterOPL3(0, reg, dat, 1);
+      break;
+
+    case 0x5E:  // YMF262 Port 0
+      reg = get_ui8();
+      dat = get_ui8();
+      FM.setRegisterOPL3(0, reg, dat, 1);
+      break;
+
+    case 0x5F:  // YMF262 Port 1
+      reg = get_ui8();
+      dat = get_ui8();
+      FM.setRegisterOPL3(1, reg, dat, 1);
       break;
 
     // Wait n samples, n can range from 0 to 65535 (approx 1.49 seconds)
@@ -701,6 +789,9 @@ void VGM::vgmProcess() {
   if (_vgmDelay >= 1000) {
     ets_delay_us(_vgmDelay / 1000);
     _vgmDelay = _vgmDelay % 1000;
+    const uint64_t vgmTime = _vgmSamples * 22.67573696145125f;
+    const uint64_t realTime = micros() - _vgmStart;
+    if (realTime > vgmTime) _vgmDelay -= (realTime - vgmTime);
   }
 }
 
