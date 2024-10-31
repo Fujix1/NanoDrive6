@@ -43,6 +43,7 @@ class FMChip {
   void reset();
   void setRegister(byte addr, byte value, int chipno);
   void setRegisterOPM(byte addr, byte value, uint8_t chipno);
+  void setRegisterOPL3(byte port, byte addr, byte data, int chipno);
   void setYM2612(byte port, byte addr, byte data, uint8_t chipno);
   void setYM2612DAC(byte data, uint8_t chipno);
   void write(byte data, byte chipno, si5351Freq_t freq);

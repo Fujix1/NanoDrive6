@@ -258,11 +258,17 @@ void FMChip::setRegister(byte addr, byte data, int chipno = 0) {
   switch (chipno) {
     case 0:
       CS0_LOW;
+      CS1_HIGH;
+      CS2_HIGH;
       break;
     case 1:
+      CS0_HIGH;
       CS1_LOW;
+      CS2_HIGH;
       break;
     case 2:
+      CS0_HIGH;
+      CS1_HIGH;
       CS2_LOW;
       break;
   }
@@ -280,6 +286,56 @@ void FMChip::setRegister(byte addr, byte data, int chipno = 0) {
   WR_LOW;
   ets_delay_us(2);
   WR_HIGH;
+  switch (chipno) {
+    case 0:
+      CS0_HIGH;
+      break;
+    case 1:
+      CS1_HIGH;
+      break;
+    case 2:
+      CS2_HIGH;
+      break;
+  }
+  ets_delay_us(16);  // 最低16
+}
+
+// 　YM2151用レジスタ設定(最適化済)
+void FMChip::setRegisterOPM(byte addr, byte data, uint8_t chipno = 0) {
+  dedic_gpio_bundle_write(dataBus, 0xff, addr);
+  A0_LOW;
+  switch (chipno) {
+    case 0:
+      CS0_LOW;
+      CS1_HIGH;
+      CS2_HIGH;
+      break;
+    case 1:
+      CS0_HIGH;
+      CS1_LOW;
+      CS2_HIGH;
+      break;
+    case 2:
+      CS0_HIGH;
+      CS1_HIGH;
+      CS2_LOW;
+      break;
+  }
+  ets_delay_us(2);
+  WR_LOW;
+  ets_delay_us(2);
+  WR_HIGH;
+  A0_HIGH;
+
+  ets_delay_us(3);
+
+  // data
+  dedic_gpio_bundle_write(dataBus, 0xff, data);
+  ets_delay_us(2);
+  WR_LOW;
+  ets_delay_us(2);
+  WR_HIGH;
+
   switch (chipno) {
     case 0:
       CS0_HIGH;
@@ -294,36 +350,48 @@ void FMChip::setRegister(byte addr, byte data, int chipno = 0) {
   ets_delay_us(12);
 }
 
-// 　YM2151用レジスタ設定(最適化済)
-void FMChip::setRegisterOPM(byte addr, byte data, uint8_t chipno = 0) {
-  dedic_gpio_bundle_write(dataBus, 0xff, addr);
-  A0_LOW;
+void FMChip::setRegisterOPL3(byte port, byte addr, byte data, int chipno) {
   switch (chipno) {
     case 0:
       CS0_LOW;
+      CS1_HIGH;
+      CS2_HIGH;
       break;
     case 1:
+      CS0_HIGH;
       CS1_LOW;
-      break;
+      CS2_HIGH;
     case 2:
+      CS0_HIGH;
+      CS1_HIGH;
       CS2_LOW;
       break;
   }
-  ets_delay_us(2);
+  if (port == 1) {
+    A1_HIGH;
+  } else {
+    A1_LOW;
+  }
+
+  // Address
+  A0_LOW;
+  dedic_gpio_bundle_write(dataBus, 0xff, addr);
   WR_LOW;
-  ets_delay_us(2);
+  ets_delay_us(16);
   WR_HIGH;
   A0_HIGH;
 
-  ets_delay_us(3);
+  ets_delay_us(16);
+
+  // 32 clocks to write address
+  // 14.318180 MHz: 69.84 ns / cycle
+  //  x 32 = 2,234.88 ns = 2.235 us
 
   // data
   dedic_gpio_bundle_write(dataBus, 0xff, data);
-  ets_delay_us(2);
   WR_LOW;
-  ets_delay_us(2);
+  ets_delay_us(16);
   WR_HIGH;
-
   switch (chipno) {
     case 0:
       CS0_HIGH;
@@ -335,7 +403,11 @@ void FMChip::setRegisterOPM(byte addr, byte data, uint8_t chipno = 0) {
       CS2_HIGH;
       break;
   }
-  ets_delay_us(12);
+  if (port == 1) {
+    A1_LOW;
+  }
+
+  ets_delay_us(16);
 }
 
 FMChip FM;
