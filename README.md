@@ -31,3 +31,8 @@ https://chipstream.netlify.app/
 
 - Kumatan for the strongest and most consolidated MD music development assets at 
 https://github.com/kuma4649/mml2vgm
+
+# Firmware Update 手順 (ほくとさん作成）
+
+ファームウェアのアップデート手順をほくとさんにまとめていただきました。ありがとうございます。
+[NanoDrive6のFirmwareVersionUP手順.pdf](https://github.com/user-attachments/files/17610335/NanoDrive6.FirmwareVersionUP.pdf)
