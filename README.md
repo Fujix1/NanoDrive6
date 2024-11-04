@@ -4,6 +4,9 @@ This is a repository for NanoDrive 6 VGM player with YM2612/YM3438 + SN76489 x 2
 
 ![nanodora6](https://github.com/user-attachments/assets/a15e7b2c-7026-4bf4-94d2-e90b153d7c28)
 
+# Manual PDF
+
+You can get the manual at [nd6_manual_r2.pdf](https://github.com/user-attachments/files/17613253/nd6_manual_r2.pdf)
 
 # Credits and licenses
 
