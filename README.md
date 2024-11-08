@@ -23,8 +23,7 @@ https://github.com/bitbank2/PNGdec
 
 ![pcb](https://github.com/user-attachments/assets/ec0ef72e-edaa-413a-92b3-2d8dc88f904d)
 
-
-![ESP32S3_NanoDrive](https://github.com/user-attachments/assets/f880bc37-d055-4cf4-a9db-40e6c198ecdf)
+![schematics](https://github.com/user-attachments/asset
 
 # Thanks to
 
