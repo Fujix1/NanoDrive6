@@ -23,7 +23,8 @@ https://github.com/bitbank2/PNGdec
 
 ![pcb](https://github.com/user-attachments/assets/ec0ef72e-edaa-413a-92b3-2d8dc88f904d)
 
-![schematics](https://github.com/user-attachments/asset
+![schematics](https://github.com/user-attachments/assets/77afa780-a4af-42aa-b96b-b38f2e91e1fe)
+
 
 # Thanks to
 
