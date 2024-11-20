@@ -131,6 +131,7 @@ void NDFile::listDir(const char *dirname) {
     }
     dir.close();
   }
+
   lcd.setCursor(0, y);
   return;
 }
@@ -156,7 +157,7 @@ bool NDFile::readFile(String path) {
   }
   vgm.size = _vgmFile.size();
   _vgmFile.read(vgm.vgmData, vgm.size);
-  Serial.printf("File name: %s\n", _vgmFile.path());
+  Serial.printf("File name: %s\n", path.c_str());
   _vgmFile.close();
 
   // check file
@@ -187,23 +188,25 @@ bool NDFile::dirPlay(int count) {
   currentFile = 0;
   currentDir = mod(currentDir + count, _numDirs);
   ndConfig.saveHistory();
-  return fileOpen(currentDir, currentFile);
+  return fileOpen(currentDir, currentFile, ndFile.getFolderAttenuation(dirs[currentDir]));
 }
 
 //----------------------------------------------------------------------
 // 直接ファイル再生
 // 戻り値: 成功/不成功
-bool NDFile::play(uint16_t d, uint16_t f) {
+bool NDFile::play(uint16_t d, uint16_t f, int8_t att) {
   currentFile = f;
   currentDir = d;
   ndConfig.saveHistory();
-  return fileOpen(currentDir, currentFile);
+  return fileOpen(currentDir, currentFile, ndFile.getFolderAttenuation(dirs[currentDir]));
 }
 
 //----------------------------------------------------------------------
 // ディレクトリ番号＋ファイル番号でファイルを開く
 // 戻り値: 成功/不成功
-bool NDFile::fileOpen(uint16_t d, uint16_t f) {
+// att: 音量減衰率 0 - 96 dB, -1 = 変更しない
+
+bool NDFile::fileOpen(uint16_t d, uint16_t f, int8_t att) {
   if (xSemaphoreTake(spFileOpen, 0) != pdTRUE) {
     Serial.printf("Semapho is already taken.\n");
     return false;
@@ -235,11 +238,43 @@ bool NDFile::fileOpen(uint16_t d, uint16_t f) {
       result = true;
     }
   }
-  nju72341.reset(0);
+  nju72341.reset(att);
   xSemaphoreGive(spFileOpen);
   nju72341.unmute();
 
   return result;
+}
+
+//----------------------------------------------------------------------
+// フォルダの減衰量取得
+// 戻り値: 0 - 96 dB
+// 設定無ければ 0
+uint8_t NDFile::getFolderAttenuation(String path) {
+  bool isDir;
+
+  File dir = SD.open(path);
+  if (!dir) {
+    return 0;
+  }
+
+  while (1) {
+    String filePath = dir.getNextFileName(&isDir);
+    if (filePath == "") return 0;
+
+    if (!isDir) {
+      String fileName = filePath.substring(filePath.lastIndexOf("/") + 1);
+      if (fileName.substring(0, 3) == "att") {
+        int att = fileName.substring(3).toInt();
+        if (att > 0 && att <= 24) {
+          return att;
+        } else {
+          return 0;
+        }
+      }
+    }
+  }
+
+  return 0;
 }
 
 NDFile ndFile = NDFile();

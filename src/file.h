@@ -19,8 +19,10 @@ class NDFile {
   bool readFile(String path);
   bool filePlay(int count);
   bool dirPlay(int count);
-  bool play(uint16_t d, uint16_t f);
-  bool fileOpen(uint16_t d, uint16_t f);
+  bool play(uint16_t d, uint16_t f, int8_t att = -1);
+  bool fileOpen(uint16_t d, uint16_t f, int8_t att = -1);
+  uint8_t getFolderAttenuation(String path);  // フォルダの音量減衰取得
+
   uint16_t currentDir;      // 現在のディレクトリ
   uint16_t currentFile;     // 現在のファイル
   uint16_t totalSongs = 0;  // 合計曲数
