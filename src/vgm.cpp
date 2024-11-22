@@ -10,8 +10,8 @@
 #include "fm.h"
 
 #define ONE_CYCLE \
-  22676  // 22.67573696145125 us
-         // 1 / 44100 * 1 000 000
+  22675.737f  // 22.67573696145125 us
+              // 1 / 44100 * 1 000 000
 
 //---------------------------------------------------------------------
 static std::string wstringToUTF8(const std::wstring& src) {
@@ -134,7 +134,8 @@ bool VGM::ready() {
     }
   }
 
-  uint32_t ay8910_clock = (version >= 0x151 && dataOffset >= 0x78) ? get_ui32_at(0x74) : 0;
+  uint32_t ay8910_clock =
+      (version >= 0x151 && dataOffset >= 0x78) ? get_ui32_at(0x74) : 0;
   if (ay8910_clock) {
     if (CHIP0 == CHIP_AY8910) {
       freq[0] = normalizeFreq(ay8910_clock, CHIP_AY8910);
@@ -146,7 +147,8 @@ bool VGM::ready() {
     }
   }
 
-  uint32_t ym2203_clock = (version >= 0x151 && dataOffset >= 0x78) ? get_ui32_at(0x44) : 0;
+  uint32_t ym2203_clock =
+      (version >= 0x151 && dataOffset >= 0x78) ? get_ui32_at(0x44) : 0;
   if (ym2203_clock) {
     if (ym2203_clock & 0x40000000) {  // check the second chip
       if (CHIP0 == CHIP_YM2203_0) {
@@ -237,25 +239,30 @@ bool VGM::ready() {
   if (freq[0] != 0) {
     char buf[7];
     dtostrf((double)freq[0] / 1000000.0, 1, 4, buf);
-    chip[c++] = CHIP_LABEL[CHIP0] + " @ " + String(buf).substring(0, 5) + " MHz";
+    chip[c++] =
+        CHIP_LABEL[CHIP0] + " @ " + String(buf).substring(0, 5) + " MHz";
   }
 
   if (freq[1] != 0) {
     char buf[7];
     dtostrf((double)freq[1] / 1000000.0, 1, 4, buf);
-    chip[c++] = CHIP_LABEL[CHIP1] + " @ " + String(buf).substring(0, 5) + " MHz";
+    chip[c++] =
+        CHIP_LABEL[CHIP1] + " @ " + String(buf).substring(0, 5) + " MHz";
   }
 
   if (c < 2 && freq[2] != 0) {
     char buf[7];
     dtostrf((double)freq[2] / 1000000.0, 1, 4, buf);
-    chip[c++] = CHIP_LABEL[CHIP2] + " @ " + String(buf).substring(0, 5) + " MHz";
+    chip[c++] =
+        CHIP_LABEL[CHIP2] + " @ " + String(buf).substring(0, 5) + " MHz";
   }
 
   u32_t n = 1 + ndFile.currentFile;  // フォルダ内曲番
 
-  updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
-              gd3.date, chip[0], chip[1], FORMAT_LABEL[vgm.format], 0, n, ndFile.files[ndFile.currentDir].size()});
+  updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn,
+              gd3.systemJp, gd3.authorEn, gd3.authorJp, gd3.date, chip[0],
+              chip[1], FORMAT_LABEL[vgm.format], 0, n,
+              ndFile.files[ndFile.currentDir].size()});
 
   _vgmStart = micros();
   return true;
@@ -560,11 +567,15 @@ uint16_t VGM::get_ui16() { return get_ui8() + (get_ui8() << 8); }
 
 //----------------------------------------------------------------------
 // 24 bit 返す
-uint32_t VGM::get_ui24() { return get_ui8() + (get_ui8() << 8) + (get_ui8() << 16); }
+uint32_t VGM::get_ui24() {
+  return get_ui8() + (get_ui8() << 8) + (get_ui8() << 16);
+}
 
 //----------------------------------------------------------------------
 // 32 bit 返す
-uint32_t VGM::get_ui32() { return get_ui8() + (get_ui8() << 8) + (get_ui8() << 16) + (get_ui8() << 24); }
+uint32_t VGM::get_ui32() {
+  return get_ui8() + (get_ui8() << 8) + (get_ui8() << 16) + (get_ui8() << 24);
+}
 
 //----------------------------------------------------------------------
 // 指定場所の 8 bit 返す
@@ -574,18 +585,21 @@ int8_t VGM::get_i8_at(uint32_t p) { return (int8_t)vgmData[p]; }
 
 //----------------------------------------------------------------------
 // 指定場所の 16 bit 返す
-uint16_t VGM::get_ui16_at(uint32_t p) { return (uint32_t(vgmData[p])) + (uint32_t(vgmData[p + 1]) << 8); }
+uint16_t VGM::get_ui16_at(uint32_t p) {
+  return (uint32_t(vgmData[p])) + (uint32_t(vgmData[p + 1]) << 8);
+}
 
 //----------------------------------------------------------------------
 // 指定場所の 24 bit 返す
 uint32_t VGM::get_ui24_at(uint32_t p) {
-  return (uint32_t(vgmData[p])) + (uint32_t(vgmData[p + 1]) << 8) + (uint32_t(vgmData[p + 2]) << 16);
+  return (uint32_t(vgmData[p])) + (uint32_t(vgmData[p + 1]) << 8) +
+         (uint32_t(vgmData[p + 2]) << 16);
 }
 //----------------------------------------------------------------------
 // 指定場所の 32 bit 返す
 uint32_t VGM::get_ui32_at(uint32_t p) {
-  return (uint32_t(vgmData[p])) + (uint32_t(vgmData[p + 1]) << 8) + (uint32_t(vgmData[p + 2]) << 16) +
-         (uint32_t(vgmData[p + 3]) << 24);
+  return (uint32_t(vgmData[p])) + (uint32_t(vgmData[p + 1]) << 8) +
+         (uint32_t(vgmData[p + 2]) << 16) + (uint32_t(vgmData[p + 3]) << 24);
 }
 
 // XGM コマンドの X を返す
@@ -786,7 +800,7 @@ void VGM::vgmProcess() {
       break;
   }
 
-  if (_vgmDelay >= 1000) {
+  if (_vgmDelay >= 3000) {
     ets_delay_us(_vgmDelay / 1000);
     _vgmDelay = _vgmDelay % 1000;
     const uint64_t vgmTime = _vgmSamples * 22.67573696145125f;
@@ -835,7 +849,8 @@ bool VGM::XGMReady() {
   for (int i = 0; i < 63; i++) {
     XGMSampleAddressTable.push_back(get_ui16() * 256 + 0x104);
     XGMSampleSizeTable.push_back(get_ui16() * 256);
-    // Serial.printf("Sample Address: 0x%x, Size: 0x%x\n", XGMSampleAddressTable[i] << 8, XGMSampleSizeTable[i] << 8);
+    // Serial.printf("Sample Address: 0x%x, Size: 0x%x\n",
+    // XGMSampleAddressTable[i] << 8, XGMSampleSizeTable[i] << 8);
   }
 
   // Sample data block size = SLEN
@@ -893,25 +908,30 @@ bool VGM::XGMReady() {
   if (freq[0] != 0) {
     char buf[7];
     dtostrf((double)freq[0] / 1000000.0, 1, 4, buf);
-    chip[c++] = CHIP_LABEL[CHIP0] + " @ " + String(buf).substring(0, 5) + " MHz";
+    chip[c++] =
+        CHIP_LABEL[CHIP0] + " @ " + String(buf).substring(0, 5) + " MHz";
   }
 
   if (freq[1] != 0) {
     char buf[7];
     dtostrf((double)freq[1] / 1000000.0, 1, 4, buf);
-    chip[c++] = CHIP_LABEL[CHIP1] + " @ " + String(buf).substring(0, 5) + " MHz";
+    chip[c++] =
+        CHIP_LABEL[CHIP1] + " @ " + String(buf).substring(0, 5) + " MHz";
   }
 
   if (c < 2 && freq[2] != 0) {
     char buf[7];
     dtostrf((double)freq[2] / 1000000.0, 1, 4, buf);
-    chip[c++] = CHIP_LABEL[CHIP2] + " @ " + String(buf).substring(0, 5) + " MHz";
+    chip[c++] =
+        CHIP_LABEL[CHIP2] + " @ " + String(buf).substring(0, 5) + " MHz";
   }
 
   u32_t n = 1 + ndFile.currentFile;  // フォルダ内曲番
 
-  updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
-              gd3.date, chip[0], chip[1], FORMAT_LABEL[vgm.format], 0, n, ndFile.files[ndFile.currentDir].size()});
+  updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn,
+              gd3.systemJp, gd3.authorEn, gd3.authorJp, gd3.date, chip[0],
+              chip[1], FORMAT_LABEL[vgm.format], 0, n,
+              ndFile.files[ndFile.currentDir].size()});
 
   xgmLoaded = true;
   _xgmStartTick = micros();
@@ -983,7 +1003,8 @@ void VGM::xgmProcess() {
       u8_t channel = command & 0x3;
       u8_t sampleID = get_ui8();
 
-      if (_xgmSampleOn[channel] == false || _xgmPriorities[channel] <= priority) {
+      if (_xgmSampleOn[channel] == false ||
+          _xgmPriorities[channel] <= priority) {
         if (sampleID == 0) {  // ID 0 は停止
           _xgmSampleOn[channel] = false;
         } else {
@@ -1000,7 +1021,8 @@ void VGM::xgmProcess() {
       // Loop command, used for music looping sequence
       _vgmLoop++;
       Serial.printf("loops: %d\n", _vgmLoop);
-      if (_vgmLoop == ndConfig.get(CFG_NUM_LOOP) && ndConfig.get(CFG_NUM_LOOP) != LOOP_INIFITE) {  //   フェードアウトON
+      if (_vgmLoop == ndConfig.get(CFG_NUM_LOOP) &&
+          ndConfig.get(CFG_NUM_LOOP) != LOOP_INIFITE) {  //   フェードアウトON
         nju72341.startFadeout();
       }
 
@@ -1036,7 +1058,8 @@ void VGM::xgmProcess() {
     bool sampFlag = false;
     for (int i = 0; i < 4; i++) {
       if (_xgmSampleOn[i]) {
-        samp += (int8_t)get_ui8_at(XGMSampleAddressTable[_xgmSampleId[i]] + _xgmSamplePos[i]++);
+        samp += (int8_t)get_ui8_at(XGMSampleAddressTable[_xgmSampleId[i]] +
+                                   _xgmSamplePos[i]++);
         sampFlag = true;
         if (_xgmSamplePos[i] >= XGMSampleSizeTable[_xgmSampleId[i]]) {
           _xgmSampleOn[i] = false;

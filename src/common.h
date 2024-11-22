@@ -1,7 +1,6 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#define ND_VERSION "6"
 #define ND_FIRM "1.7"
 
 // Current hardware setup
