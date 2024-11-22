@@ -8,9 +8,10 @@
 #define FADEOUT_STEPS 50
 
 // Aカーブの音量マップ
-static const uint8_t NJU72341_db[FADEOUT_STEPS] = {0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,  2,  2,  2,  3,  3,
-                                                   4,  5,  5,  6,  7,  8,  9,  11, 12, 13, 15, 17, 18, 20, 22, 24, 26,
-                                                   28, 30, 32, 35, 38, 41, 44, 48, 52, 57, 62, 68, 74, 80, 88, 96};
+static const uint8_t NJU72341_db[FADEOUT_STEPS] = {
+    0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,  2,  2,  2,  3,  3,
+    4,  5,  5,  6,  7,  8,  9,  11, 12, 13, 15, 17, 18, 20, 22, 24, 26,
+    28, 30, 32, 35, 38, 41, 44, 48, 52, 57, 62, 68, 74, 80, 88, 96};
 
 static TimerHandle_t hFadeOutTimer;  // フェードアウト用タイマー
 static u32_t _fadeOutStartMS;
@@ -57,7 +58,9 @@ void NJU72341::init(uint16_t fadeOutDuration, bool NJU72342) {
     _fadeOutDuration = fadeOutDuration;
   }
 
-  hFadeOutTimer = xTimerCreate("FADEOUT_TIMER", _fadeOutDuration / FADEOUT_STEPS, pdTRUE, NULL, fadeOutTimerHandler);
+  hFadeOutTimer =
+      xTimerCreate("FADEOUT_TIMER", _fadeOutDuration / FADEOUT_STEPS, pdTRUE,
+                   NULL, fadeOutTimerHandler);
 }
 
 void NJU72341::setFadeoutDuration(uint16_t fadeOutDuration) {
@@ -88,8 +91,11 @@ void NJU72341::startFadeout() {
   }
 }
 
-void NJU72341::reset(uint8_t att) {
-  _attenuation = att;
+// att 減衰量dB: -1 = 変更しない
+void NJU72341::reset(int8_t att) {
+  if (att >= 0) {
+    _attenuation = att;
+  }
   fadeOutStatus = FADEOUT_BEFORE;
   resetFadeout();
 }
@@ -101,6 +107,7 @@ void NJU72341::resetFadeout() {
 }
 
 void NJU72341::setInputGain(tNJU72341_GAIN newInputGain) {
+  _inputGain = newInputGain;
   Wire.beginTransmission(_slaveAddress);
   Wire.write(0x00);
   Wire.write(_inputGain);
@@ -110,7 +117,7 @@ void NJU72341::setInputGain(tNJU72341_GAIN newInputGain) {
 // 全チャンネルの音量設定
 // 0:最大, 96: ミュート
 void NJU72341::setVolumeAll(uint8_t newGain) {
-  uint8_t bit = 119 - newGain;
+  uint8_t bit = 119 - newGain - _attenuation;
   Wire.beginTransmission(_slaveAddress);
   Wire.write(0x01);
   Wire.write(bit);
@@ -147,13 +154,13 @@ void NJU72341::setVolume_3B_4B(uint8_t newGain) {
 
 void NJU72341::mute() {
   _isMuted = true;
-  digitalWrite(NJU72341_MUTE_PIN, HIGH);
+  // digitalWrite(NJU72341_MUTE_PIN, HIGH);
   setVolumeAll(96);
 }
 
 void NJU72341::unmute() {
   setVolumeAll(0);
-  digitalWrite(NJU72341_MUTE_PIN, LOW);
+  // digitalWrite(NJU72341_MUTE_PIN, LOW);
   _isMuted = false;
 }
 
