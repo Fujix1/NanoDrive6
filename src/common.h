@@ -1,12 +1,14 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#define ND_FIRM "1.7"
-
 // Current hardware setup
 #define CHIP0 CHIP_YM2612
 #define CHIP1 CHIP_SN76489_0
 #define CHIP2 CHIP_SN76489_1
+
+#define CHIP0_CLOCK CLK_0
+#define CHIP1_CLOCK CLK_1
+#define CHIP2_CLOCK CLK_0
 
 // LCD
 #define LCD_W 170

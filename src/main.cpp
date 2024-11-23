@@ -24,12 +24,9 @@ void setup() {
   digitalWrite(D0, HIGH);
 
   Serial.begin(115200);
-  Serial.printf("Firmware - %s\n", ND_FIRM);
   Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
-  Serial.printf("Flash - %'d Bytes at %'d\n", ESP.getFlashChipSize(),
-                ESP.getFlashChipSpeed());
-  Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(),
-                ESP.getFreePsram());
+  Serial.printf("Flash - %'d Bytes at %'d\n", ESP.getFlashChipSize(), ESP.getFlashChipSpeed());
+  Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(), ESP.getFreePsram());
 
   /*
     pinMode(A0, OUTPUT);
@@ -76,7 +73,7 @@ void setup() {
   lcd.setFont(&fonts::Font2);
   lcd.println("NANO DRIVE 6");
   lcd.println("2024 Fujix@e2j.net");
-  lcd.printf("Firmware: %s\n\n", ND_FIRM);
+  lcd.printf("Firmware: 1.7\n\n");
 
   lcd.printf("Open Font Render by takkaO\n");
   lcd.printf("LovyganGFX by lovyan\n");
@@ -151,10 +148,8 @@ void setup() {
   }
 
   Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
-  Serial.printf("Flash - %'d Bytes at %'d\n", ESP.getFlashChipSize(),
-                ESP.getFlashChipSpeed());
-  Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(),
-                ESP.getFreePsram());
+  Serial.printf("Flash - %'d Bytes at %'d\n", ESP.getFlashChipSize(), ESP.getFlashChipSpeed());
+  Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(), ESP.getFreePsram());
 }
 
 void loop() {
