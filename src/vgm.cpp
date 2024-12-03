@@ -786,6 +786,7 @@ bool VGM::XGMReady() {
   _vgmSamples = 0;
   _vgmLoop = 0;
   _xgmFrame = 0;
+  _xgmYMSNFrame = 0;
 
   // XGM2
   _xgmYMFrame = 0;
@@ -797,14 +798,11 @@ bool VGM::XGMReady() {
   XGMSampleSizeTable.clear();
   XGMSampleAddressTable.push_back(0);
   XGMSampleSizeTable.push_back(0);
-  _xgmSampleOn[0] = false;
-  _xgmSampleOn[1] = false;
-  _xgmSampleOn[2] = false;
-  _xgmSampleOn[3] = false;
-  _xgmPriorities[0] = 0;
-  _xgmPriorities[1] = 0;
-  _xgmPriorities[2] = 0;
-  _xgmPriorities[3] = 0;
+
+  for (int i = 0; i < XGM1_MAX_PCM_CH; i++) {
+    _xgmSampleOn[i] = false;
+    _xgmPriorities[i] = 0;
+  }
 
   // XGM ident
   if (get_ui32_at(0) == 0x204d4758) {
@@ -969,6 +967,7 @@ bool VGM::XGMReady() {
   return true;
 }
 
+//---------------------------------------------------------------
 // XGM1 処理
 void VGM::xgmProcess() {
   // フェードアウト完了
@@ -977,14 +976,50 @@ void VGM::xgmProcess() {
     return;
   }
 
+  while (_xgmYMSNFrame <= _xgmFrame) {
+    _xgm1ProcessYMSN();
+  }
+
+  _xgmFrame = _xgmYMSNFrame;
+  _xgmWaitUntil = _xgmStartTick + _xgmYMSNFrame * 16666;  // 60Hz
+  _vgmSamples = _xgmYMSNFrame * 735;                      // 44100 / 60
+
+  // PCM Stream mixing
+  while (_xgmWaitUntil - XGM1_PCM_DELAY > micros()) {
+    _xgm1ProcessPCM();
+    ets_delay_us(XGM1_PCM_DELAY);
+  }
+}
+
+void VGM::_xgm1ProcessPCM() {
+  int16_t samp = 0;
+  bool sampFlag = false;
+  for (int i = 0; i < XGM1_MAX_PCM_CH; i++) {
+    if (_xgmSampleOn[i]) {
+      samp += (s8_t)get_ui8_at(XGMSampleAddressTable[_xgmSampleId[i]] + _xgmSamplePos[i]++);
+      sampFlag = true;
+      if (_xgmSamplePos[i] >= XGMSampleSizeTable[_xgmSampleId[i]]) {
+        _xgmSampleOn[i] = false;
+      }
+    }
+  }
+  if (sampFlag) {
+    if (samp > INT8_MAX) {
+      samp = INT8_MAX;
+    } else if (samp < INT8_MIN)
+      samp = INT8_MIN;
+    samp += 128;
+    FM.setYM2612DAC(samp, 0);
+  }
+}
+
+void VGM::_xgm1ProcessYMSN() {
   u8_t command = get_ui8();
 
   switch (command) {
     case 0x00:
       // frame wait
-      _xgmFrame++;
-      _xgmWaitUntil = _xgmStartTick + _xgmFrame * 16666;  // 60Hz
-      _vgmSamples = _xgmFrame * 735;                      // 44100 / 60
+      _xgmYMSNFrame++;
       break;
 
     case 0x10 ... 0x1f:
@@ -1047,32 +1082,9 @@ void VGM::xgmProcess() {
       return;
     }
   }
-
-  // PCM Stream mixing
-  while (_xgmWaitUntil > micros()) {
-    int16_t samp = 0;
-    bool sampFlag = false;
-    for (int i = 0; i < 4; i++) {
-      if (_xgmSampleOn[i]) {
-        samp += (s8_t)get_ui8_at(XGMSampleAddressTable[_xgmSampleId[i]] + _xgmSamplePos[i]++);
-        sampFlag = true;
-        if (_xgmSamplePos[i] >= XGMSampleSizeTable[_xgmSampleId[i]]) {
-          _xgmSampleOn[i] = false;
-        }
-      }
-    }
-    if (sampFlag) {
-      if (samp > INT8_MAX) {
-        samp = INT8_MAX;
-      } else if (samp < INT8_MIN)
-        samp = INT8_MIN;
-      samp += 128;
-      FM.setYM2612DAC(samp, 0);
-    }
-    ets_delay_us(68);
-  }
 }
 
+//---------------------------------------------------------------
 // XGM2 処理
 void VGM::xgm2Process() {
   // フェードアウト完了
@@ -1089,7 +1101,6 @@ void VGM::xgm2Process() {
   }
 
   _xgmFrame = (_xgmPSGFrame < _xgmYMFrame) ? _xgmPSGFrame : _xgmYMFrame;
-
   _xgmWaitUntil = _xgmStartTick + _xgmFrame * 16666;  // 60Hz
   _vgmSamples = _xgmFrame * 735;                      // 44100 / 60
 

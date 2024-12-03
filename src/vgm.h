@@ -7,6 +7,9 @@
 #include "common.h"
 #include "disp.h"
 
+#define XGM1_MAX_PCM_CH 8
+#define XGM1_PCM_DELAY 68
+
 // XGM V2 FM
 #define WAIT_SHORT 0x00 ... 0x0e
 #define WAIT_LONG 0x0F
@@ -144,13 +147,14 @@ class VGM {
   uint64_t _vgmStart = 0;
   uint32_t _pcmpos = 0;
 
-  u32_t _xgmSamplePos[4] = {0, 0, 0, 0};
-  u8_t _xgmSampleId[4] = {0, 0, 0, 0};
-  u8_t _xgmPriorities[4] = {0, 0, 0, 0};
-  bool _xgmSampleOn[4] = {false, false, false, false};
-  bool _xgmPCMHalfSpeed[3] = {false, false, false};
-  bool _xgmPCMHalfTick[3] = {false, false, false};
+  u32_t _xgmSamplePos[XGM1_MAX_PCM_CH];
+  u8_t _xgmSampleId[XGM1_MAX_PCM_CH];
+  u8_t _xgmPriorities[XGM1_MAX_PCM_CH];
+  bool _xgmSampleOn[XGM1_MAX_PCM_CH];
+  bool _xgmPCMHalfSpeed[3];
+  bool _xgmPCMHalfTick[3];
   u32_t _xgmFrame;
+  u32_t _xgmYMSNFrame;
   u32_t _xgmStartTick;
   u32_t _xgmWaitUntil;
   u32_t _xgmWaitYMUntil;
@@ -180,6 +184,10 @@ class VGM {
 
   // when reach the end of the song
   void endProcedure();
+
+  // xgm1
+  void _xgm1ProcessYMSN();
+  void _xgm1ProcessPCM();
 
   // xgm2
   void _xgm2ProcessYM();
