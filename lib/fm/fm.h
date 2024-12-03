@@ -50,7 +50,7 @@ class FMChip {
   void writeRaw(byte data, byte chipno, si5351Freq_t freq);
 
  private:
-  unsigned char psgFrqLowByte = 0;
+  u8_t _psgFrqLowByte = 0;
 };
 
 extern FMChip FM;

@@ -83,21 +83,29 @@ void FMChip::reset(void) {
   FM.write(0xdf, 2, SI5351_1500);
   FM.write(0xff, 2, SI5351_1500);
 
+  _psgFrqLowByte = 0;
+
   ets_delay_us(12000);
 }
 
 // SN76489
 void FMChip::write(byte data, byte chipno, si5351Freq_t freq) {
-  if ((data & 0x80) == 0) {
-    if ((psgFrqLowByte & 0x0F) == 0) {
-      if ((data & 0x3F) == 0) psgFrqLowByte |= 1;
+  //
+
+  if ((data & 0x90) == 0x80 && (data & 0x60) >> 5 != 3) {
+    // Low byte 周波数 0x8n, 0xan, 0xcn
+    _psgFrqLowByte = data;
+
+  } else if ((data & 0x80) == 0) {  // High byte
+    if ((_psgFrqLowByte & 0x0F) == 0) {
+      if ((data & 0x3F) == 0) _psgFrqLowByte |= 1;
     }
-    writeRaw(psgFrqLowByte, chipno, freq);
+    writeRaw(_psgFrqLowByte, chipno, freq);
     writeRaw(data, chipno, freq);
-  } else if ((data & 0x90) == 0x80 && (data & 0x60) >> 5 != 3)
-    psgFrqLowByte = data;
-  else
+
+  } else {
     writeRaw(data, chipno, freq);
+  }
 }
 
 void FMChip::writeRaw(byte data, byte chipno, si5351Freq_t freq) {

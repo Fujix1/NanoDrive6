@@ -40,3 +40,6 @@ https://github.com/kuma4649/mml2vgm
 ファームウェアのアップデート手順を[ほくとさん](https://x.com/NightBird_hoku)にまとめていただきました。ありがとうございます。
 
 [NanoDrive6のFirmwareVersionUP手順.pdf](https://github.com/user-attachments/files/17610335/NanoDrive6.FirmwareVersionUP.pdf)
+
+
+Portions of this software are copyright © The FreeTypeProject (www.freetype.org). All rights reserved.

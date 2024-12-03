@@ -160,14 +160,6 @@ bool NDFile::readFile(String path) {
   Serial.printf("File name: %s\n", path.c_str());
   _vgmFile.close();
 
-  // check file
-  String ext = path.substring(path.length() - 4);
-  if (ext.equalsIgnoreCase(".vgm")) {
-    vgm.format = FORMAT_VGM;
-  } else if (ext.equalsIgnoreCase(".xgm")) {
-    vgm.format = FORMAT_XGM;
-  }
-
   return true;
 }
 
@@ -216,26 +208,17 @@ bool NDFile::fileOpen(uint16_t d, uint16_t f, int8_t att) {
   nju72341.resetFadeout();
   FM.reset();
 
-  // stop sound output off SN76489
-  FM.write(0x9f, 1, SI5351_1500);
-  FM.write(0xbf, 1, SI5351_1500);
-  FM.write(0xdf, 1, SI5351_1500);
-  FM.write(0xff, 1, SI5351_1500);
-
-  FM.write(0x9f, 2, SI5351_1500);
-  FM.write(0xbf, 2, SI5351_1500);
-  FM.write(0xdf, 2, SI5351_1500);
-  FM.write(0xff, 2, SI5351_1500);
-
   String st = dirs[d] + "/" + files[d][f];
 
   bool result = false;
 
   if (readFile(st)) {
-    if (vgm.format == FORMAT_VGM && vgm.ready()) {
-      result = true;
-    } else if (vgm.format == FORMAT_XGM && vgm.XGMReady()) {
-      result = true;
+    // check file type
+    String ext = st.substring(st.length() - 4);
+    if (ext.equalsIgnoreCase(".vgm")) {
+      result = vgm.ready();
+    } else if (ext.equalsIgnoreCase(".xgm")) {
+      result = vgm.XGMReady();
     }
   }
   nju72341.reset(att);

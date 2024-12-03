@@ -20,7 +20,7 @@ static std::string wstringToUTF8(const std::wstring& src) {
 }
 
 //---------------------------------------------------------------------
-static uint32_t gd3p;
+static u32_t gd3p;
 void parseGD3(t_gd3* gd3, u32_t offset) {}
 
 //---------------------------------------------------------------------
@@ -28,7 +28,7 @@ void parseGD3(t_gd3* gd3, u32_t offset) {}
 VGM::VGM() {
   // メモリ確保
   psramInit();  // ALWAYS CALL THIS BEFORE USING THE PSRAM
-  vgmData = (uint8_t*)ps_calloc(MAX_FILE_SIZE, sizeof(uint8_t));
+  vgmData = (u8_t*)ps_calloc(MAX_FILE_SIZE, sizeof(u8_t));
 
   // チップスロット
   for (int i = 0; i < sizeof chipSlot / sizeof chipSlot[0]; i++) {
@@ -53,6 +53,8 @@ bool VGM::ready() {
   xgmLoaded = false;
   _pos = 0;
 
+  format = FORMAT_UNKNOWN;
+
   if (vgmData == NULL) {
     Serial.println("ERROR: PSRAM確保失敗");
     return false;
@@ -73,6 +75,8 @@ bool VGM::ready() {
     return false;
   }
 
+  format = FORMAT_VGM;
+
   // version
   version = get_ui32_at(8);
 
@@ -92,7 +96,7 @@ bool VGM::ready() {
   _pos = dataOffset;
 
   // Setup Clocks
-  uint32_t sn76489_clock = get_ui32_at(0x0c);
+  u32_t sn76489_clock = get_ui32_at(0x0c);
   if (sn76489_clock) {
     if (CHIP0 == CHIP_SN76489_0) {
       freq[CHIP0_CLOCK] = normalizeFreq(sn76489_clock, CHIP_SN76489_0);
@@ -107,11 +111,11 @@ bool VGM::ready() {
       if (version < 0x170) {
         freq[2] = normalizeFreq(sn76489_clock, CHIP_SN76489_0);
       } else {
-        uint32_t headerSize = get_ui32_at(0xbc);
-        uint32_t chpClockOffset = get_ui32_at(0xbc + headerSize);
-        uint8_t entryCount = get_ui8_at(0xbc + headerSize + chpClockOffset);
-        uint8_t chipID = get_ui8_at(0xbc + headerSize + chpClockOffset + 1);
-        uint32_t clock = get_ui32_at(0xbc + headerSize + chpClockOffset + 2);
+        u32_t headerSize = get_ui32_at(0xbc);
+        u32_t chpClockOffset = get_ui32_at(0xbc + headerSize);
+        u8_t entryCount = get_ui8_at(0xbc + headerSize + chpClockOffset);
+        u8_t chipID = get_ui8_at(0xbc + headerSize + chpClockOffset + 1);
+        u32_t clock = get_ui32_at(0xbc + headerSize + chpClockOffset + 2);
 
         // Serial.printf("chipId: %d, freq: %x\n", chipID, clock);
 
@@ -125,7 +129,7 @@ bool VGM::ready() {
     }
   }
 
-  uint32_t ym2612_clock = get_ui32_at(0x2c);
+  u32_t ym2612_clock = get_ui32_at(0x2c);
   if (ym2612_clock) {
     if (CHIP0 == CHIP_YM2612) {
       freq[CHIP0_CLOCK] = normalizeFreq(ym2612_clock, CHIP_YM2612);
@@ -134,7 +138,7 @@ bool VGM::ready() {
     }
   }
 
-  uint32_t ay8910_clock = (version >= 0x151 && dataOffset >= 0x78) ? get_ui32_at(0x74) : 0;
+  u32_t ay8910_clock = (version >= 0x151 && dataOffset >= 0x78) ? get_ui32_at(0x74) : 0;
   if (ay8910_clock) {
     if (CHIP0 == CHIP_AY8910) {
       freq[CHIP0_CLOCK] = normalizeFreq(ay8910_clock, CHIP_AY8910);
@@ -146,7 +150,7 @@ bool VGM::ready() {
     }
   }
 
-  uint32_t ym2203_clock = (version >= 0x151 && dataOffset >= 0x78) ? get_ui32_at(0x44) : 0;
+  u32_t ym2203_clock = (version >= 0x151 && dataOffset >= 0x78) ? get_ui32_at(0x44) : 0;
   if (ym2203_clock) {
     if (ym2203_clock & 0x40000000) {  // check the second chip
       if (CHIP0 == CHIP_YM2203_0) {
@@ -177,7 +181,7 @@ bool VGM::ready() {
     }
   }
 
-  uint32_t ym2151_clock = get_ui32_at(0x30);
+  u32_t ym2151_clock = get_ui32_at(0x30);
   if (ym2151_clock) {
     if (CHIP0 == CHIP_YM2151) {
       freq[CHIP0_CLOCK] = normalizeFreq(ym2151_clock, CHIP_YM2151);
@@ -187,7 +191,7 @@ bool VGM::ready() {
     }
   }
 
-  uint32_t ym3812_clock = get_ui32_at(0x50);
+  u32_t ym3812_clock = get_ui32_at(0x50);
   if (ym3812_clock) {
     if (CHIP0 == CHIP_YM3812) {
       freq[CHIP0_CLOCK] = normalizeFreq(ym3812_clock, CHIP_YM3812);
@@ -203,7 +207,7 @@ bool VGM::ready() {
     }
   }
 
-  uint32_t ymf262_clock = get_ui32_at(0x5c);
+  u32_t ymf262_clock = get_ui32_at(0x5c);
   if (ymf262_clock) {
     if (CHIP0 == CHIP_YMF262) {
       freq[CHIP0_CLOCK] = normalizeFreq(ymf262_clock, CHIP_YMF262);
@@ -267,15 +271,7 @@ void VGM::_parseGD3() {
 
   // GD3 が無い場合
   if (vgm.size < gd3Offset) {
-    gd3.trackEn = ndFile.files[ndFile.currentDir][ndFile.currentFile];
-    gd3.trackJp = ndFile.files[ndFile.currentDir][ndFile.currentFile];
-    gd3.gameEn = "(No GD3 info)";
-    gd3.gameJp = "(GD3情報なし)";
-    gd3.systemEn = "";
-    gd3.systemJp = "";
-    gd3.authorEn = "";
-    gd3.authorJp = "";
-    gd3.date = "";
+    _resetGD3();
   } else {
     gd3.trackEn = _digGD3();
     gd3.trackJp = _digGD3();
@@ -286,14 +282,26 @@ void VGM::_parseGD3() {
     gd3.authorEn = _digGD3();
     gd3.authorJp = _digGD3();
     gd3.date = _digGD3();
-    // gd3.converted = _digGD3();
-    // gd3.notes = _digGD3();
+    gd3.converted = _digGD3();
+    gd3.notes = _digGD3();
 
     if (gd3.trackJp == "") gd3.trackJp = gd3.trackEn;
     if (gd3.gameJp == "") gd3.gameJp = gd3.gameEn;
     if (gd3.systemJp == "") gd3.systemJp = gd3.systemEn;
     if (gd3.authorJp == "") gd3.authorJp = gd3.authorEn;
   }
+}
+
+void VGM::_resetGD3() {
+  gd3.trackEn = ndFile.files[ndFile.currentDir][ndFile.currentFile];
+  gd3.trackJp = ndFile.files[ndFile.currentDir][ndFile.currentFile];
+  gd3.gameEn = "(No GD3 info)";
+  gd3.gameJp = "(GD3情報なし)";
+  gd3.systemEn = "";
+  gd3.systemJp = "";
+  gd3.authorEn = "";
+  gd3.authorJp = "";
+  gd3.date = "";
 }
 
 String VGM::_digGD3() {
@@ -310,7 +318,7 @@ String VGM::_digGD3() {
 
 //----------------------------------------------------------------------
 // 周波数の実際の値を設定
-si5351Freq_t VGM::normalizeFreq(uint32_t freq, t_chip chip) {
+si5351Freq_t VGM::normalizeFreq(u32_t freq, t_chip chip) {
   switch (chip) {
     case CHIP_AY8910: {
       switch (freq) {
@@ -552,44 +560,45 @@ si5351Freq_t VGM::normalizeFreq(uint32_t freq, t_chip chip) {
 
 //----------------------------------------------------------------------
 // 8 bit 返す
-uint8_t VGM::get_ui8() { return vgmData[_pos++]; }
+u8_t VGM::get_ui8() { return vgmData[_pos++]; }
 
 //----------------------------------------------------------------------
 // 16 bit 返す
-uint16_t VGM::get_ui16() { return get_ui8() + (get_ui8() << 8); }
+u16_t VGM::get_ui16() { return get_ui8() + (get_ui8() << 8); }
 
 //----------------------------------------------------------------------
 // 24 bit 返す
-uint32_t VGM::get_ui24() { return get_ui8() + (get_ui8() << 8) + (get_ui8() << 16); }
+u32_t VGM::get_ui24() { return get_ui8() + (get_ui8() << 8) + (get_ui8() << 16); }
 
 //----------------------------------------------------------------------
 // 32 bit 返す
-uint32_t VGM::get_ui32() { return get_ui8() + (get_ui8() << 8) + (get_ui8() << 16) + (get_ui8() << 24); }
+u32_t VGM::get_ui32() { return get_ui8() + (get_ui8() << 8) + (get_ui8() << 16) + (get_ui8() << 24); }
 
 //----------------------------------------------------------------------
 // 指定場所の 8 bit 返す
-uint8_t VGM::get_ui8_at(uint32_t p) { return vgmData[p]; }
+u8_t VGM::get_ui8_at(u32_t p) { return vgmData[p]; }
 
-int8_t VGM::get_i8_at(uint32_t p) { return (int8_t)vgmData[p]; }
+s8_t VGM::get_s8_at(u32_t p) { return (s8_t)vgmData[p]; }
 
 //----------------------------------------------------------------------
 // 指定場所の 16 bit 返す
-uint16_t VGM::get_ui16_at(uint32_t p) { return (uint32_t(vgmData[p])) + (uint32_t(vgmData[p + 1]) << 8); }
+u16_t VGM::get_ui16_at(u32_t p) { return (u32_t(vgmData[p])) + (u32_t(vgmData[p + 1]) << 8); }
 
 //----------------------------------------------------------------------
 // 指定場所の 24 bit 返す
-uint32_t VGM::get_ui24_at(uint32_t p) {
-  return (uint32_t(vgmData[p])) + (uint32_t(vgmData[p + 1]) << 8) + (uint32_t(vgmData[p + 2]) << 16);
+u32_t VGM::get_ui24_at(u32_t p) {
+  return (u32_t(vgmData[p])) + (u32_t(vgmData[p + 1]) << 8) + (u32_t(vgmData[p + 2]) << 16);
 }
+
 //----------------------------------------------------------------------
 // 指定場所の 32 bit 返す
-uint32_t VGM::get_ui32_at(uint32_t p) {
-  return (uint32_t(vgmData[p])) + (uint32_t(vgmData[p + 1]) << 8) + (uint32_t(vgmData[p + 2]) << 16) +
-         (uint32_t(vgmData[p + 3]) << 24);
+u32_t VGM::get_ui32_at(u32_t p) {
+  return (u32_t(vgmData[p])) + (u32_t(vgmData[p + 1]) << 8) + (u32_t(vgmData[p + 2]) << 16) +
+         (u32_t(vgmData[p + 3]) << 24);
 }
 
 // XGM コマンドの X を返す
-uint8_t VGM::getNumWrites(u8_t command) { return command % 0xf; }
+u8_t VGM::getNumWrites(u8_t command) { return command % 0xf; }
 
 //----------------------------------------------------------------------
 // VGM処理
@@ -597,29 +606,13 @@ uint8_t VGM::getNumWrites(u8_t command) { return command % 0xf; }
 void VGM::vgmProcess() {
   // フェードアウト完了
   if (nju72341.fadeOutStatus == FADEOUT_COMPLETED) {
-    switch (ndConfig.get(CFG_REPEAT)) {
-      case REPEAT_ONE: {
-        ndFile.filePlay(0);
-        break;
-      }
-      case REPEAT_FOLDER: {
-        ndFile.filePlay(1);
-        break;
-      }
-      case REPEAT_ALL: {
-        if (ndFile.getNumFilesinCurrentDir() - 1 == ndFile.currentFile)
-          ndFile.dirPlay(1);
-        else
-          ndFile.filePlay(1);
-        break;
-      }
-    }
+    endProcedure();
     return;
   }
 
-  uint8_t reg;
-  uint8_t dat;
-  uint8_t command = get_ui8();
+  u8_t reg;
+  u8_t dat;
+  u8_t command = get_ui8();
 
   switch (command) {
     case 0xA0:  // AY8910, YM2203 PSG, YM2149, YMZ294D
@@ -709,23 +702,8 @@ void VGM::vgmProcess() {
 
     case 0x66:
       if (!loopOffset || ndConfig.get(CFG_FADEOUT) == FO_0) {  // ループしない曲
-        switch (ndConfig.get(CFG_REPEAT)) {
-          case REPEAT_ONE: {
-            ndFile.filePlay(0);
-            break;
-          }
-          case REPEAT_FOLDER: {
-            ndFile.filePlay(1);
-            break;
-          }
-          case REPEAT_ALL: {
-            if (ndFile.getNumFilesinCurrentDir() - 1 == ndFile.currentFile)
-              ndFile.dirPlay(1);
-            else
-              ndFile.filePlay(1);
-            break;
-          }
-        }
+        endProcedure();
+        return;
       } else {
         _vgmLoop++;
         if (_vgmLoop == ndConfig.get(CFG_NUM_LOOP) &&
@@ -796,9 +774,11 @@ void VGM::vgmProcess() {
 }
 
 //---------------------------------------------------------------------
-// xgm (not fully tested, only supports v1.1 so far)
+// xgm
 // XGM setup
 bool VGM::XGMReady() {
+  bool hasGd3 = false;
+
   vgmLoaded = false;
   xgmLoaded = false;
   _pos = 0;
@@ -806,6 +786,10 @@ bool VGM::XGMReady() {
   _vgmSamples = 0;
   _vgmLoop = 0;
   _xgmFrame = 0;
+
+  // XGM2
+  _xgmYMFrame = 0;
+  _xgmPSGFrame = 0;
 
   _xgmWaitUntil = 0;
 
@@ -822,59 +806,124 @@ bool VGM::XGMReady() {
   _xgmPriorities[2] = 0;
   _xgmPriorities[3] = 0;
 
-  // XGM 1 ident
-  if (get_ui32_at(0) != 0x204d4758) {
+  // XGM ident
+  if (get_ui32_at(0) == 0x204d4758) {
+    XGMVersion = 1;
+    format = FORMAT_XGM;
+    Serial.println("XGM Version 1.1");
+  } else if (get_ui32_at(0) == 0x324d4758) {
+    XGMVersion = 2;
+    format = FORMAT_XGM2;
+    Serial.println("XGM Version 2");
+  } else {
     Serial.println("ERROR: XGM ファイル解析失敗");
+    format = FORMAT_UNKNOWN;
+    u32_t n = 1 + ndFile.currentFile;
+    updateDisp({"Bad XGM file ident", "XGMファイル解析失敗", "", "", "--", "--", "--", "--", "--", "", "",
+                FORMAT_LABEL[vgm.format], 0, n, ndFile.files[ndFile.currentDir].size()});
+    Serial.println("ERROR: Bad XGM file ident.");
+
     xgmLoaded = false;
     return false;
   }
-  XGMVersion = 1;
 
-  // Sample id table
-  _pos = 0x4;
-  for (int i = 0; i < 63; i++) {
-    XGMSampleAddressTable.push_back(get_ui16() * 256 + 0x104);
-    XGMSampleSizeTable.push_back(get_ui16() * 256);
-    // Serial.printf("Sample Address: 0x%x, Size: 0x%x\n",
-    // XGMSampleAddressTable[i] << 8, XGMSampleSizeTable[i] << 8);
+  // XGM 1.1 / 2 information
+  switch (XGMVersion) {
+    case 1: {
+      // Sample id table
+      _pos = 0x4;
+      for (int i = 0; i < 63; i++) {
+        XGMSampleAddressTable.push_back(get_ui16() * 256 + 0x104);
+        XGMSampleSizeTable.push_back(get_ui16() * 256);
+      }
+
+      // Sample data block size = SLEN
+      XGM_SLEN = get_ui16() << 8;
+
+      // Version
+      // Serial.printf("XGM Version: %d\n", get_ui8());
+
+      // NTSC/PAL, GD3, MultiTrack
+      XGM_FLAGS = get_ui8_at(0x103);
+      // PAL
+      // GD3
+      // Ignore MultiTrack
+      _xgmIsNTSC = (XGM_FLAGS & 0b1 == 0);
+      hasGd3 = XGM_FLAGS & 0b10;
+
+      // Music data block size = MLEN
+      XGM_MLEN = get_ui32_at(0x104 + XGM_SLEN);
+      // Serial.printf("MLEN: %x\n", XGM_MLEN);
+
+      // Music data block position
+      _pos = 0x108 + XGM_SLEN;
+      // Serial.printf("0x108+ SLEN: %x\n", _pos);
+
+      gd3Offset = 0x108 + XGM_SLEN + XGM_MLEN;
+
+      break;
+    }
+    case 2: {
+      _pos = 0x4;
+      // Format description
+      XGM_FLAGS = get_ui8_at(0x0005);
+      _xgmIsNTSC = (XGM_FLAGS & 0b0001);
+      // ignore multi track
+      // packed FM / PSG / GD3
+      hasGd3 = XGM_FLAGS & 0b100;
+
+      // SLEN: Sample data bloc size / 256 (ex: $0200 means 512*256 = 131072 bytes)
+      XGM_SLEN = get_ui16_at(0x0006) << 8;
+      Serial.printf("XGM_SLEN: %x\n", XGM_SLEN);
+
+      // FMLEN: FM music data block size / 256 (ex: $0040 means 64*256 = 16384 bytes)
+      XGM_FMLEN = get_ui16_at(0x0008) << 8;
+      Serial.printf("XGM_FMLEN: %x\n", XGM_FMLEN);
+
+      // PSGLEN: PSG music data block size / 256 (ex: $0020 means 32*256 = 8192 bytes)
+      XGM_PSGLEN = get_ui16_at(0x000a) << 8;
+      Serial.printf("XGM_PSGLEN: %x\n", XGM_PSGLEN);
+
+      // SID: sample id table
+      _pos = 0x000c;
+
+      for (int i = 0; i < 124; i++) {
+        u16_t value = get_ui16();
+        if (value == 0xffff) {
+          XGMSampleAddressTable.push_back(0);
+        } else {
+          XGMSampleAddressTable.push_back(value * 256 + 0x104);
+        }
+      }
+
+      for (int i = 1; i < 124; i++) {
+        if (XGMSampleAddressTable[i] == 0) {
+          XGMSampleSizeTable.push_back(0);
+        } else {
+          XGMSampleSizeTable.push_back(XGMSampleAddressTable[i + 1] - XGMSampleAddressTable[i]);
+        }
+      }
+
+      gd3Offset = 0x104 + XGM_SLEN + XGM_FMLEN + XGM_PSGLEN;
+
+      _xgm2_ym_offset = 0x104 + XGM_SLEN;
+      _xgm2_psg_offset = 0x104 + XGM_SLEN + XGM_FMLEN;
+      _xgm2_ym_pos = _xgm2_ym_offset;
+      _xgm2_psg_pos = _xgm2_psg_offset;
+
+      break;
+    }
+    default: {
+      Serial.println("Unexpected XGM version.");
+      return false;
+    }
   }
 
-  // Sample data block size = SLEN
-  XGM_SLEN = get_ui16() << 8;
-
-  // Version
-  // Serial.printf("XGM Version: %d\n", get_ui8());
-
-  // NTSC/PAL, GD3, MultiTrack
-  XGM_FLAGS = get_ui8_at(0x103);
-  // PAL
   // GD3
-  // Ignore MultiTrack
-  _xgmIsNTSC = (XGM_FLAGS & 0b1 == 0);
-
-  // Music data block size = MLEN
-  XGM_MLEN = get_ui32_at(0x104 + XGM_SLEN);
-  // Serial.printf("MLEN: %x\n", XGM_MLEN);
-
-  // Music data block position
-  _pos = 0x108 + XGM_SLEN;
-  // Serial.printf("0x108+ SLEN: %x\n", _pos);
-
-  // GD3
-  // Serial.printf("XGM_FLAGS: %d\n", XGM_FLAGS);
-  gd3Offset = 0x108 + XGM_SLEN + XGM_MLEN;
-  if (XGM_FLAGS & 0b10) {
+  if (hasGd3) {
     _parseGD3();
   } else {
-    gd3.trackEn = ndFile.files[ndFile.currentDir][ndFile.currentFile];
-    gd3.trackJp = ndFile.files[ndFile.currentDir][ndFile.currentFile];
-    gd3.gameEn = "(No GD3 info)";
-    gd3.gameJp = "(GD3情報なし)";
-    gd3.systemEn = "";
-    gd3.systemJp = "";
-    gd3.authorEn = "";
-    gd3.authorJp = "";
-    gd3.date = "";
+    _resetGD3();
   }
 
   // FM PCM 構成は固定
@@ -920,27 +969,11 @@ bool VGM::XGMReady() {
   return true;
 }
 
-// XGM 処理 (Experimental)
+// XGM1 処理
 void VGM::xgmProcess() {
   // フェードアウト完了
   if (nju72341.fadeOutStatus == FADEOUT_COMPLETED) {
-    switch (ndConfig.get(CFG_REPEAT)) {
-      case REPEAT_ONE: {
-        ndFile.filePlay(0);
-        break;
-      }
-      case REPEAT_FOLDER: {
-        ndFile.filePlay(1);
-        break;
-      }
-      case REPEAT_ALL: {
-        if (ndFile.getNumFilesinCurrentDir() - 1 == ndFile.currentFile)
-          ndFile.dirPlay(1);
-        else
-          ndFile.filePlay(1);
-        break;
-      }
-    }
+    endProcedure();
     return;
   }
 
@@ -1004,30 +1037,14 @@ void VGM::xgmProcess() {
       if (_vgmLoop == ndConfig.get(CFG_NUM_LOOP) && ndConfig.get(CFG_NUM_LOOP) != LOOP_INIFITE) {  //   フェードアウトON
         nju72341.startFadeout();
       }
-
       _pos = 0x108 + XGM_SLEN + get_ui24();  // ループ位置
       break;
     }
 
     case 0x7f: {
       // End command (end of music data).
-      switch (ndConfig.get(CFG_REPEAT)) {
-        case REPEAT_ONE: {
-          ndFile.filePlay(0);
-          break;
-        }
-        case REPEAT_FOLDER: {
-          ndFile.filePlay(1);
-          break;
-        }
-        case REPEAT_ALL: {
-          if (ndFile.getNumFilesinCurrentDir() - 1 == ndFile.currentFile)
-            ndFile.dirPlay(1);
-          else
-            ndFile.filePlay(1);
-          break;
-        }
-      }
+      endProcedure();
+      return;
     }
   }
 
@@ -1037,7 +1054,7 @@ void VGM::xgmProcess() {
     bool sampFlag = false;
     for (int i = 0; i < 4; i++) {
       if (_xgmSampleOn[i]) {
-        samp += (int8_t)get_ui8_at(XGMSampleAddressTable[_xgmSampleId[i]] + _xgmSamplePos[i]++);
+        samp += (s8_t)get_ui8_at(XGMSampleAddressTable[_xgmSampleId[i]] + _xgmSamplePos[i]++);
         sampFlag = true;
         if (_xgmSamplePos[i] >= XGMSampleSizeTable[_xgmSampleId[i]]) {
           _xgmSampleOn[i] = false;
@@ -1053,6 +1070,587 @@ void VGM::xgmProcess() {
       FM.setYM2612DAC(samp, 0);
     }
     ets_delay_us(68);
+  }
+}
+
+// XGM2 処理
+void VGM::xgm2Process() {
+  // フェードアウト完了
+  if (nju72341.fadeOutStatus == FADEOUT_COMPLETED) {
+    endProcedure();
+    return;
+  }
+
+  while (_xgmYMFrame <= _xgmFrame) {
+    _xgm2ProcessYM();
+  }
+  while (_xgmPSGFrame <= _xgmFrame) {
+    _xgm2ProcessSN();
+  }
+
+  _xgmFrame = (_xgmPSGFrame < _xgmYMFrame) ? _xgmPSGFrame : _xgmYMFrame;
+
+  _xgmWaitUntil = _xgmStartTick + _xgmFrame * 16666;  // 60Hz
+  _vgmSamples = _xgmFrame * 735;                      // 44100 / 60
+
+  while (_xgmWaitUntil - XGM2_PCM_DELAY >= micros()) {
+    _xgm2ProcessPCM();
+    ets_delay_us(XGM2_PCM_DELAY);
+  }
+}
+
+void VGM::_xgm2ProcessPCM() {
+  int16_t samp = 0;
+  bool sampFlag = false;
+
+  for (int i = 0; i < 3; i++) {
+    if (_xgmSampleOn[i]) {
+      if (_xgmPCMHalfTick[i] == false) {
+        samp += (s8_t)get_ui8_at(XGMSampleAddressTable[_xgmSampleId[i]] + _xgmSamplePos[i]++);
+        sampFlag = true;
+
+        if (_xgmSamplePos[i] >= XGMSampleSizeTable[_xgmSampleId[i]]) {
+          _xgmSampleOn[i] = false;
+        }
+      }
+      if (_xgmPCMHalfSpeed[i]) _xgmPCMHalfTick[i] = !_xgmPCMHalfTick[i];
+    }
+  }
+
+  if (sampFlag) {
+    if (samp > INT8_MAX) {
+      samp = INT8_MAX;
+    } else if (samp < INT8_MIN)
+      samp = INT8_MIN;
+    samp += 128;
+    FM.setYM2612DAC(samp, 0);
+  }
+}
+
+void VGM::_xgm2ProcessYM() {
+  u8_t port = _getYMPort(_xgm2_ym_pos);
+  u8_t channel = _getYMChannel(_xgm2_ym_pos);
+  u8_t command = get_ui8_at(_xgm2_ym_pos++);
+  u8_t reg;
+  u8_t value;
+
+  switch (command) {
+    case FM_LOOP: {
+      u32_t loopOffset = get_ui24_at(_xgm2_ym_pos);
+      Serial.printf("0x%x - FM end/loop: offset: %x\n", _xgm2_ym_pos - _xgm2_ym_offset - 1, loopOffset);
+      if (loopOffset == 0xffffff) {
+        endProcedure();
+        return;
+      } else {
+        _vgmLoop++;
+        _xgm2_ym_pos = _xgm2_ym_offset + loopOffset;
+
+        Serial.printf("loops: %d\n", _vgmLoop);
+        if (_vgmLoop == ndConfig.get(CFG_NUM_LOOP) &&
+            ndConfig.get(CFG_NUM_LOOP) != LOOP_INIFITE) {  //   フェードアウトON
+          nju72341.startFadeout();
+        }
+      }
+      break;
+    }
+
+    case PCM: {
+      u8_t ch = command & 0b011;
+      bool halfspeed = command & 0b100;
+      u8_t priority = command & 0b1000;
+      u8_t sampleID = get_ui8_at(_xgm2_ym_pos++);
+
+      // Serial.printf("PCM Ch: %d, Half: %d, Pr: %d, Id: %d\n", ch, halfspeed, priority, sampleID);
+
+      _xgmSampleId[ch] = sampleID;
+      if (sampleID == 0) {
+        _xgmSampleOn[ch] = false;
+      } else {
+        _xgmSampleOn[ch] = true;
+        _xgmSamplePos[ch] = 0;
+        _xgmPCMHalfSpeed[ch] = halfspeed;
+        _xgmPCMHalfTick[ch] = false;
+      }
+      break;
+    }
+
+    case FM_LOAD_INST: {
+      for (int i = 0x30; i <= 0x9C; i += 0x04) {
+        reg = i + channel;
+        value = get_ui8_at(_xgm2_ym_pos++);
+        _xgmYmState[port][reg] = value;
+        FM.setYM2612(port, reg, value, 0);
+      }
+
+      reg = 0xb0 + channel;
+      value = get_ui8_at(_xgm2_ym_pos++);
+      _xgmYmState[port][reg] = value;
+      FM.setYM2612(port, reg, value, 0);
+
+      reg = 0xb4 + channel;
+      value = get_ui8_at(_xgm2_ym_pos++);
+      _xgmYmState[port][reg] = value;
+      FM.setYM2612(port, reg, value, 0);
+      break;
+    }
+
+    case FM_WRITE: {
+      u8_t comsize = (command & 7) + 1;
+      for (int j = 0; j < comsize; j++) {
+        reg = get_ui8_at(_xgm2_ym_pos++);
+        value = get_ui8_at(_xgm2_ym_pos++);
+        _xgmYmState[port][reg] = value;
+        FM.setYM2612(port, reg, value, 0);
+      }
+      break;
+    }
+
+    case FM0_PAN:
+    case FM1_PAN: {
+      reg = 0xb4 + channel;
+      value = (_xgmYmState[port][reg] & 0x3f) | ((command << 4) & 0xc0);
+      _xgmYmState[port][reg] = value;
+      FM.setYM2612(port, reg, value, 0);
+      break;
+    }
+
+    case FM_FREQ:
+    case FM_FREQ_WAIT: {
+      // wait
+      if ((command & 0xf0) == 0x80) {
+        _xgmYMFrame++;
+      }
+
+      u8_t data1 = get_ui8_at(_xgm2_ym_pos++);
+      u8_t data2 = get_ui8_at(_xgm2_ym_pos++);
+
+      // pre-key off?
+      if ((data1 & 0x40) != 0) {
+        FM.setYM2612(0, 0x28, 0x00 + (port << 2) + channel, 0);
+      }
+
+      // special mode ?
+      reg = ((command & 8) != 0) ? 0xa8 : 0xa0;
+      // set channel from slot
+      if ((command & 8) != 0) {
+        channel = _getYMSlot(command) - 1;
+      }
+      u16_t lvalue = ((data1 & 0x3f) << 8) | (data2 & 0xff);
+      _xgmYmState[port][reg + channel + 4] = ((lvalue >> 8) & 0x3f);
+      _xgmYmState[port][reg + channel + 0] = (lvalue & 0xff);
+      FM.setYM2612(port, reg + channel + 4, _xgmYmState[port][reg + channel + 4], 0);
+      FM.setYM2612(port, reg + channel + 0, _xgmYmState[port][reg + channel + 0], 0);
+
+      // post-key on?
+      if ((data1 & 0x80) != 0) {
+        FM.setYM2612(0, 0x28, 0xf0 + (port << 2) + channel, 0);
+      }
+      break;
+    }
+
+    case FM_FREQ_DELTA:
+    case FM_FREQ_DELTA_WAIT: {
+      // wait
+      if ((command & 0xf0) == 0xb0) {
+        _xgmYMFrame++;
+      }
+
+      u8_t data1 = get_ui8_at(_xgm2_ym_pos++);
+      // sepecial mode?
+      reg = ((command & 8) != 0) ? 0xa8 : 0xa0;
+      // set channel from slot
+      if ((command & 8) != 0) {
+        channel = _getYMSlot(command) - 1;
+      }
+      // get state
+      u16_t lvalue = (_xgmYmState[port][reg + channel + 4] & 0x3f) << 8;
+      lvalue |= _xgmYmState[port][reg + channel + 0] & 0xff;
+      int delta = ((data1 >> 1) & 0x7f) + 1;
+      delta = ((data1 & 1) != 0) ? -delta : delta;
+      lvalue += delta;
+      _xgmYmState[port][reg + channel + 4] = (lvalue >> 8) & 0x3f;
+      _xgmYmState[port][reg + channel + 0] = lvalue & 0xff;
+      FM.setYM2612(port, reg + channel + 4, _xgmYmState[port][reg + channel + 4], 0);
+      FM.setYM2612(port, reg + channel + 0, _xgmYmState[port][reg + channel + 0], 0);
+      break;
+    }
+
+    case FM_TL: {
+      u8_t data1 = get_ui8_at(_xgm2_ym_pos++);
+      // compute reg
+      reg = 0x40 + (_getYMSlot(command) << 2) + channel;
+      // save state
+      _xgmYmState[port][reg] = (data1 >> 1) & 0x7F;
+      // create commands
+      FM.setYM2612(port, reg, _xgmYmState[port][reg], 0);
+      break;
+    }
+
+    case FM_TL_DELTA:
+    case FM_TL_DELTA_WAIT: {
+      // wait
+      if ((command & 0xf0) == 0xd0) {
+        _xgmYMFrame++;
+      }
+
+      u8_t data1 = get_ui8_at(_xgm2_ym_pos++);
+      // compute reg
+      reg = 0x40 + (_getYMSlot(command) << 2) + channel;
+
+      int delta = ((data1 >> 2) & 0x3f) + 1;
+      delta = ((data1 & 2) != 0) ? -delta : delta;
+
+      // get state
+      int lvalue = _xgmYmState[port][reg] & 0xff;
+      lvalue += delta;
+      // save state
+      _xgmYmState[port][reg] = lvalue;
+      // create commands
+      FM.setYM2612(port, reg, _xgmYmState[port][reg], 0);
+      break;
+    }
+
+    case FM_KEY: {
+      FM.setYM2612(0, 0x28, (((command & 8) != 0) ? 0xf0 : 0x00) + (port << 2) + channel, 0);
+      break;
+    }
+
+    case FM_KEY_SEQ: {
+      // create key sequence commands
+      if ((command & 8) != 0) {
+        // ON-OFF sequence
+        FM.setYM2612(0, 0x28, 0xf0 + (port << 2) + channel, 0);
+        FM.setYM2612(0, 0x28, 0x00 + (port << 2) + channel, 0);
+      } else {
+        // OFF-ON sequence
+        FM.setYM2612(0, 0x28, 0x00 + (port << 2) + channel, 0);
+        FM.setYM2612(0, 0x28, 0xf0 + (port << 2) + channel, 0);
+      }
+      break;
+    }
+
+    case FM_DAC_ON: {
+      _xgmYmState[0][0x2b] = 0x80;
+      FM.setYM2612(0, 0x2b, 0x80, 0);
+      break;
+    }
+
+    case FM_DAC_OFF: {
+      _xgmYmState[0][0x2b] = 0x00;
+      FM.setYM2612(0, 0x2b, 0x00, 0);
+      break;
+    }
+
+    case FM_LFO: {
+      u8_t data1 = get_ui8_at(_xgm2_ym_pos++);
+      _xgmYmState[0][0x22] = data1;
+      FM.setYM2612(0, 0x22, _xgmYmState[0][0x22], 0);
+      break;
+    }
+
+    case FM_CH3_SPECIAL_ON: {
+      value = (_xgmYmState[0][0x27] & 0xbf) | 0x40;
+      _xgmYmState[0][0x27] = value;
+      FM.setYM2612(0, 0x27, value, 0);
+      break;
+    }
+
+    case FM_CH3_SPECIAL_OFF: {
+      value = (_xgmYmState[0][0x27] & 0xbf) | 0x00;
+      _xgmYmState[0][0x27] = value;
+      FM.setYM2612(0, 0x27, value, 0);
+      break;
+    }
+
+    case WAIT_SHORT: {
+      _xgmYMFrame += command + 1;
+      break;
+    }
+    case WAIT_LONG: {
+      _xgmYMFrame += get_ui8_at(_xgm2_ym_pos++) + 16;
+      break;
+    }
+
+    case FRAME_DELAY: {
+      break;
+    }
+
+    default: {
+      Serial.printf("Unknown XGM2 command: 0x%0x @ 0x%0x\n", command, _xgm2_ym_pos);
+    }
+  }
+}
+
+// XGM 2 port and channel
+int VGM::_getYMPort(u32_t pos) {
+  u8_t command = get_ui8_at(pos);
+  switch (command) {
+    case FM0_PAN:
+      return 0;
+    case FM1_PAN:
+      return 1;
+    case FM_LOAD_INST:
+    case FM_FREQ:
+    case FM_FREQ_WAIT:
+    case FM_FREQ_DELTA:
+    case FM_FREQ_DELTA_WAIT:
+    case FM_KEY:
+    case FM_KEY_SEQ:
+      return (command >> 2) & 1;
+    case FM_WRITE:
+      return (command >> 3) & 1;
+    case FM_TL:
+    case FM_TL_DELTA:
+    case FM_TL_DELTA_WAIT:
+      return (get_ui8_at(pos + 1) >> 0) & 1;
+    case FM_KEY_ADV:
+      return (get_ui8_at(pos + 1) >> 2) & 1;
+  }
+  return 0;
+}
+
+int VGM::_getYMChannel(u32_t pos) {
+  u8_t command = get_ui8_at(pos);
+  switch (command) {
+    case FM_FREQ:
+    case FM_FREQ_WAIT:
+    case FM_FREQ_DELTA:
+    case FM_FREQ_DELTA_WAIT:
+      if ((command & 8) != 0) return 2;
+    case FM_LOAD_INST:
+    case FM_KEY:
+    case FM_KEY_SEQ:
+    case FM_TL:
+    case FM_TL_DELTA:
+    case FM_TL_DELTA_WAIT:
+    case FM0_PAN:
+    case FM1_PAN:
+      return (command & 3);
+    case FM_WRITE:
+      if ((get_ui8_at(pos + 1) & 0xF8) == 0xA8) return 2;
+    case FM_KEY_ADV:
+      return (get_ui8_at(pos + 1) & 3);
+  }
+  return -1;
+}
+
+int VGM::_getYMSlot(u8_t command) {
+  switch (command) {
+    case FM_FREQ:
+    case FM_FREQ_WAIT:
+    case FM_FREQ_DELTA:
+    case FM_FREQ_DELTA_WAIT:
+      return ((command & 8) != 0) ? ((command & 3) + 1) : -1;
+    case FM_TL:
+    case FM_TL_DELTA:
+    case FM_TL_DELTA_WAIT:
+      return ((command >> 2) & 3);
+  }
+  return -1;
+}
+
+void VGM::_xgm2ProcessSN() {
+  u8_t channel = _getChannel(_xgm2_psg_pos);
+  u8_t command = get_ui8_at(_xgm2_psg_pos++);
+  u8_t reg;
+  u8_t value;
+
+  switch (command) {
+    int oldHighFreq;
+
+    case PSG_LOOP: {
+      u32_t loopOffset = get_ui24_at(_xgm2_psg_pos);
+      // Serial.printf("0x%x - PSG end/loop: offset: %x\n", _xgm2_psg_pos - _xgm2_psg_offset - 1, loopOffset);
+      if (loopOffset == 0xFFFFFF) {
+        xgmLoaded = false;
+      } else {
+        _xgm2_psg_pos = _xgm2_psg_offset + loopOffset;
+      }
+      break;
+    }
+
+    case PSG_ENV0:
+    case PSG_ENV1:
+    case PSG_ENV2:
+    case PSG_ENV3: {
+      _xgmPsgState[0][channel] = command & 0x0f;
+      value = (0x90 + (channel << 5)) | _xgmPsgState[0][channel];
+      // Serial.printf("0x%x - %2x: PSG ENV ch %d 0x%x\n", _xgm2_psg_pos - _xgm2_psg_offset - 1, command, channel,
+      // value);
+      FM.writeRaw(value, 1, freq[chipSlot[CHIP_SN76489_0]]);
+      break;
+    }
+
+    case PSG_ENV0_DELTA:
+    case PSG_ENV1_DELTA:
+    case PSG_ENV2_DELTA:
+    case PSG_ENV3_DELTA: {
+      // wait
+      if ((command & 0x08)) {
+        _xgmPSGFrame++;
+      }
+
+      int delta = ((command >> 0) & 3) + 1;
+      delta = ((command & 4) != 0) ? -delta : delta;
+      _xgmPsgState[0][channel] = delta + (_xgmPsgState[0][channel] & 0xf);
+      value = (0x90 + (channel << 5)) | _xgmPsgState[0][channel];
+      // Serial.printf("0x%x - %2x: PSG ENV DELTA ch %d 0x%x\n", _xgm2_psg_pos - _xgm2_psg_offset - 1, command, channel,
+      //              value);
+      FM.writeRaw(value, 1, freq[chipSlot[CHIP_SN76489_0]]);
+      break;
+    }
+
+    case PSG_FREQ:
+    case PSG_FREQ_WAIT: {
+      // wait
+      if ((command & 0xf0) == 0x30) {
+        _xgmPSGFrame++;
+      }
+
+      u8_t data1 = get_ui8_at(_xgm2_psg_pos++);
+      oldHighFreq = _xgmPsgState[1][channel] & 0x03f0;
+      int lvalue = ((command & 0x3) << 8) | (data1 & 0xFF);
+
+      _xgmPsgState[1][channel] = lvalue;
+
+      // Workaround for Sega VDP and SN76489
+      // value = (0x80 + (channel << 5)) | (lvalue & 0x0f);
+      if (lvalue == 0) {
+        value = ((0x80 + (channel << 5)) | 1);
+      } else {
+        value = ((0x80 + (channel << 5)) | (lvalue & 0x0f));
+      }
+      FM.writeRaw(value, 1, freq[chipSlot[CHIP_SN76489_0]]);
+
+      // Always send High value for SN76489
+      //      if ((oldHighFreq != (lvalue & 0x3F0)) && (channel < 3)) {
+      if (channel < 3) {
+        value = (0x00 | ((lvalue >> 4) & 0x3f));
+        // Serial.printf("   PSG_FREQ+ ch %d 0x%0x\n", channel, value);
+        FM.writeRaw(value, 1, freq[chipSlot[CHIP_SN76489_0]]);
+      }
+      break;
+    }
+
+    case PSG_FREQ_LOW: {
+      // wait
+      if ((command & 0x1)) {
+        _xgmPSGFrame++;
+      }
+
+      oldHighFreq = _xgmPsgState[1][channel] & 0x03f0;
+
+      u8_t data1 = get_ui8_at(_xgm2_psg_pos++);
+      int lvalue = (_xgmPsgState[1][channel] & 0x03f0) | (data1 & 0xF);
+      _xgmPsgState[1][channel] = lvalue;
+      if (lvalue == 0) {
+        value = ((0x80 + (channel << 5)) | 1);
+      } else {
+        value = ((0x80 + (channel << 5)) | (lvalue & 0x0f));
+      }
+      FM.writeRaw(value, 1, freq[chipSlot[CHIP_SN76489_0]]);
+      // Serial.printf("0x%x - %2x: PSG_FREQ_LOW ch %d 0x%x\n", _xgm2_psg_pos - _xgm2_psg_offset - 2, command, channel,
+      //               value);
+
+      break;
+    }
+
+    case PSG_FREQ0_DELTA:
+    case PSG_FREQ1_DELTA:
+    case PSG_FREQ2_DELTA:
+    case PSG_FREQ3_DELTA: {
+      // wait
+      if ((command & 0x08)) {
+        _xgmPSGFrame++;
+      }
+
+      oldHighFreq = _xgmPsgState[1][channel] & 0x03f0;
+      int delta = ((command >> 0) & 3) + 1;
+      delta = ((command & 4) != 0) != 0 ? -delta : delta;
+      int lvalue = (_xgmPsgState[1][channel] & 0x03ff) + delta;
+      _xgmPsgState[1][channel] = lvalue;
+
+      // Workaround for Sega VDP and SN76489
+      // value = (0x80 + (channel << 5)) | (lvalue & 0x0f);
+      if (lvalue == 0) {
+        value = ((0x80 + (channel << 5)) | 1);
+      } else {
+        value = ((0x80 + (channel << 5)) | (lvalue & 0x0f));
+      }
+
+      FM.writeRaw(value, 1, freq[chipSlot[CHIP_SN76489_0]]);
+      // Serial.printf("0x%x - %2x: PSG FREQ DELTA ch %d 0x%x\n", _xgm2_psg_pos - _xgm2_psg_offset - 1, command,
+      // channel,
+      //              value);
+
+      // high byte changed and not channel 3 (single byte write for channel 3)
+      if ((oldHighFreq != (lvalue & 0x3f0)) && (channel < 3)) {
+        // if (channel < 3) {
+        value = (0x00 | ((lvalue >> 4) & 0x3f));
+        FM.writeRaw(value, 1, freq[chipSlot[CHIP_SN76489_0]]);
+        // Serial.printf(" %2x: PSG_FREQ_DELTA+ ch %d 0x%x\n", command, channel, value);
+      }
+      break;
+    }
+
+    case PSG_WAIT_SHORT: {
+      _xgmPSGFrame += command + 1;
+      break;
+    }
+    case PSG_WAIT_LONG: {
+      _xgmPSGFrame += get_ui8_at(_xgm2_psg_pos++) + 15;
+      break;
+    }
+  }
+}
+
+u8_t VGM::_getChannel(u32_t pos) {
+  u8_t command = get_ui8_at(pos);
+  switch (command) {
+    case PSG_ENV0:
+    case PSG_ENV0_DELTA:
+    case PSG_FREQ0_DELTA:
+      return 0;
+    case PSG_ENV1:
+    case PSG_ENV1_DELTA:
+    case PSG_FREQ1_DELTA:
+      return 1;
+    case PSG_ENV2:
+    case PSG_ENV2_DELTA:
+    case PSG_FREQ2_DELTA:
+      return 2;
+    case PSG_ENV3:
+    case PSG_ENV3_DELTA:
+    case PSG_FREQ3_DELTA:
+      return 3;
+    case PSG_FREQ:
+    case PSG_FREQ_WAIT:
+      return ((command >> 2) & 3);
+    case PSG_FREQ_LOW:
+      return ((get_ui8_at(pos + 1) >> 5) & 3);
+  }
+  return 255;
+}
+
+//---------------------------------------------------------------
+// 曲終了時の処理
+void VGM::endProcedure() {
+  switch (ndConfig.get(CFG_REPEAT)) {
+    case REPEAT_ONE: {
+      ndFile.filePlay(0);
+      break;
+    }
+    case REPEAT_FOLDER: {
+      ndFile.filePlay(1);
+      break;
+    }
+    case REPEAT_ALL: {
+      if (ndFile.getNumFilesinCurrentDir() - 1 == ndFile.currentFile)
+        ndFile.dirPlay(1);
+      else
+        ndFile.filePlay(1);
+      break;
+    }
   }
 }
 
