@@ -141,15 +141,15 @@ void setup() {
 
 void loop() {
   while (1) {
-    input.inputHandler();
     if (vgm.vgmLoaded) {
       vgm.vgmProcess();
-    }
-    if (vgm.xgmLoaded) {
+    } else if (vgm.xgmLoaded) {
       if (vgm.XGMVersion == 1)
         vgm.xgmProcess();
       else
         vgm.xgm2Process();
     }
+
+    input.inputHandler();
   }
 }

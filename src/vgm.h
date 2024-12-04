@@ -129,6 +129,7 @@ class VGM {
   bool ready();     // VGM の再生準備
   bool XGMReady();  // XGM の再生準備
   void vgmProcess();
+  void vgmProcessMain();
   void xgmProcess();
   void xgm2Process();
   uint64_t getCurrentTime();
@@ -141,10 +142,12 @@ class VGM {
   uint32_t _xgm2_psg_pos;
 
   t_gd3 gd3;
-  int32_t _vgmDelay = 0;
-  uint16_t _vgmLoop = 0;
+  // int32_t _vgmDelay = 0;
+  uint16_t _vgmLoop;
   uint64_t _vgmSamples;
-  uint64_t _vgmStart = 0;
+  uint64_t _vgmRealSamples;
+  uint64_t _vgmStart;
+  uint64_t _vgmWaitUntil;
   uint32_t _pcmpos = 0;
 
   u32_t _xgmSamplePos[XGM1_MAX_PCM_CH];

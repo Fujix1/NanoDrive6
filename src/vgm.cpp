@@ -65,8 +65,9 @@ bool VGM::ready() {
   freq[2] = SI5351_UNDEFINED;
 
   _vgmLoop = 0;
-  _vgmDelay = 0;
+  //_vgmDelay = 0;
   _vgmSamples = 0;
+  _vgmRealSamples = 0;
 
   // VGM ident
   if (get_ui32_at(0) != 0x206d6756) {
@@ -279,7 +280,7 @@ void VGM::_parseGD3(uint32_t pos) {
   gd3.authorJp = _digGD3();
   gd3.date = _digGD3();
   gd3.converted = _digGD3();
-  gd3.notes = _digGD3();
+  // gd3.notes = _digGD3();
 
   if (gd3.trackJp == "") gd3.trackJp = gd3.trackEn;
   if (gd3.gameJp == "") gd3.gameJp = gd3.gameEn;
@@ -605,6 +606,30 @@ void VGM::vgmProcess() {
     return;
   }
 
+  while (_vgmSamples <= _vgmRealSamples) {
+    vgmProcessMain();
+  }
+
+  _vgmRealSamples = _vgmSamples;
+  _vgmWaitUntil = _vgmStart + _vgmRealSamples * 22.67573696145125;
+  while (_vgmWaitUntil - 22 > micros()) {
+    ets_delay_us(22);
+  }
+
+  /*
+    vgmProcessMain();
+
+    if (_vgmDelay >= 3000) {
+      ets_delay_us(_vgmDelay / 1000);
+      _vgmDelay = _vgmDelay % 1000;
+      const uint64_t vgmTime = _vgmSamples * 22.67573696145125f;
+      const uint64_t realTime = micros() - _vgmStart;
+      if (realTime > vgmTime) _vgmDelay -= (realTime - vgmTime);
+    }
+  */
+}
+
+void VGM::vgmProcessMain() {
   u8_t reg;
   u8_t dat;
   u8_t command = get_ui8();
@@ -618,12 +643,10 @@ void VGM::vgmProcess() {
 
     case 0x30:  // SN76489 CHIP 2
       FM.write(get_ui8(), 2, freq[chipSlot[CHIP_SN76489_1]]);
-
       break;
 
     case 0x50:  // SN76489 CHIP 1
       FM.write(get_ui8(), 1, freq[chipSlot[CHIP_SN76489_0]]);
-
       break;
 
     case 0x52:  // YM2612 port 0, write value dd to register aa
@@ -678,20 +701,20 @@ void VGM::vgmProcess() {
     // Wait n samples, n can range from 0 to 65535 (approx 1.49 seconds)
     case 0x61: {
       u16_t w = get_ui16();
-      _vgmDelay += w * ONE_CYCLE;
+      //_vgmDelay += w * ONE_CYCLE;
       _vgmSamples += w;
       break;
     }
 
     // wait 735 samples (60th of a second)
     case 0x62:
-      _vgmDelay += 735 * ONE_CYCLE;
+      //_vgmDelay += 735 * ONE_CYCLE;
       _vgmSamples += 735;
       break;
 
     // wait 882 samples (50th of a second)
     case 0x63:
-      _vgmDelay += 882 * ONE_CYCLE;
+      //_vgmDelay += 882 * ONE_CYCLE;
       _vgmSamples += 882;
       break;
 
@@ -717,13 +740,13 @@ void VGM::vgmProcess() {
       break;
 
     case 0x70 ... 0x7f:
-      _vgmDelay += ((command & 15) + 1) * ONE_CYCLE;
+      //_vgmDelay += ((command & 15) + 1) * ONE_CYCLE;
       _vgmSamples += (command & 15) + 1;
       break;
 
     case 0x80 ... 0x8f:
-      FM.setYM2612(0, 0x2a, vgmData[_pcmpos++], 0);
-      _vgmDelay += (command & 15) * ONE_CYCLE - 19800;
+      FM.setYM2612DAC(vgmData[_pcmpos++], 0);
+      //_vgmDelay += (command & 15) * ONE_CYCLE;
       _vgmSamples += (command & 15);
       break;
 
@@ -757,14 +780,6 @@ void VGM::vgmProcess() {
     default:
       ESP_LOGI("Unknown VGM Command: %0.2X\n", command);
       break;
-  }
-
-  if (_vgmDelay >= 3000) {
-    ets_delay_us(_vgmDelay / 1000);
-    _vgmDelay = _vgmDelay % 1000;
-    const uint64_t vgmTime = _vgmSamples * 22.67573696145125f;
-    const uint64_t realTime = micros() - _vgmStart;
-    if (realTime > vgmTime) _vgmDelay -= (realTime - vgmTime);
   }
 }
 
