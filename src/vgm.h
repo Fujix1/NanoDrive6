@@ -177,7 +177,7 @@ class VGM {
   si5351Freq_t normalizeFreq(uint32_t freq, t_chip chip);
 
   uint32_t _gd3p;
-  void _parseGD3();
+  void _parseGD3(u32_t pos);
   String _digGD3();
   void _resetGD3();
   uint8_t getNumWrites(u8_t command);

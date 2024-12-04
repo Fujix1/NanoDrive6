@@ -233,7 +233,7 @@ bool VGM::ready() {
   vgmLoaded = true;  // VGM 開始できる
 
   // GD3 tags
-  _parseGD3();
+  _parseGD3(gd3Offset);
 
   String chip[2] = {"", ""};
   int c = 0;
@@ -266,42 +266,25 @@ bool VGM::ready() {
 }
 
 // GD3タグをパース
-void VGM::_parseGD3() {
-  _gd3p = gd3Offset + 12;
+void VGM::_parseGD3(uint32_t pos) {
+  _gd3p = pos + 12;
 
-  // GD3 が無い場合
-  if (vgm.size < gd3Offset) {
-    _resetGD3();
-  } else {
-    gd3.trackEn = _digGD3();
-    gd3.trackJp = _digGD3();
-    gd3.gameEn = _digGD3();
-    gd3.gameJp = _digGD3();
-    gd3.systemEn = _digGD3();
-    gd3.systemJp = _digGD3();
-    gd3.authorEn = _digGD3();
-    gd3.authorJp = _digGD3();
-    gd3.date = _digGD3();
-    gd3.converted = _digGD3();
-    gd3.notes = _digGD3();
+  gd3.trackEn = _digGD3();
+  gd3.trackJp = _digGD3();
+  gd3.gameEn = _digGD3();
+  gd3.gameJp = _digGD3();
+  gd3.systemEn = _digGD3();
+  gd3.systemJp = _digGD3();
+  gd3.authorEn = _digGD3();
+  gd3.authorJp = _digGD3();
+  gd3.date = _digGD3();
+  gd3.converted = _digGD3();
+  gd3.notes = _digGD3();
 
-    if (gd3.trackJp == "") gd3.trackJp = gd3.trackEn;
-    if (gd3.gameJp == "") gd3.gameJp = gd3.gameEn;
-    if (gd3.systemJp == "") gd3.systemJp = gd3.systemEn;
-    if (gd3.authorJp == "") gd3.authorJp = gd3.authorEn;
-  }
-}
-
-void VGM::_resetGD3() {
-  gd3.trackEn = ndFile.files[ndFile.currentDir][ndFile.currentFile];
-  gd3.trackJp = ndFile.files[ndFile.currentDir][ndFile.currentFile];
-  gd3.gameEn = "(No GD3 info)";
-  gd3.gameJp = "(GD3情報なし)";
-  gd3.systemEn = "";
-  gd3.systemJp = "";
-  gd3.authorEn = "";
-  gd3.authorJp = "";
-  gd3.date = "";
+  if (gd3.trackJp == "") gd3.trackJp = gd3.trackEn;
+  if (gd3.gameJp == "") gd3.gameJp = gd3.gameEn;
+  if (gd3.systemJp == "") gd3.systemJp = gd3.systemEn;
+  if (gd3.authorJp == "") gd3.authorJp = gd3.authorEn;
 }
 
 String VGM::_digGD3() {
@@ -314,6 +297,18 @@ String VGM::_digGD3() {
   _gd3p += 2;
   std::string sst = wstringToUTF8(wst);
   return (String)sst.c_str();
+}
+
+void VGM::_resetGD3() {
+  gd3.trackEn = ndFile.files[ndFile.currentDir][ndFile.currentFile];
+  gd3.trackJp = ndFile.files[ndFile.currentDir][ndFile.currentFile];
+  gd3.gameEn = "(No GD3 info)";
+  gd3.gameJp = "(GD3情報なし)";
+  gd3.systemEn = "";
+  gd3.systemJp = "";
+  gd3.authorEn = "";
+  gd3.authorJp = "";
+  gd3.date = "";
 }
 
 //----------------------------------------------------------------------
@@ -919,7 +914,7 @@ bool VGM::XGMReady() {
 
   // GD3
   if (hasGd3) {
-    _parseGD3();
+    _parseGD3(gd3Offset);
   } else {
     _resetGD3();
   }

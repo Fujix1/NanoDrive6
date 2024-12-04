@@ -307,8 +307,16 @@ void redraw() {
     lblSystem.setCaption(_dispData.systemEn);
   }
 
-  // /snap/songno.png を優先
-  if (openPNG(ndFile.dirs[ndFile.currentDir] + "/snap", String(_dispData.no) + ".png", true, true) == false) {
+  // Snapshot
+  // 1) snap/[finemame].png
+  // 2) snap/[songno].png
+  // 3) ***.png
+
+  String fileName = ndFile.files[ndFile.currentDir][ndFile.currentFile];
+  fileName = fileName.substring(0, fileName.length() - 4);
+
+  if (openPNG(ndFile.dirs[ndFile.currentDir] + "/snap", fileName + ".png", true, true) == false) {
+  } else if (openPNG(ndFile.dirs[ndFile.currentDir] + "/snap", String(_dispData.no) + ".png", true, true) == false) {
     openPNG(ndFile.dirs[ndFile.currentDir], ndFile.pngs[ndFile.currentDir], true, true);
   }
 
