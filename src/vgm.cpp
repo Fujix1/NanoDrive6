@@ -745,7 +745,8 @@ void VGM::vgmProcessMain() {
       break;
 
     case 0x80 ... 0x8f:
-      FM.setYM2612DAC(vgmData[_pcmpos++], 0);
+      // FM.setYM2612DAC(vgmData[_pcmpos++], 0);
+      FM.setYM2612(0, 0x2a, vgmData[_pcmpos++], 0);
       //_vgmDelay += (command & 15) * ONE_CYCLE;
       _vgmSamples += (command & 15);
       break;

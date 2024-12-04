@@ -112,17 +112,11 @@ void FMChip::writeRaw(byte data, byte chipno, si5351Freq_t freq) {
   switch (chipno) {
     case 0:
       CS0_LOW;
-      CS1_HIGH;
-      CS2_HIGH;
       break;
     case 1:
-      CS0_HIGH;
       CS1_LOW;
-      CS2_HIGH;
       break;
     case 2:
-      CS0_HIGH;
-      CS1_HIGH;
       CS2_LOW;
       break;
   }
@@ -135,7 +129,7 @@ void FMChip::writeRaw(byte data, byte chipno, si5351Freq_t freq) {
   // 3.579MHz :  0.2794us * 32 = 8.94 us
   // 1.5MHz   :  0.66us   * 32 = 21.3 us
   WR_LOW;
-  ets_delay_us((32000000 / freq) + 1);
+  ets_delay_us((32000000 / freq));
 
   WR_HIGH;
   switch (chipno) {
@@ -156,16 +150,10 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
   switch (chipno) {
     case 0:
       CS0_LOW;
-      CS1_HIGH;
-      CS2_HIGH;
       break;
     case 1:
-      CS0_HIGH;
       CS1_LOW;
-      CS2_HIGH;
     case 2:
-      CS0_HIGH;
-      CS1_HIGH;
       CS2_LOW;
       break;
   }
@@ -249,7 +237,7 @@ void FMChip::setYM2612DAC(byte data, uint8_t chipno) {
     A0_HIGH;
     // アドレスライト後の待ちサイクル
     // アドレス＄21-＄B6 待ちサイクル 17 = 2.21us
-    ets_delay_us(3);
+    ets_delay_us(4);
   }
 
   // data
