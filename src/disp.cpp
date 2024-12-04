@@ -316,8 +316,9 @@ void redraw() {
   fileName = fileName.substring(0, fileName.length() - 4);
 
   if (openPNG(ndFile.dirs[ndFile.currentDir] + "/snap", fileName + ".png", true, true) == false) {
-  } else if (openPNG(ndFile.dirs[ndFile.currentDir] + "/snap", String(_dispData.no) + ".png", true, true) == false) {
-    openPNG(ndFile.dirs[ndFile.currentDir], ndFile.pngs[ndFile.currentDir], true, true);
+    if (openPNG(ndFile.dirs[ndFile.currentDir] + "/snap", String(_dispData.no) + ".png", true, true) == false) {
+      openPNG(ndFile.dirs[ndFile.currentDir], ndFile.pngs[ndFile.currentDir], true, true);
+    }
   }
 
   frameBuffer.pushSprite(0, 0);
