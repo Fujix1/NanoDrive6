@@ -178,7 +178,13 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
   ets_delay_us(4);  // 3 は一部足りない
 
   // data
+  /*if (addr >= 0x40 && addr <= 0x4e) {
+    dedic_gpio_bundle_write(dataBus, 0xff, 127);
+  } else {
+    dedic_gpio_bundle_write(dataBus, 0xff, data);
+  }*/
   dedic_gpio_bundle_write(dataBus, 0xff, data);
+
   WR_LOW;
   WR_HIGH;
   switch (chipno) {
@@ -217,13 +223,9 @@ void FMChip::setYM2612DAC(byte data, uint8_t chipno) {
   switch (chipno) {
     case 0:
       CS0_LOW;
-      CS1_HIGH;
-      CS2_HIGH;
       break;
     case 1:
-      CS0_HIGH;
       CS1_LOW;
-      CS2_HIGH;
       break;
   }
 
@@ -244,6 +246,14 @@ void FMChip::setYM2612DAC(byte data, uint8_t chipno) {
   dedic_gpio_bundle_write(dataBus, 0xff, data);
   WR_LOW;
   WR_HIGH;
+  switch (chipno) {
+    case 0:
+      CS0_HIGH;
+      break;
+    case 1:
+      CS1_HIGH;
+      break;
+  }
 }
 
 // YM2203, AY-8910用レジスタ設定

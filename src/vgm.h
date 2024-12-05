@@ -142,7 +142,6 @@ class VGM {
   uint32_t _xgm2_psg_pos;
 
   t_gd3 gd3;
-  // int32_t _vgmDelay = 0;
   uint16_t _vgmLoop;
   uint64_t _vgmSamples;
   uint64_t _vgmRealSamples;
@@ -155,7 +154,7 @@ class VGM {
   u8_t _xgmPriorities[XGM1_MAX_PCM_CH];
   bool _xgmSampleOn[XGM1_MAX_PCM_CH];
   bool _xgmPCMHalfSpeed[3];
-  bool _xgmPCMHalfTick[3];
+  bool _xgmPCMHalfSent[3];
   u32_t _xgmFrame;
   u32_t _xgmYMSNFrame;
   u32_t _xgmStartTick;

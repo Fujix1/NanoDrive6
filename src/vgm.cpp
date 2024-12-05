@@ -615,18 +615,6 @@ void VGM::vgmProcess() {
   while (_vgmWaitUntil - 22 > micros()) {
     ets_delay_us(22);
   }
-
-  /*
-    vgmProcessMain();
-
-    if (_vgmDelay >= 3000) {
-      ets_delay_us(_vgmDelay / 1000);
-      _vgmDelay = _vgmDelay % 1000;
-      const uint64_t vgmTime = _vgmSamples * 22.67573696145125f;
-      const uint64_t realTime = micros() - _vgmStart;
-      if (realTime > vgmTime) _vgmDelay -= (realTime - vgmTime);
-    }
-  */
 }
 
 void VGM::vgmProcessMain() {
@@ -701,20 +689,17 @@ void VGM::vgmProcessMain() {
     // Wait n samples, n can range from 0 to 65535 (approx 1.49 seconds)
     case 0x61: {
       u16_t w = get_ui16();
-      //_vgmDelay += w * ONE_CYCLE;
       _vgmSamples += w;
       break;
     }
 
     // wait 735 samples (60th of a second)
     case 0x62:
-      //_vgmDelay += 735 * ONE_CYCLE;
       _vgmSamples += 735;
       break;
 
     // wait 882 samples (50th of a second)
     case 0x63:
-      //_vgmDelay += 882 * ONE_CYCLE;
       _vgmSamples += 882;
       break;
 
@@ -740,14 +725,11 @@ void VGM::vgmProcessMain() {
       break;
 
     case 0x70 ... 0x7f:
-      //_vgmDelay += ((command & 15) + 1) * ONE_CYCLE;
       _vgmSamples += (command & 15) + 1;
       break;
 
     case 0x80 ... 0x8f:
-      // FM.setYM2612DAC(vgmData[_pcmpos++], 0);
-      FM.setYM2612(0, 0x2a, vgmData[_pcmpos++], 0);
-      //_vgmDelay += (command & 15) * ONE_CYCLE;
+      FM.setYM2612DAC(vgmData[_pcmpos++], 0);
       _vgmSamples += (command & 15);
       break;
 
@@ -910,9 +892,17 @@ bool VGM::XGMReady() {
           XGMSampleSizeTable.push_back(0);
         } else {
           XGMSampleSizeTable.push_back(XGMSampleAddressTable[i + 1] - XGMSampleAddressTable[i]);
+
+          // Last sample size
+          if (XGMSampleSizeTable[i] > XGM_SLEN - 0x104) {
+            XGMSampleSizeTable[i] = XGM_SLEN - XGMSampleAddressTable[i] + 0x104;
+          }
         }
       }
 
+      for (int i = 0; i < 123; i++) {
+        Serial.printf("Sample: id %d, add %x, size %x\n", i, XGMSampleAddressTable[i], XGMSampleSizeTable[i]);
+      }
       gd3Offset = 0x104 + XGM_SLEN + XGM_FMLEN + XGM_PSGLEN;
 
       _xgm2_ym_offset = 0x104 + XGM_SLEN;
@@ -1127,15 +1117,16 @@ void VGM::_xgm2ProcessPCM() {
 
   for (int i = 0; i < 3; i++) {
     if (_xgmSampleOn[i]) {
-      if (_xgmPCMHalfTick[i] == false) {
+      if (_xgmPCMHalfSent[i] == false) {
         samp += (s8_t)get_ui8_at(XGMSampleAddressTable[_xgmSampleId[i]] + _xgmSamplePos[i]++);
         sampFlag = true;
 
         if (_xgmSamplePos[i] >= XGMSampleSizeTable[_xgmSampleId[i]]) {
           _xgmSampleOn[i] = false;
+          _xgmSampleId[i] = 0;
         }
       }
-      if (_xgmPCMHalfSpeed[i]) _xgmPCMHalfTick[i] = !_xgmPCMHalfTick[i];
+      if (_xgmPCMHalfSpeed[i]) _xgmPCMHalfSent[i] = !_xgmPCMHalfSent[i];
     }
   }
 
@@ -1191,7 +1182,7 @@ void VGM::_xgm2ProcessYM() {
         _xgmSampleOn[ch] = true;
         _xgmSamplePos[ch] = 0;
         _xgmPCMHalfSpeed[ch] = halfspeed;
-        _xgmPCMHalfTick[ch] = false;
+        _xgmPCMHalfSent[ch] = false;
       }
       break;
     }
