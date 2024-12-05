@@ -626,12 +626,15 @@ void VGM::vgmProcessMain() {
   u8_t command = get_ui8();
 
   switch (command) {
+#ifdef USE_AY8910
     case 0xA0:  // AY8910, YM2203 PSG, YM2149, YMZ294D
       reg = get_ui8();
       dat = get_ui8();
       FM.setRegister(reg, dat, 0);
       break;
+#endif
 
+#ifdef USE_SN76489
     case 0x30:  // SN76489 CHIP 2
       if (SN76489_Freq0is0X400) {
         FM.write(get_ui8(), 2, freq[chipSlot[CHIP_SN76489_1]]);
@@ -647,7 +650,9 @@ void VGM::vgmProcessMain() {
         FM.write(get_ui8(), 1, freq[chipSlot[CHIP_SN76489_0]]);
       }
       break;
+#endif
 
+#ifdef USE_YM2612
     case 0x52:  // YM2612 port 0, write value dd to register aa
       reg = get_ui8();
       dat = get_ui8();
@@ -659,14 +664,18 @@ void VGM::vgmProcessMain() {
       dat = get_ui8();
       FM.setYM2612(1, reg, dat, 0);
       break;
+#endif
 
+#ifdef USE_YM2151
     case 0x54:  // YM2151
     case 0xa4:
       reg = get_ui8();
       dat = get_ui8();
       FM.setRegisterOPM(reg, dat, 0);
       break;
+#endif
 
+#ifdef USE_YM2203
     case 0x55:  // YM2203_0
       reg = get_ui8();
       dat = get_ui8();
@@ -678,7 +687,9 @@ void VGM::vgmProcessMain() {
       dat = get_ui8();
       FM.setRegister(reg, dat, 1);
       break;
+#endif
 
+#ifdef USE_YM3812
     case 0x5A:  // YM3812
       reg = get_ui8();
       dat = get_ui8();
@@ -690,12 +701,15 @@ void VGM::vgmProcessMain() {
       dat = get_ui8();
       FM.setRegisterOPL3(0, reg, dat, 1);
       break;
+#endif
 
+#ifdef USE_YMF262
     case 0x5F:  // YMF262 Port 1
       reg = get_ui8();
       dat = get_ui8();
       FM.setRegisterOPL3(1, reg, dat, 1);
       break;
+#endif
 
     // Wait n samples, n can range from 0 to 65535 (approx 1.49 seconds)
     case 0x61: {
