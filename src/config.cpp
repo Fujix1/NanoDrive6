@@ -71,7 +71,7 @@ bool NDConfig::init() {
                    {"None", "2 sec.", "5 sec.", "8 sec.", "10 sec.", "12 sec.", "15 sec."},
                    {FO_0, FO_2, FO_5, FO_8, FO_10, FO_12, FO_15}});
 
-  items.push_back({0, "画面更新", "LCD Update", {"する", "しない"}, {"Yes", "No"}, {UPDATE_YES, UPDATE_NO}});
+  items.push_back({0, "画面更新", "LCD Update", {"する", "しない"}, {"On", "Off"}, {UPDATE_YES, UPDATE_NO}});
 
   if (!SPIFFS.begin(true)) {
     return false;
