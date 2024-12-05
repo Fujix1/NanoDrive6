@@ -99,14 +99,15 @@ const std::vector<String> CHIP_LABEL = {"",       "SN76489", "SN76489", "YM2612"
 
 class VGM {
  public:
-  uint8_t *vgmData;       // データ本体
-  uint32_t size = 0;      // ファイルサイズ
-  uint32_t version;       // VGM バージョン
-  uint32_t dataOffset;    // データオフセット
-  uint32_t loopOffset;    // ループオフセット
-  uint32_t gd3Offset;     // gd3オフセット
-  uint32_t totalSamples;  // 全サンプル数
   t_format format;
+
+  uint8_t *vgmData;     // データ本体
+  uint32_t version;     // VGM バージョン
+  uint32_t dataOffset;  // データオフセット
+  uint32_t loopOffset;  // ループオフセット
+  uint32_t gd3Offset;   // gd3オフセット
+  // uint32_t totalSamples;  // 全サンプル数
+  boolean SN76489_Freq0is0X400;  // SN76489 が Sega VDP ではない
 
   std::vector<si5351Freq_t> freq = {SI5351_UNDEFINED, SI5351_UNDEFINED};
 
@@ -135,13 +136,9 @@ class VGM {
   uint64_t getCurrentTime();
 
  private:
-  uint32_t _pos;
-  uint32_t _xgm2_ym_offset;
-  uint32_t _xgm2_ym_pos;
-  uint32_t _xgm2_psg_offset;
-  uint32_t _xgm2_psg_pos;
-
   t_gd3 gd3;
+  uint32_t _pos;
+
   uint16_t _vgmLoop;
   uint64_t _vgmSamples;
   uint64_t _vgmRealSamples;
@@ -167,6 +164,11 @@ class VGM {
   s16_t _xgmPsgState[2][4];
   u32_t _xgmYMFrame, _xgmPSGFrame;
 
+  uint32_t _xgm2_ym_offset;
+  uint32_t _xgm2_ym_pos;
+  uint32_t _xgm2_psg_offset;
+  uint32_t _xgm2_psg_pos;
+
   u8_t get_ui8();
   u16_t get_ui16();
   u32_t get_ui24();
@@ -182,7 +184,6 @@ class VGM {
   void _parseGD3(u32_t pos);
   String _digGD3();
   void _resetGD3();
-  uint8_t getNumWrites(u8_t command);
 
   // when reach the end of the song
   void endProcedure();

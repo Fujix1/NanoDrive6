@@ -82,7 +82,7 @@ bool VGM::ready() {
   version = get_ui32_at(8);
 
   // total # samples
-  totalSamples = get_ui32_at(0x18);
+  // totalSamples = get_ui32_at(0x18);
 
   // loop offset
   loopOffset = get_ui32_at(0x1c);
@@ -127,6 +127,12 @@ bool VGM::ready() {
           freq[2] = normalizeFreq(clock, CHIP_SN76489_0);
         }
       }
+    }
+
+    // SN76489 フラグ
+    SN76489_Freq0is0X400 = false;
+    if (version >= 0x151) {
+      SN76489_Freq0is0X400 = get_ui8_at(0x2b) & 0x0001;
     }
   }
 
@@ -593,9 +599,6 @@ u32_t VGM::get_ui32_at(u32_t p) {
          (u32_t(vgmData[p + 3]) << 24);
 }
 
-// XGM コマンドの X を返す
-u8_t VGM::getNumWrites(u8_t command) { return command % 0xf; }
-
 //----------------------------------------------------------------------
 // VGM処理
 
@@ -630,11 +633,19 @@ void VGM::vgmProcessMain() {
       break;
 
     case 0x30:  // SN76489 CHIP 2
-      FM.write(get_ui8(), 2, freq[chipSlot[CHIP_SN76489_1]]);
+      if (SN76489_Freq0is0X400) {
+        FM.write(get_ui8(), 2, freq[chipSlot[CHIP_SN76489_1]]);
+      } else {
+        FM.write(get_ui8(), 1, freq[chipSlot[CHIP_SN76489_0]]);
+      }
       break;
 
     case 0x50:  // SN76489 CHIP 1
-      FM.write(get_ui8(), 1, freq[chipSlot[CHIP_SN76489_0]]);
+      if (SN76489_Freq0is0X400) {
+        FM.writeRaw(get_ui8(), 1, freq[chipSlot[CHIP_SN76489_0]]);
+      } else {
+        FM.write(get_ui8(), 1, freq[chipSlot[CHIP_SN76489_0]]);
+      }
       break;
 
     case 0x52:  // YM2612 port 0, write value dd to register aa

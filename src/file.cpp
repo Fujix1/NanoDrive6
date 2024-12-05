@@ -145,18 +145,16 @@ bool NDFile::readFile(String path) {
   if (!_vgmFile) {
     lcd.printf("ERROR: Failed to open file.\n%s", path.c_str());
     _vgmFile.close();
-    vgm.size = 0;
     return false;
   }
 
   if (_vgmFile.size() > MAX_FILE_SIZE) {
     lcd.printf("ERROR: The file is too large.\nMax file size is %d.\n%s", MAX_FILE_SIZE, path.c_str());
     _vgmFile.close();
-    vgm.size = 0;
     return false;
   }
-  vgm.size = _vgmFile.size();
-  _vgmFile.read(vgm.vgmData, vgm.size);
+
+  _vgmFile.read(vgm.vgmData, _vgmFile.size());
   Serial.printf("File name: %s\n", path.c_str());
   _vgmFile.close();
 

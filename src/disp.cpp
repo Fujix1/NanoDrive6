@@ -623,6 +623,7 @@ void CFGWindow::draw() {
   render.setDrawer(frameBuffer);
   render.setAlignment(Align::TopLeft);
   render.setFontColor(C_LIGHTGRAY, C_FOOTER_ACTIVE);
+
   if (ndConfig.get(CFG_LANG) == LANG_JA) {
     render.loadFont(fontMain, sizeof(fontMain));
     render.setFontSize(17);
@@ -634,7 +635,7 @@ void CFGWindow::draw() {
     render.loadFont(nimbusBold, sizeof(nimbusBold));
     render.setFontSize(16);
     render.setCursor(6, 5);
-    render.printf("Preferences");
+    render.printf("Settings");
     render.setCursor(133, 298);
     render.printf("OK");
   }
@@ -670,7 +671,7 @@ void CFGWindow::drawItem(int index, bool toFrameBuffer) {
     label = ndConfig.items[index].labelJp;
     option = ndConfig.items[index].optionsJp[ndConfig.items[index].index];
   } else {
-    fontSize = 17;
+    fontSize = 16;
     ofr.loadFont(nimbusBold, sizeof(nimbusBold));
     label = ndConfig.items[index].labelEn;
     option = ndConfig.items[index].optionsEn[ndConfig.items[index].index];
