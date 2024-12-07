@@ -80,13 +80,11 @@ bool VGM::ready() {
 
   // version
   version = get_ui32_at(8);
-
   // total # samples
   // totalSamples = get_ui32_at(0x18);
 
   // loop offset
   loopOffset = get_ui32_at(0x1c);
-
   // vg3 offset
   gd3Offset = get_ui32_at(0x14) + 0x14;
 
@@ -644,10 +642,15 @@ void VGM::vgmProcessMain() {
       break;
 
     case 0x50:  // SN76489 CHIP 1
-      if (SN76489_Freq0is0X400) {
-        FM.writeRaw(get_ui8(), 1, freq[chipSlot[CHIP_SN76489_0]]);
-      } else {
-        FM.write(get_ui8(), 1, freq[chipSlot[CHIP_SN76489_0]]);
+
+      // WORKAROUND FOR COMMAND TO UNDEFINED SN CHIP
+      // Sonic & Knuckles 30th song
+      if (freq[chipSlot[CHIP_SN76489_0]] != SI5351_UNDEFINED) {
+        if (SN76489_Freq0is0X400) {
+          FM.writeRaw(get_ui8(), 1, freq[chipSlot[CHIP_SN76489_0]]);
+        } else {
+          FM.write(get_ui8(), 1, freq[chipSlot[CHIP_SN76489_0]]);
+        }
       }
       break;
 #endif

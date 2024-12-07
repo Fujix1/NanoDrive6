@@ -129,6 +129,7 @@ void FMChip::writeRaw(byte data, byte chipno, si5351Freq_t freq) {
   // 3.579MHz :  0.2794us * 32 = 8.94 us
   // 1.5MHz   :  0.66us   * 32 = 21.3 us
   WR_LOW;
+
   ets_delay_us((32000000 / freq));
 
   WR_HIGH;
