@@ -120,7 +120,6 @@ void FMChip::writeRaw(byte data, byte chipno, si5351Freq_t freq) {
       CS2_LOW;
       break;
   }
-
   WR_HIGH;
   dedic_gpio_bundle_write(dataBus, 0xff, data);
 
@@ -130,7 +129,7 @@ void FMChip::writeRaw(byte data, byte chipno, si5351Freq_t freq) {
   // 1.5MHz   :  0.66us   * 32 = 21.3 us
   WR_LOW;
 
-  ets_delay_us((32000000 / freq));
+  ets_delay_us((32000000 / freq) + 1);
 
   WR_HIGH;
   switch (chipno) {
@@ -176,7 +175,7 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
 
   // アドレスライト後の待ちサイクル
   // アドレス＄21-＄B6 待ちサイクル 17 = 2.21us
-  ets_delay_us(4);  // 3 は一部足りない
+  ets_delay_us(5);  // 3 は一部足りない
 
   // data
   /*if (addr >= 0x40 && addr <= 0x4e) {
@@ -206,9 +205,9 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
   // unsigned long deltaTime = micros() - startTime;
   // Serial.printf("%x%d\n", addr, deltaTime);
   if (addr >= 0x21 && addr <= 0x9e) {
-    ets_delay_us(11);  // 83 cycles = 10.79us,
+    ets_delay_us(12);  // 83 cycles = 10.79us,
   } else if (addr >= 0xa0 && addr <= 0xb6) {
-    ets_delay_us(7);  // 47 cycles = 6.11us
+    ets_delay_us(8);  // 47 cycles = 6.11us
   }
 
   // YM3438 Twww マニュアルより
