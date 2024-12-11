@@ -33,7 +33,6 @@ class NDFile {
   std::vector<std::vector<String>> files;  // 各ディレクトリ内のファイル一覧
 
  private:
-  uint16_t _numDirs;  //
 };
 
 extern NDFile ndFile;

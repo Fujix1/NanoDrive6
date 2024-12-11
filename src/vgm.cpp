@@ -929,7 +929,7 @@ bool VGM::XGMReady() {
       }
 
       for (int i = 0; i < 123; i++) {
-        Serial.printf("Sample: id %d, add %x, size %x\n", i, XGMSampleAddressTable[i], XGMSampleSizeTable[i]);
+        // Serial.printf("Sample: id %d, add %x, size %x\n", i, XGMSampleAddressTable[i], XGMSampleSizeTable[i]);
       }
       gd3Offset = 0x104 + XGM_SLEN + XGM_FMLEN + XGM_PSGLEN;
 

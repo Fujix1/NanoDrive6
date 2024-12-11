@@ -101,7 +101,6 @@ void NDFile::listDir(const char *dirname) {
     dirName = root.getNextFileName(&isDir);
   }
   root.close();
-  _numDirs = dirs.size();
 
   // 各ディレクトリ内のファイル名取得
   files.resize(dirs.size());
@@ -176,7 +175,7 @@ bool NDFile::filePlay(int count) {
 // 戻り値: 成功/不成功
 bool NDFile::dirPlay(int count) {
   currentFile = 0;
-  currentDir = mod(currentDir + count, _numDirs);
+  currentDir = mod(currentDir + count, dirs.size());
   ndConfig.saveHistory();
   return fileOpen(currentDir, currentFile, ndFile.getFolderAttenuation(dirs[currentDir]));
 }

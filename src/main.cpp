@@ -49,7 +49,7 @@ void setup() {
   pinMode(D0, OUTPUT);
   digitalWrite(D0, HIGH);
 
-  Serial.begin(115200);
+  Serial.begin(2000000);
   Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
   Serial.printf("Flash - %'d Bytes at %'d\n", ESP.getFlashChipSize(), ESP.getFlashChipSpeed());
   Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(), ESP.getFreePsram());
@@ -93,23 +93,45 @@ void setup() {
   SI5351.setFreq(SI5351_4000, 1);
   SI5351.enableOutputs(true);
 
-  // SD読み込み
-  if (ndFile.init() == true) {
-    ndFile.listDir("/");
-  } else {
-    exit;
-  }
-
-  // ファイル数確認
-  if (ndFile.totalSongs == 0) {
-    lcd.printf("ERROR: No file to play on the SD.\n");
-    exit;
-  }
-
   // VGM用GPIO初期化
   // Lovyanの初期化で上書きされるので、initDisp();の後に呼び出す
   FM.begin();
   FM.reset();
+
+  // 動作切り替え
+  if (ndConfig.currentMode == MODE_PLAYER) {
+    // SD読み込み
+    if (ndFile.init() == true) {
+      ndFile.listDir("/");
+    } else {
+      exit;
+    }
+
+    // ファイル数確認
+    if (ndFile.totalSongs == 0) {
+      lcd.printf("ERROR: No file to play on the SD.\n");
+      exit;
+    }
+
+    // 読み込み履歴復元
+    u16_t lastDirIndex = 0, lastTrackIndex = 0;
+    u32_t history = ndConfig.loadHistory();
+    lastDirIndex = history & 0xffff;
+    lastTrackIndex = (history & 0xffff0000) >> 16;
+
+    switch (ndConfig.get(CFG_HISTORY)) {
+      case HISTORY_FOLDER:
+        ndFile.dirPlay(lastDirIndex);
+        break;
+      case HISTORY_FILE:
+        ndFile.play(lastDirIndex, lastTrackIndex);
+        break;
+      default:
+        ndFile.dirPlay(0);
+    }
+  } else {
+    lcd.printf("Entering Serial Mode.\n");
+  }
 
   // 入力有効化
   input.init();
@@ -117,39 +139,26 @@ void setup() {
 
   cfgWindow.init();
 
-  // 読み込み履歴復元
-  u16_t lastDirIndex = 0, lastTrackIndex = 0;
-  u32_t history = ndConfig.loadHistory();
-  lastDirIndex = history & 0xffff;
-  lastTrackIndex = (history & 0xffff0000) >> 16;
-
-  switch (ndConfig.get(CFG_HISTORY)) {
-    case HISTORY_FOLDER:
-      ndFile.dirPlay(lastDirIndex);
-      break;
-    case HISTORY_FILE:
-      ndFile.play(lastDirIndex, lastTrackIndex);
-      break;
-    default:
-      ndFile.dirPlay(0);
-  }
-
   Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
   Serial.printf("Flash - %'d Bytes at %'d\n", ESP.getFlashChipSize(), ESP.getFlashChipSpeed());
   Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(), ESP.getFreePsram());
 }
 
 void loop() {
-  while (1) {
-    if (vgm.vgmLoaded) {
-      vgm.vgmProcess();
-    } else if (vgm.xgmLoaded) {
-      if (vgm.XGMVersion == 1)
-        vgm.xgmProcess();
-      else
-        vgm.xgm2Process();
+  if (ndConfig.currentMode == MODE_PLAYER) {
+    while (1) {
+      if (vgm.vgmLoaded) {
+        vgm.vgmProcess();
+      } else if (vgm.xgmLoaded) {
+        if (vgm.XGMVersion == 1)
+          vgm.xgmProcess();
+        else
+          vgm.xgm2Process();
+      }
+      input.inputHandler();
     }
 
+  } else {
     input.inputHandler();
   }
 }

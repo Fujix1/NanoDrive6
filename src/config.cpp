@@ -72,6 +72,8 @@ bool NDConfig::init() {
                    {FO_0, FO_2, FO_5, FO_8, FO_10, FO_12, FO_15}});
 
   items.push_back({0, "画面更新", "LCD Update", {"する", "しない"}, {"On", "Off"}, {UPDATE_YES, UPDATE_NO}});
+  items.push_back(
+      {0, "動作モード", "Mode", {"プレーヤー", "シリアル"}, {"Player", "Serial"}, {MODE_PLAYER, MODE_SERIAL}});
 
   if (!SPIFFS.begin(true)) {
     return false;
@@ -113,6 +115,13 @@ void NDConfig::loadCfg() {
     }
   }
   file.close();
+
+  // 現在の動作モード
+  if (items.size() > CFG_MODE) {
+    currentMode = (tMode)items[CFG_MODE].index;
+  } else {
+    currentMode = MODE_PLAYER;
+  }
 }
 
 // 最後に開いたフォルダ番号の照合
