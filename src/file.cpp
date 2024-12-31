@@ -273,7 +273,6 @@ u32_t NDFile::get_ui24() { return get_ui8() + (get_ui8() << 8) + (get_ui8() << 1
 u32_t NDFile::get_ui32() { return get_ui8() + (get_ui8() << 8) + (get_ui8() << 16) + (get_ui8() << 24); }
 // 指定場所の 8 bit 返す
 u8_t NDFile::get_ui8_at(uint32_t p) { return data[p]; }
-s8_t NDFile::get_s8_at(uint32_t p) { return (s8_t)data[p]; }
 // 指定場所の 16 bit 返す
 u16_t NDFile::get_ui16_at(uint32_t p) { return (u32_t(data[p])) + (u32_t(data[p + 1]) << 8); }
 // 指定場所の 24 bit 返す

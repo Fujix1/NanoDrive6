@@ -347,8 +347,7 @@ si5351Freq_t VGM::normalizeFreq(u32_t freq, t_chip chip) {
         case 3072000:  // 3.072MHz
           return SI5351_3072;
           break;
-        case 3579580:  // 3.579MHz
-        case 3579545:
+        case 3579000 ... 3580000:  // 3.579MHz
           return SI5351_3579;
           break;
         case 3993600:
@@ -374,9 +373,7 @@ si5351Freq_t VGM::normalizeFreq(u32_t freq, t_chip chip) {
         case 3500000:
           return SI5351_3500;
           break;
-        case 3579580:
-        case 3579545:
-        case 3580000:
+        case 3579000 ... 3580000:  // 3.579MHz
           return SI5351_3579;
           break;
         case 4000000:
@@ -417,8 +414,7 @@ si5351Freq_t VGM::normalizeFreq(u32_t freq, t_chip chip) {
         case 3000000:  // YM2203 @ 3MHz
           return SI5351_6000;
           break;
-        case 3579580:  // YM2203 @ 3.579MHz
-        case 3579545:
+        case 3579000 ... 3580000:  // YM2203 @ 3.579MHz
           return SI5351_7159;
           break;
         case 3993600:
@@ -588,7 +584,7 @@ void VGM::vgmProcessMain() {
       if (SN76489_Freq0is0X400) {
         FM.writeRaw(ndFile.get_ui8(), 2, freq[chipSlot[CHIP_SN76489_1]]);
       } else {
-        FM.write(ndFile.get_ui8(), 1, freq[chipSlot[CHIP_SN76489_0]]);
+        FM.write(ndFile.get_ui8(), 2, freq[chipSlot[CHIP_SN76489_0]]);
       }
       break;
 

@@ -39,7 +39,6 @@ class NDFile {
   u32_t get_ui24();
   u32_t get_ui32();
   u8_t get_ui8_at(uint32_t p);
-  s8_t get_s8_at(uint32_t p);
   u16_t get_ui16_at(uint32_t p);
   u32_t get_ui24_at(uint32_t p);
   u32_t get_ui32_at(uint32_t p);
