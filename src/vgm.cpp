@@ -65,7 +65,6 @@ bool VGM::ready() {
   freq[2] = SI5351_UNDEFINED;
 
   _vgmLoop = 0;
-  //_vgmDelay = 0;
   _vgmSamples = 0;
   _vgmRealSamples = 0;
 
@@ -635,7 +634,7 @@ void VGM::vgmProcessMain() {
 #ifdef USE_SN76489
     case 0x30:  // SN76489 CHIP 2
       if (SN76489_Freq0is0X400) {
-        FM.write(get_ui8(), 2, freq[chipSlot[CHIP_SN76489_1]]);
+        FM.writeRaw(get_ui8(), 2, freq[chipSlot[CHIP_SN76489_1]]);
       } else {
         FM.write(get_ui8(), 1, freq[chipSlot[CHIP_SN76489_0]]);
       }
