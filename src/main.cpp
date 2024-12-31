@@ -63,8 +63,8 @@ void setup() {
 
   lcd.setFont(&fonts::Font2);
   lcd.println("NANO DRIVE 6");
-  lcd.println("2024 Fujix@e2j.net");
-  lcd.printf("Firmware: 1.83\n\n");
+  lcd.println("2024, 2025 Fujix@e2j.net");
+  lcd.printf("Firmware: 1.84\n\n");
 
   // PSRAM 初期化確認
   if (psramInit()) {
@@ -99,39 +99,40 @@ void setup() {
   FM.reset();
 
   // 動作切り替え
-  if (ndConfig.currentMode == MODE_PLAYER) {
-    // SD読み込み
-    if (ndFile.init() == true) {
-      ndFile.listDir("/");
-    } else {
-      exit;
-    }
-
-    // ファイル数確認
-    if (ndFile.totalSongs == 0) {
-      lcd.printf("ERROR: No file to play on the SD.\n");
-      exit;
-    }
-
-    // 読み込み履歴復元
-    u16_t lastDirIndex = 0, lastTrackIndex = 0;
-    u32_t history = ndConfig.loadHistory();
-    lastDirIndex = history & 0xffff;
-    lastTrackIndex = (history & 0xffff0000) >> 16;
-
-    switch (ndConfig.get(CFG_HISTORY)) {
-      case HISTORY_FOLDER:
-        ndFile.dirPlay(lastDirIndex);
-        break;
-      case HISTORY_FILE:
-        ndFile.play(lastDirIndex, lastTrackIndex);
-        break;
-      default:
-        ndFile.dirPlay(0);
-    }
+  // if (ndConfig.currentMode == MODE_PLAYER) {
+  // SD読み込み
+  if (ndFile.init() == true) {
+    ndFile.listDir("/");
   } else {
+    exit;
+  }
+
+  // ファイル数確認
+  if (ndFile.totalSongs == 0) {
+    lcd.printf("ERROR: No file to play on the SD.\n");
+    exit;
+  }
+
+  // 読み込み履歴復元
+  u16_t lastDirIndex = 0, lastTrackIndex = 0;
+  u32_t history = ndConfig.loadHistory();
+  lastDirIndex = history & 0xffff;
+  lastTrackIndex = (history & 0xffff0000) >> 16;
+
+  switch (ndConfig.get(CFG_HISTORY)) {
+    case HISTORY_FOLDER:
+      ndFile.dirPlay(lastDirIndex);
+      break;
+    case HISTORY_FILE:
+      ndFile.play(lastDirIndex, lastTrackIndex);
+      break;
+    default:
+      ndFile.dirPlay(0);
+  }
+  /*} else {
     lcd.printf("Entering Serial Mode.\n");
   }
+  */
 
   // 入力有効化
   input.init();
