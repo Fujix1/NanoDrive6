@@ -53,6 +53,11 @@ bool NDFile::init() {
   uint64_t cardSize = SD.cardSize() / (1024 * 1024);
   lcd.printf("- Size: %llu MB\n", cardSize);
   vTaskDelay(100);
+
+  // メモリ確保
+  psramInit();  // ALWAYS CALL THIS BEFORE USING THE PSRAM
+  data = (u8_t *)ps_calloc(MAX_FILE_SIZE, sizeof(u8_t));
+
   return true;
 }
 
@@ -153,7 +158,7 @@ bool NDFile::readFile(String path) {
     return false;
   }
 
-  _vgmFile.read(vgm.vgmData, _vgmFile.size());
+  _vgmFile.read(data, _vgmFile.size());
   Serial.printf("File name: %s\n", path.c_str());
   _vgmFile.close();
 
@@ -255,6 +260,29 @@ uint8_t NDFile::getFolderAttenuation(String path) {
   }
 
   return 0;
+}
+
+// data access
+// 8 bit 返す
+u8_t NDFile::get_ui8() { return data[pos++]; }
+// 16 bit 返す
+u16_t NDFile::get_ui16() { return get_ui8() + (get_ui8() << 8); }
+// 24 bit 返す
+u32_t NDFile::get_ui24() { return get_ui8() + (get_ui8() << 8) + (get_ui8() << 16); }
+// 32 bit 返す
+u32_t NDFile::get_ui32() { return get_ui8() + (get_ui8() << 8) + (get_ui8() << 16) + (get_ui8() << 24); }
+// 指定場所の 8 bit 返す
+u8_t NDFile::get_ui8_at(uint32_t p) { return data[p]; }
+s8_t NDFile::get_s8_at(uint32_t p) { return (s8_t)data[p]; }
+// 指定場所の 16 bit 返す
+u16_t NDFile::get_ui16_at(uint32_t p) { return (u32_t(data[p])) + (u32_t(data[p + 1]) << 8); }
+// 指定場所の 24 bit 返す
+u32_t NDFile::get_ui24_at(uint32_t p) {
+  return (u32_t(data[p])) + (u32_t(data[p + 1]) << 8) + (u32_t(data[p + 2]) << 16);
+}
+// 指定場所の 32 bit 返す
+u32_t NDFile::get_ui32_at(uint32_t p) {
+  return (u32_t(data[p])) + (u32_t(data[p + 1]) << 8) + (u32_t(data[p + 2]) << 16) + (u32_t(data[p + 3]) << 24);
 }
 
 NDFile ndFile = NDFile();

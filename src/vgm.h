@@ -101,7 +101,6 @@ class VGM {
  public:
   t_format format;
 
-  uint8_t *vgmData;     // データ本体
   uint32_t version;     // VGM バージョン
   uint32_t dataOffset;  // データオフセット
   uint32_t loopOffset;  // ループオフセット
@@ -137,7 +136,6 @@ class VGM {
 
  private:
   t_gd3 gd3;
-  uint32_t _pos;
 
   uint16_t _vgmLoop;
   uint64_t _vgmSamples;
@@ -169,15 +167,6 @@ class VGM {
   uint32_t _xgm2_psg_offset;
   uint32_t _xgm2_psg_pos;
 
-  u8_t get_ui8();
-  u16_t get_ui16();
-  u32_t get_ui24();
-  u32_t get_ui32();
-  u8_t get_ui8_at(uint32_t p);
-  s8_t get_s8_at(uint32_t p);
-  u16_t get_ui16_at(uint32_t p);
-  u32_t get_ui24_at(uint32_t p);
-  u32_t get_ui32_at(uint32_t p);
   si5351Freq_t normalizeFreq(uint32_t freq, t_chip chip);
 
   uint32_t _gd3p;

@@ -28,9 +28,21 @@ class NDFile {
   uint16_t totalSongs = 0;  // 合計曲数
   uint16_t getNumFilesinCurrentDir();
 
+  uint8_t *data;                           // データ本体
+  uint32_t pos;                            // データ位置
   std::vector<String> dirs;                // ルートのディレクトリ一覧
   std::vector<String> pngs;                // ディレクトリごとのpng
   std::vector<std::vector<String>> files;  // 各ディレクトリ内のファイル一覧
+
+  u8_t get_ui8();
+  u16_t get_ui16();
+  u32_t get_ui24();
+  u32_t get_ui32();
+  u8_t get_ui8_at(uint32_t p);
+  s8_t get_s8_at(uint32_t p);
+  u16_t get_ui16_at(uint32_t p);
+  u32_t get_ui24_at(uint32_t p);
+  u32_t get_ui32_at(uint32_t p);
 
  private:
 };
