@@ -6,7 +6,7 @@ This is a repository for NanoDrive 6 VGM player with YM2612/YM3438 + SN76489 x 2
 
 # Manual PDF
 
-You can get the manual at [nd6_manual_r2.pdf](https://github.com/user-attachments/files/17613253/nd6_manual_r2.pdf)
+You can get the manual at [nd6_manual_r3.pdf](https://github.com/user-attachments/files/18299302/nd6_manual_r3.pdf)
 
 # PCB
 
