@@ -124,6 +124,16 @@ bool VGM::ready() {
     }
   }
 
+  u32_t ym2413_clock = ndFile.get_ui32_at(0x10);
+  if (ym2413_clock) {
+    if (CHIP0 == CHIP_YM2413) {
+      freq[CHIP0_CLOCK] = normalizeFreq(ym2413_clock, CHIP_YM2413);
+    }
+    if (CHIP1 == CHIP_YM2413) {
+      freq[CHIP1_CLOCK] = normalizeFreq(ym2413_clock, CHIP_YM2413);
+    }
+  }
+
   u32_t ym2612_clock = ndFile.get_ui32_at(0x2c);
   if (ym2612_clock) {
     if (CHIP0 == CHIP_YM2612) {
@@ -333,7 +343,23 @@ si5351Freq_t VGM::normalizeFreq(u32_t freq, t_chip chip) {
       }
       break;
     }
-
+    case CHIP_YM2413: {
+      switch (freq) {
+        case 2000000:
+          return SI5351_2000;
+          break;
+        case 3579000 ... 3580000:  // 3.579MHz
+          return SI5351_3579;
+          break;
+        case 4000000:
+          return SI5351_4000;
+          break;
+        default:
+          return SI5351_3579;
+          break;
+      }
+      break;
+    }
     case CHIP_YM2203_0:
     case CHIP_YM2203_1: {
       switch (freq) {
@@ -589,7 +615,6 @@ void VGM::vgmProcessMain() {
       break;
 
     case 0x50:  // SN76489 CHIP 1
-
       // WORKAROUND FOR COMMAND TO UNDEFINED SN CHIP
       // Sonic & Knuckles 30th song
       if (freq[chipSlot[CHIP_SN76489_0]] != SI5351_UNDEFINED) {
@@ -599,6 +624,14 @@ void VGM::vgmProcessMain() {
           FM.write(ndFile.get_ui8(), 1, freq[chipSlot[CHIP_SN76489_0]]);
         }
       }
+      break;
+#endif
+
+#ifdef USE_YM2413
+    case 0x51:
+      reg = ndFile.get_ui8();
+      dat = ndFile.get_ui8();
+      FM.setRegisterOPM(reg, dat, 0);
       break;
 #endif
 

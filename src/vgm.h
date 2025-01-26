@@ -79,6 +79,7 @@ typedef enum {
   CHIP_NONE,
   CHIP_SN76489_0,
   CHIP_SN76489_1,
+  CHIP_YM2413,
   CHIP_YM2612,
   CHIP_YM2151,
   CHIP_YM2203_0,
@@ -94,7 +95,7 @@ typedef enum {
 typedef enum { CLK_0, CLK_1, CLK_2, CLK_3 } t_clockSlot;
 
 // チップ名
-const std::vector<String> CHIP_LABEL = {"",       "SN76489", "SN76489", "YM2612", "YM2151", "YM2203",
+const std::vector<String> CHIP_LABEL = {"",       "SN76489", "SN76489", "YM2413", "YM2612", "YM2151", "YM2203",
                                         "YM2203", "YM2608",  "YM2610",  "YM3812", "AY8910", "YMF262"};
 
 class VGM {

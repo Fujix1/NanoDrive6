@@ -15,8 +15,10 @@ void inputTask(void *param) {
 
 void serialCheckerTask(void *param) {
   while (1) {
-    if (Serial.available() > 0) {
+    if (Serial.available() > 0) {  // シリアルデータがある場合
       char data = Serial.read();
+      Serial.printf("Serial data: %c\n", data);  // debug
+      /*
       while (Serial.available()) Serial.read();
       if (data == 'a') {
         input.inputBuffer = btnRIGHT;
@@ -26,7 +28,7 @@ void serialCheckerTask(void *param) {
         input.inputBuffer = btnUP;
       } else if (data == 's') {
         input.inputBuffer = btnDOWN;
-      }
+      }*/
     }
     vTaskDelay(100);
   }
