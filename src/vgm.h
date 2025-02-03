@@ -141,8 +141,8 @@ class VGM {
   uint16_t _vgmLoop;
   uint64_t _vgmSamples;
   uint64_t _vgmRealSamples;
-  uint64_t _vgmStart;
-  uint64_t _vgmWaitUntil;
+  unsigned long _vgmStart;
+  unsigned long _vgmWaitUntil;
   uint32_t _pcmpos = 0;
 
   u32_t _xgmSamplePos[XGM1_MAX_PCM_CH];
