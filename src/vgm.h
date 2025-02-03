@@ -141,9 +141,10 @@ class VGM {
   uint16_t _vgmLoop;
   uint64_t _vgmSamples;
   uint64_t _vgmRealSamples;
-  unsigned long _vgmStart;
-  unsigned long _vgmWaitUntil;
+  uint64_t _vgmStart;
+  uint64_t _vgmWaitUntil;
   uint32_t _pcmpos = 0;
+  int64_t micros64();
 
   u32_t _xgmSamplePos[XGM1_MAX_PCM_CH];
   u8_t _xgmSampleId[XGM1_MAX_PCM_CH];
@@ -153,10 +154,10 @@ class VGM {
   bool _xgmPCMHalfSent[3];
   u32_t _xgmFrame;
   u32_t _xgmYMSNFrame;
-  u32_t _xgmStartTick;
-  u32_t _xgmWaitUntil;
-  u32_t _xgmWaitYMUntil;
-  u32_t _xgmWaitPsgUntil;
+  u64_t _xgmStartTick;
+  u64_t _xgmWaitUntil;
+  u64_t _xgmWaitYMUntil;
+  u64_t _xgmWaitPsgUntil;
   bool _xgmIsNTSC;
 
   u8_t _xgmYmState[2][0x100];

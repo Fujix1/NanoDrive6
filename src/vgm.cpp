@@ -266,7 +266,7 @@ bool VGM::ready() {
   updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
               gd3.date, chip[0], chip[1], FORMAT_LABEL[vgm.format], 0, n, ndFile.files[ndFile.currentDir].size()});
 
-  _vgmStart = micros();
+  _vgmStart = micros64();
   return true;
 }
 
@@ -586,7 +586,7 @@ void VGM::vgmProcess() {
 
   _vgmRealSamples = _vgmSamples;
   _vgmWaitUntil = _vgmStart + _vgmRealSamples * 22.67573696145125;
-  while ((long)(_vgmWaitUntil - micros()) > 22) {  // オーバーフロー対策
+  while (_vgmWaitUntil - 22 > micros64()) {
     ets_delay_us(22);
   }
 }
@@ -990,11 +990,11 @@ void VGM::xgmProcess() {
   }
 
   _xgmFrame = _xgmYMSNFrame;
-  _xgmWaitUntil = _xgmStartTick + (unsigned long)(_xgmYMSNFrame * 16666);  // 60Hz
-  _vgmSamples = _xgmYMSNFrame * 735;                                       // 44100 / 60
+  _xgmWaitUntil = _xgmStartTick + _xgmYMSNFrame * 16666;  // 60Hz
+  _vgmSamples = _xgmYMSNFrame * 735;                      // 44100 / 60
 
   // PCM Stream mixing
-  while ((long)(_xgmWaitUntil - micros()) > XGM1_PCM_DELAY) {
+  while (_xgmWaitUntil - XGM1_PCM_DELAY > micros()) {
     _xgm1ProcessPCM();
     ets_delay_us(XGM1_PCM_DELAY);
   }
@@ -1110,10 +1110,10 @@ void VGM::xgm2Process() {
   }
 
   _xgmFrame = (_xgmPSGFrame < _xgmYMFrame) ? _xgmPSGFrame : _xgmYMFrame;
-  _xgmWaitUntil = _xgmStartTick + (unsigned long)(_xgmFrame * 16666);  // 60Hz
-  _vgmSamples = _xgmFrame * 735;                                       // 44100 / 60
+  _xgmWaitUntil = _xgmStartTick + _xgmFrame * 16666;  // 60Hz
+  _vgmSamples = _xgmFrame * 735;                      // 44100 / 60
 
-  while ((long)(_xgmWaitUntil - micros()) >= XGM2_PCM_DELAY) {
+  while (_xgmWaitUntil - XGM2_PCM_DELAY >= micros()) {
     _xgm2ProcessPCM();
     ets_delay_us(XGM2_PCM_DELAY);
   }
@@ -1678,6 +1678,11 @@ void VGM::endProcedure() {
 uint64_t VGM::getCurrentTime() {
   if (_vgmSamples >= 264600000) _vgmSamples = 0;
   return _vgmSamples / 44100;
+}
+
+int64_t VGM::micros64() {
+  //
+  return esp_timer_get_time();
 }
 
 VGM vgm = VGM();
