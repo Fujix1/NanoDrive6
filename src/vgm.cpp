@@ -1106,10 +1106,16 @@ void VGM::xgm2Process() {
   }
 
   while (_xgmYMFrame <= _xgmFrame) {
-    _xgm2ProcessYM();
+    if (_xgm2ProcessYM()) {
+      endProcedure();
+      return;
+    };
   }
   while (_xgmPSGFrame <= _xgmFrame) {
-    _xgm2ProcessSN();
+    if (_xgm2ProcessSN()) {
+      endProcedure();
+      return;
+    };
   }
 
   _xgmFrame = (_xgmPSGFrame < _xgmYMFrame) ? _xgmPSGFrame : _xgmYMFrame;
@@ -1151,7 +1157,14 @@ void VGM::_xgm2ProcessPCM() {
   }
 }
 
-void VGM::_xgm2ProcessYM() {
+/**
+ * @brief   XGM2 PSG 処理
+ *
+ * @return true   曲終了
+ * @return false  処理を継続
+ */
+
+bool VGM::_xgm2ProcessYM() {
   u8_t port = _getYMPort(_xgm2_ym_pos);
   u8_t channel = _getYMChannel(_xgm2_ym_pos);
   u8_t command = ndFile.get_ui8_at(_xgm2_ym_pos++);
@@ -1163,8 +1176,7 @@ void VGM::_xgm2ProcessYM() {
       u32_t loopOffset = ndFile.get_ui24_at(_xgm2_ym_pos);
       Serial.printf("0x%x - FM end/loop: offset: %x\n", _xgm2_ym_pos - _xgm2_ym_offset - 1, loopOffset);
       if (loopOffset == 0xffffff) {
-        endProcedure();
-        return;
+        return true;  // 曲終了
       } else {
         _vgmLoop++;
         _xgm2_ym_pos = _xgm2_ym_offset + loopOffset;
@@ -1403,6 +1415,8 @@ void VGM::_xgm2ProcessYM() {
       Serial.printf("Unknown XGM2 command: 0x%0x @ 0x%0x\n", command, _xgm2_ym_pos);
     }
   }
+
+  return false;
 }
 
 // XGM 2 port and channel
@@ -1473,7 +1487,13 @@ int VGM::_getYMSlot(u8_t command) {
   return -1;
 }
 
-void VGM::_xgm2ProcessSN() {
+/**
+ * @brief SN76489 command processing
+ *
+ * @return true  End of music data
+ * @return false  Continue processing
+ */
+bool VGM::_xgm2ProcessSN() {
   u8_t channel = _getChannel(_xgm2_psg_pos);
   u8_t command = ndFile.get_ui8_at(_xgm2_psg_pos++);
   u8_t reg;
@@ -1486,7 +1506,7 @@ void VGM::_xgm2ProcessSN() {
       u32_t loopOffset = ndFile.get_ui24_at(_xgm2_psg_pos);
       // Serial.printf("0x%x - PSG end/loop: offset: %x\n", _xgm2_psg_pos - _xgm2_psg_offset - 1, loopOffset);
       if (loopOffset == 0xFFFFFF) {
-        xgmLoaded = false;
+        return true;  // 処理終了
       } else {
         _xgm2_psg_pos = _xgm2_psg_offset + loopOffset;
       }
@@ -1626,6 +1646,7 @@ void VGM::_xgm2ProcessSN() {
       break;
     }
   }
+  return false;
 }
 
 u8_t VGM::_getChannel(u32_t pos) {
@@ -1659,6 +1680,9 @@ u8_t VGM::_getChannel(u32_t pos) {
 //---------------------------------------------------------------
 // 曲終了時の処理
 void VGM::endProcedure() {
+  xgmLoaded = false;
+  vgmLoaded = false;
+
   switch (ndConfig.get(CFG_REPEAT)) {
     case REPEAT_ONE: {
       ndFile.filePlay(0);
