@@ -102,29 +102,29 @@ class VGM {
  public:
   t_format format;
 
-  uint32_t version;     // VGM バージョン
-  uint32_t dataOffset;  // データオフセット
-  uint32_t loopOffset;  // ループオフセット
-  uint32_t gd3Offset;   // gd3オフセット
-  // uint32_t totalSamples;  // 全サンプル数
+  u32_t version;     // VGM バージョン
+  u32_t dataOffset;  // データオフセット
+  u32_t loopOffset;  // ループオフセット
+  u32_t gd3Offset;   // gd3オフセット
+  // u32_t totalSamples;  // 全サンプル数
   boolean SN76489_Freq0is0X400;  // SN76489 が Sega VDP ではない
 
   std::vector<si5351Freq_t> freq = {SI5351_UNDEFINED, SI5351_UNDEFINED};
 
-  int8_t chipSlot[11];
+  s8_t chipSlot[11];
 
   bool vgmLoaded = false;
   bool xgmLoaded = false;
 
-  uint8_t XGMVersion;  // XGM バージョン 1 or 2
-  std::vector<uint32_t> XGMSampleAddressTable;
-  std::vector<uint32_t> XGMSampleSizeTable;
+  u8_t XGMVersion;  // XGM バージョン 1 or 2
+  std::vector<u32_t> XGMSampleAddressTable;
+  std::vector<u32_t> XGMSampleSizeTable;
 
-  uint32_t XGM_SLEN;
-  uint32_t XGM_MLEN;
-  uint8_t XGM_FLAGS;
-  uint32_t XGM_FMLEN;   // XGM2
-  uint32_t XGM_PSGLEN;  // XGM2
+  u32_t XGM_SLEN;
+  u32_t XGM_MLEN;
+  u8_t XGM_FLAGS;
+  u32_t XGM_FMLEN;   // XGM2
+  u32_t XGM_PSGLEN;  // XGM2
 
   VGM();
   bool ready();     // VGM の再生準備
@@ -133,18 +133,18 @@ class VGM {
   void vgmProcessMain();
   void xgmProcess();
   void xgm2Process();
-  uint64_t getCurrentTime();
+  u64_t getCurrentTime();
 
  private:
   t_gd3 gd3;
 
-  uint16_t _vgmLoop;
-  uint64_t _vgmSamples;
-  uint64_t _vgmRealSamples;
-  uint64_t _vgmStart;
-  uint64_t _vgmWaitUntil;
-  uint32_t _pcmpos = 0;
-  int64_t micros64();
+  u16_t _vgmLoop;
+  u64_t _vgmSamples;
+  u64_t _vgmRealSamples;
+  u64_t _vgmStart;
+  u64_t _vgmWaitUntil;
+  u32_t _pcmpos = 0;
+  s64_t micros64();
 
   u32_t _xgmSamplePos[XGM1_MAX_PCM_CH];
   u8_t _xgmSampleId[XGM1_MAX_PCM_CH];
@@ -164,14 +164,14 @@ class VGM {
   s16_t _xgmPsgState[2][4];
   u32_t _xgmYMFrame, _xgmPSGFrame;
 
-  uint32_t _xgm2_ym_offset;
-  uint32_t _xgm2_ym_pos;
-  uint32_t _xgm2_psg_offset;
-  uint32_t _xgm2_psg_pos;
+  u32_t _xgm2_ym_offset;
+  u32_t _xgm2_ym_pos;
+  u32_t _xgm2_psg_offset;
+  u32_t _xgm2_psg_pos;
 
-  si5351Freq_t normalizeFreq(uint32_t freq, t_chip chip);
+  si5351Freq_t normalizeFreq(u32_t freq, t_chip chip);
 
-  uint32_t _gd3p;
+  u32_t _gd3p;
   void _parseGD3(u32_t pos);
   String _digGD3();
   void _resetGD3();

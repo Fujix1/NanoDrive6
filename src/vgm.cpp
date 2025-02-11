@@ -586,6 +586,7 @@ void VGM::vgmProcess() {
 
   _vgmRealSamples = _vgmSamples;
   _vgmWaitUntil = _vgmStart + _vgmRealSamples * 22.67573696145125;
+
   while (_vgmWaitUntil - 22 > micros64()) {
     ets_delay_us(22);
   }
@@ -631,7 +632,7 @@ void VGM::vgmProcessMain() {
     case 0x51:
       reg = ndFile.get_ui8();
       dat = ndFile.get_ui8();
-      FM.setRegisterOPM(reg, dat, 0);
+      FM.setRegisterOPLL(reg, dat, 1);
       break;
 #endif
 
@@ -658,13 +659,15 @@ void VGM::vgmProcessMain() {
       break;
 #endif
 
-#ifdef USE_YM2203
+#ifdef USE_YM2203_0
     case 0x55:  // YM2203_0
       reg = ndFile.get_ui8();
       dat = ndFile.get_ui8();
       FM.setRegister(reg, dat, 0);
       break;
+#endif
 
+#ifdef USE_YM2203_1
     case 0xA5:  // YM2203_1
       reg = ndFile.get_ui8();
       dat = ndFile.get_ui8();
@@ -971,7 +974,7 @@ bool VGM::XGMReady() {
               gd3.date, chip[0], chip[1], FORMAT_LABEL[vgm.format], 0, n, ndFile.files[ndFile.currentDir].size()});
 
   xgmLoaded = true;
-  _xgmStartTick = micros();
+  _xgmStartTick = micros64();
 
   return true;
 }
@@ -1675,12 +1678,12 @@ void VGM::endProcedure() {
   }
 }
 
-uint64_t VGM::getCurrentTime() {
+u64_t VGM::getCurrentTime() {
   if (_vgmSamples >= 264600000) _vgmSamples = 0;
   return _vgmSamples / 44100;
 }
 
-int64_t VGM::micros64() {
+s64_t VGM::micros64() {
   //
   return esp_timer_get_time();
 }
