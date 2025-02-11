@@ -64,7 +64,7 @@ void setup() {
   lcd.setFont(&fonts::Font2);
   lcd.println("NANO DRIVE 6");
   lcd.println("2024, 2025 Fujix@e2j.net");
-  lcd.printf("Firmware: 1.85\n\n");
+  lcd.printf("Firmware: 1.86\n\n");
 
   // PSRAM 初期化確認
   if (psramInit()) {
