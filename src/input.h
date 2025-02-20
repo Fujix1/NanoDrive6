@@ -3,8 +3,8 @@
 #include <Arduino.h>
 
 #define INPUT_PIN 1
-#define INPUT_CAPTURE_INTERVAL 100  // ms キャプチャインターバル
-#define INPUT_REPEAT_DELAY 300      // ms リピート開始までの時間
+#define INPUT_CAPTURE_INTERVAL 60  // ms キャプチャインターバル
+#define INPUT_REPEAT_DELAY 300     // ms リピート開始までの時間
 
 typedef enum { btnNONE, btnRIGHT, btnUP, btnDOWN, btnLEFT, btnSELECT, btnFUNC } Button;
 
