@@ -49,7 +49,7 @@ void setup() {
   pinMode(D0, OUTPUT);
   digitalWrite(D0, HIGH);
 
-  Serial.begin(921600);
+  Serial.begin(1500000);
   Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
   Serial.printf("Flash - %'d Bytes at %'d\n", ESP.getFlashChipSize(), ESP.getFlashChipSpeed());
   Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(), ESP.getFreePsram());
