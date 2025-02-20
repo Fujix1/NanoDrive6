@@ -13,11 +13,18 @@ void inputTask(void *param) {
   }
 }
 
-void serialCheckerTask(void *param) {
+void serialCheckerTask_(void *param) {
   while (1) {
-    if (Serial.available() > 0) {  // シリアルデータがある場合
-      char data = Serial.read();
-      Serial.printf("Serial data: %c\n", data);  // debug
+    int s = Serial.available();
+    if (s > 0) {  // シリアルデータがある場合
+      byte data[s + 1];
+      // byte data = Serial.read();
+      Serial.readBytes(data, s);
+      lcd.setCursor(0, 32);
+      // lcd.printf("%02x", Serial.available());
+      lcd.printf("%02x %d   ", data[0], s);
+
+      // Serial.printf("Serial data: %c\n", data);  // debug
       /*
       while (Serial.available()) Serial.read();
       if (data == 'a') {
@@ -30,16 +37,13 @@ void serialCheckerTask(void *param) {
         input.inputBuffer = btnDOWN;
       }*/
     }
-    vTaskDelay(100);
+    vTaskDelay(1);
   }
 }
 
 Input::Input() { pinMode(INPUT_PIN, ANALOG); }
 
-void Input::init() {
-  xTaskCreateUniversal(inputTask, "inputTask", 8192, NULL, 1, NULL, PRO_CPU_NUM);
-  xTaskCreateUniversal(serialCheckerTask, "serialTask", 8192, NULL, 1, NULL, PRO_CPU_NUM);
-}
+void Input::init() { xTaskCreateUniversal(inputTask, "inputTask", 8192, NULL, 1, NULL, PRO_CPU_NUM); }
 
 void Input::inputHandler() {
   if (!_enabled) return;

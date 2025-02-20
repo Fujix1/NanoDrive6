@@ -49,7 +49,7 @@ void setup() {
   pinMode(D0, OUTPUT);
   digitalWrite(D0, HIGH);
 
-  Serial.begin(2000000);
+  Serial.begin(921600);
   Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
   Serial.printf("Flash - %'d Bytes at %'d\n", ESP.getFlashChipSize(), ESP.getFlashChipSpeed());
   Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(), ESP.getFreePsram());
@@ -64,7 +64,7 @@ void setup() {
   lcd.setFont(&fonts::Font2);
   lcd.println("NANO DRIVE 6");
   lcd.println("2024, 2025 Fujix@e2j.net");
-  lcd.printf("Firmware: 1.86\n\n");
+  lcd.printf("Version 1.9\n\n");
 
   // PSRAM 初期化確認
   if (psramInit()) {
@@ -77,7 +77,6 @@ void setup() {
   // ユーザ設定
   if (ndConfig.init()) {
     ndConfig.loadCfg();
-    // lcd.printf("User settings restored.\n");
   } else {
     Serial.printf("ERROR: SPIFFS initialization failed.\n");
     exit;
@@ -89,8 +88,8 @@ void setup() {
 
   // SI5351 初期化
   SI5351.begin();
-  SI5351.setFreq(SI5351_4000, 0);
-  SI5351.setFreq(SI5351_4000, 1);
+  SI5351.setFreq(SI5351_7670, 0);
+  SI5351.setFreq(SI5351_3579, 1);
   SI5351.enableOutputs(true);
 
   // VGM用GPIO初期化
@@ -99,6 +98,7 @@ void setup() {
   FM.reset();
 
   // 動作切り替え
+  // プレイヤーモード
   // if (ndConfig.currentMode == MODE_PLAYER) {
   // SD読み込み
   if (ndFile.init() == true) {
@@ -129,8 +129,12 @@ void setup() {
     default:
       ndFile.dirPlay(0);
   }
-  /*} else {
-    lcd.printf("Entering Serial Mode.\n");
+  //}
+  /*
+  else {
+    // シリアルモード
+    serialMan.init();
+    serialMan.startSerialTask();
   }
   */
 
@@ -146,20 +150,24 @@ void setup() {
 }
 
 void loop() {
-  if (ndConfig.currentMode == MODE_PLAYER) {
-    while (1) {
-      if (vgm.vgmLoaded) {
-        vgm.vgmProcess();
-      } else if (vgm.xgmLoaded) {
-        if (vgm.XGMVersion == 1)
-          vgm.xgmProcess();
-        else
-          vgm.xgm2Process();
-      }
-      input.inputHandler();
+  // if (ndConfig.currentMode == MODE_PLAYER) {
+  while (1) {
+    if (vgm.vgmLoaded) {
+      vgm.vgmProcess();
+    } else if (vgm.xgmLoaded) {
+      if (vgm.XGMVersion == 1)
+        vgm.xgmProcess();
+      else
+        vgm.xgm2Process();
     }
-
-  } else {
     input.inputHandler();
   }
+  /*
+    } else {
+      while (1) {
+        input.inputHandler();
+        delay(1);
+      }
+    }
+ */
 }

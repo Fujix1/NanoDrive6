@@ -178,11 +178,6 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
   ets_delay_us(5);  // 3 は一部足りない
 
   // data
-  /*if (addr >= 0x40 && addr <= 0x4e) {
-    dedic_gpio_bundle_write(dataBus, 0xff, 127);
-  } else {
-    dedic_gpio_bundle_write(dataBus, 0xff, data);
-  }*/
   dedic_gpio_bundle_write(dataBus, 0xff, data);
 
   WR_LOW;
@@ -204,7 +199,8 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
   }
   // unsigned long deltaTime = micros() - startTime;
   // Serial.printf("%x%d\n", addr, deltaTime);
-  if (addr >= 0x21 && addr <= 0x9e) {
+  if (addr == 0x2a) {
+  } else if (addr >= 0x21 && addr <= 0x9e) {
     ets_delay_us(12);  // 83 cycles = 10.79us,
   } else if (addr >= 0xa0 && addr <= 0xb6) {
     ets_delay_us(8);  // 47 cycles = 6.11us

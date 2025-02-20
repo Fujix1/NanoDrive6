@@ -180,7 +180,7 @@ class VGM {
   void endProcedure();
 
   // xgm1
-  void _xgm1ProcessYMSN();
+  bool _xgm1ProcessYMSN();
   void _xgm1ProcessPCM();
 
   // xgm2

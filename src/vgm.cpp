@@ -769,7 +769,6 @@ void VGM::vgmProcessMain() {
       break;
     case 0xe0:
       _pcmpos = 0x47 + ndFile.get_ui32();
-      //_vgmSamples++;
       break;
     default:
       ESP_LOGI("Unknown VGM Command: %0.2X\n", command);
@@ -989,7 +988,10 @@ void VGM::xgmProcess() {
   }
 
   while (_xgmYMSNFrame <= _xgmFrame) {
-    _xgm1ProcessYMSN();
+    if (_xgm1ProcessYMSN()) {
+      endProcedure();
+      return;
+    }
   }
 
   _xgmFrame = _xgmYMSNFrame;
@@ -1025,7 +1027,7 @@ void VGM::_xgm1ProcessPCM() {
   }
 }
 
-void VGM::_xgm1ProcessYMSN() {
+bool VGM::_xgm1ProcessYMSN() {
   u8_t command = ndFile.get_ui8();
 
   switch (command) {
@@ -1090,10 +1092,11 @@ void VGM::_xgm1ProcessYMSN() {
 
     case 0x7f: {
       // End command (end of music data).
-      endProcedure();
-      return;
+      return true;
     }
   }
+
+  return false;
 }
 
 //---------------------------------------------------------------
