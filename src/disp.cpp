@@ -242,7 +242,7 @@ void drawBG() {
   frameBuffer.fillRoundRect(6, 301, 17, 14, 2, C_FOOTER_ACTIVE);
 }
 
-// 再描画
+// プレーヤー描画
 void redraw() {
   xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
   _stopTimerDrawing = true;
@@ -323,6 +323,59 @@ void redraw() {
 
   frameBuffer.pushSprite(0, 0);
   _stopTimerDrawing = false;
+  xSemaphoreGive(spFrameBuffer);
+}
+
+// シリアルモード描画
+void serialModeDraw() {
+  xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
+  _stopTimerDrawing = true;
+  drawBG();
+  render.setUseRenderTask(false);
+  render.setDrawer(frameBuffer);
+
+  frameBuffer.pushImage(170 - 2 - USB_ICON_WIDTH, 2, USB_ICON_WIDTH, USB_ICON_HEIGHT, usb_icon);  // usb icon
+
+  render.loadFont(nimbusBold, sizeof(nimbusBold));
+  render.setFontSize(13);
+  render.setFontColor(C_YELLOW, C_DARK);
+  render.setCursor(27, 284);
+  render.printf("YM2612 @ 7.670 MHz");
+  render.setCursor(27, 303);
+  render.printf("SN76489 @ 3.579 MHz");
+
+  render.setFontColor(C_LIGHTGRAY, C_FOOTER_INACTIVE);
+  render.setCursor(11, 284);
+  render.printf("1");
+  render.setCursor(11, 303);
+  render.printf("2");
+
+  render.setFontColor(C_ORANGE, C_HEADER);
+  render.setCursor(4, 4);
+  render.setAlignment(Align::TopLeft);
+  render.printf("USB");
+  render.unloadFont();
+
+  render.loadFont(fontMain, sizeof(fontMain));
+  render.setFontSize(16);
+  render.setFontColor(C_GRAY, C_BASEBG);
+  render.setCursor(28, 256);
+  render.printf("--");
+  render.unloadFont();
+
+  if (ndConfig.get(CFG_LANG) == LANG_JA) {
+    lblTitle.setCaption("シリアルモード");
+    lblGame.setCaption("テスト版");
+    lblAuthor.setCaption("--");
+    lblSystem.setCaption("メガドライブ");
+  } else {
+    lblTitle.setCaption("Serial Mode");
+    lblGame.setCaption("Test Support");
+    lblAuthor.setCaption("--");
+    lblSystem.setCaption("Mega Drive / Genesis");
+  }
+
+  frameBuffer.pushSprite(0, 0);
   xSemaphoreGive(spFrameBuffer);
 }
 

@@ -38,6 +38,7 @@
 #include "file.h"
 #include "fm.h"
 #include "input.h"
+#include "serialman.h"
 #include "vgm.h"
 
 void setup() {
@@ -64,7 +65,7 @@ void setup() {
   lcd.setFont(&fonts::Font2);
   lcd.println("NANO DRIVE 6");
   lcd.println("2024, 2025 Fujix@e2j.net");
-  lcd.printf("Version 1.9\n\n");
+  lcd.printf("Version 2.0 alpha\n\n");
 
   // PSRAM 初期化確認
   if (psramInit()) {
@@ -99,44 +100,43 @@ void setup() {
 
   // 動作切り替え
   // プレイヤーモード
-  // if (ndConfig.currentMode == MODE_PLAYER) {
-  // SD読み込み
-  if (ndFile.init() == true) {
-    ndFile.listDir("/");
-  } else {
-    exit;
+  if (ndConfig.currentMode == MODE_PLAYER) {
+    // SD読み込み
+    if (ndFile.init() == true) {
+      ndFile.listDir("/");
+    } else {
+      exit;
+    }
+
+    // ファイル数確認
+    if (ndFile.totalSongs == 0) {
+      lcd.printf("ERROR: No file to play on the SD.\n");
+      exit;
+    }
+
+    // 読み込み履歴復元
+    u16_t lastDirIndex = 0, lastTrackIndex = 0;
+    u32_t history = ndConfig.loadHistory();
+    lastDirIndex = history & 0xffff;
+    lastTrackIndex = (history & 0xffff0000) >> 16;
+
+    switch (ndConfig.get(CFG_HISTORY)) {
+      case HISTORY_FOLDER:
+        ndFile.dirPlay(lastDirIndex);
+        break;
+      case HISTORY_FILE:
+        ndFile.play(lastDirIndex, lastTrackIndex);
+        break;
+      default:
+        ndFile.dirPlay(0);
+    }
   }
 
-  // ファイル数確認
-  if (ndFile.totalSongs == 0) {
-    lcd.printf("ERROR: No file to play on the SD.\n");
-    exit;
-  }
-
-  // 読み込み履歴復元
-  u16_t lastDirIndex = 0, lastTrackIndex = 0;
-  u32_t history = ndConfig.loadHistory();
-  lastDirIndex = history & 0xffff;
-  lastTrackIndex = (history & 0xffff0000) >> 16;
-
-  switch (ndConfig.get(CFG_HISTORY)) {
-    case HISTORY_FOLDER:
-      ndFile.dirPlay(lastDirIndex);
-      break;
-    case HISTORY_FILE:
-      ndFile.play(lastDirIndex, lastTrackIndex);
-      break;
-    default:
-      ndFile.dirPlay(0);
-  }
-  //}
-  /*
   else {
     // シリアルモード
     serialMan.init();
     serialMan.startSerialTask();
   }
-  */
 
   // 入力有効化
   input.init();
@@ -150,24 +150,23 @@ void setup() {
 }
 
 void loop() {
-  // if (ndConfig.currentMode == MODE_PLAYER) {
-  while (1) {
-    if (vgm.vgmLoaded) {
-      vgm.vgmProcess();
-    } else if (vgm.xgmLoaded) {
-      if (vgm.XGMVersion == 1)
-        vgm.xgmProcess();
-      else
-        vgm.xgm2Process();
-    }
-    input.inputHandler();
-  }
-  /*
-    } else {
-      while (1) {
-        input.inputHandler();
-        delay(1);
+  if (ndConfig.currentMode == MODE_PLAYER) {
+    while (1) {
+      if (vgm.vgmLoaded) {
+        vgm.vgmProcess();
+      } else if (vgm.xgmLoaded) {
+        if (vgm.XGMVersion == 1)
+          vgm.xgmProcess();
+        else
+          vgm.xgm2Process();
       }
+      input.inputHandler();
     }
- */
+
+  } else {
+    while (1) {
+      input.inputHandler();
+      delay(1);
+    }
+  }
 }

@@ -54,6 +54,7 @@ bool initDisp();
 void updateDisp(tDispData data);
 void redrawOnCore0();
 void redraw();
+void serialModeDraw();
 void drawBG();
 void startTimer();
 void stopTimer();

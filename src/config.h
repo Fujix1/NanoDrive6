@@ -37,7 +37,7 @@ typedef enum {
   CFG_HISTORY,   // 起動時復旧
   CFG_FADEOUT,   // フェードアウト時間
   CFG_UPDATE,    // 画面更新有無
-  // CFG_MODE,      // 動作モード
+  CFG_MODE,      // 動作モード
 } tConfig;
 
 // 設定用構造体
