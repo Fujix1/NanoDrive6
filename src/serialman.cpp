@@ -7,7 +7,7 @@
 #include "disp.h"
 #include "fm.h"
 
-#define SERIAL_SIZE_RX 4096
+#define SERIAL_SIZE_RX 65535
 
 u8_t getSerial() {
   while (1) {
