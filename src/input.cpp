@@ -80,33 +80,61 @@ void Input::inputHandler() {
     }
 
   } else {
-    switch (inputBuffer) {
-      case btnNONE: {
-        break;
+    if (ndConfig.currentMode == MODE_PLAYER) {
+      switch (inputBuffer) {
+        case btnNONE: {
+          break;
+        }
+        case btnUP: {
+          ndFile.dirPlay(1);
+          break;
+        }
+        case btnDOWN: {
+          ndFile.dirPlay(-1);
+          break;
+        }
+        case btnRIGHT: {
+          ndFile.filePlay(-1);
+          break;
+        }
+        case btnLEFT: {
+          ndFile.filePlay(1);
+          break;
+        }
+        case btnSELECT: {
+          cfgWindow.show();  // 設定ウィンドウ表示
+          break;
+        }
+        case btnFUNC: {
+          cfgWindow.show();  // 設定ウィンドウ表示
+          break;
+        }
       }
-      case btnUP: {
-        ndFile.dirPlay(1);
-        break;
-      }
-      case btnDOWN: {
-        ndFile.dirPlay(-1);
-        break;
-      }
-      case btnRIGHT: {
-        ndFile.filePlay(-1);
-        break;
-      }
-      case btnLEFT: {
-        ndFile.filePlay(1);
-        break;
-      }
-      case btnSELECT: {
-        cfgWindow.show();  // 設定ウィンドウ表示
-        break;
-      }
-      case btnFUNC: {
-        cfgWindow.show();  // 設定ウィンドウ表示
-        break;
+    } else {
+      switch (inputBuffer) {
+        case btnNONE: {
+          break;
+        }
+        case btnUP: {
+          // ndFile.dirPlay(1);
+          break;
+        }
+        case btnDOWN: {
+          // ndFile.dirPlay(-1);
+          break;
+        }
+        case btnRIGHT: {
+          // ndFile.filePlay(-1);
+          break;
+        }
+        case btnLEFT: {
+          // ndFile.filePlay(1);
+          break;
+        }
+        case btnSELECT: {
+          cfgWindow.show();  // 設定ウィンドウ表示
+          break;
+        }
       }
     }
   }
