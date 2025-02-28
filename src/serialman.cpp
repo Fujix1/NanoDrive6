@@ -7,6 +7,8 @@
 #include "disp.h"
 #include "fm.h"
 
+#define SERIAL_SIZE_RX 4096
+
 u8_t getSerial() {
   while (1) {
     if (Serial.available()) {
@@ -22,7 +24,7 @@ void serialCheckerTask(void *param) {
   u8_t command, reg, dat, samples;
   u32_t clock0 = SI5351_3579, clock1 = SI5351_2000;
   int32_t wait = 0;
-  // lcd.setCursor(0, 24);
+  lcd.setCursor(5, 77);
   // lcd.printf("%02x %02x %02x", 0x53, reg, dat);
 
   while (1) {
@@ -102,8 +104,9 @@ void serialCheckerTask(void *param) {
         */
 
       default:
-        lcd.setCursor(5, 77);
-        lcd.printf("Unknown: %02x", command);
+        // lcd.setCursor(5, 77);
+        lcd.printf("%02x ", command);
+        // Serial.printf("%02x\n", command);
         break;
     }
   }
@@ -115,6 +118,8 @@ SerialMan::SerialMan() {}
 // シリアル受信初期化
 void SerialMan::init() {
   uint8_t data = 1;
+
+  Serial.setRxBufferSize(SERIAL_SIZE_RX);  // シリアルバッファサイズ設定
 
   // 画面描画
   serialModeDraw();
