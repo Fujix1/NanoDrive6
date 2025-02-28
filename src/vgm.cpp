@@ -640,13 +640,17 @@ void VGM::vgmProcessMain() {
     case 0x52:  // YM2612 port 0, write value dd to register aa
       reg = ndFile.get_ui8();
       dat = ndFile.get_ui8();
-      FM.setYM2612(0, reg, dat, 0);
+      if ((reg >= 0x30 && reg <= 0xB6) || reg == 0x22 || reg == 0x27 || reg == 0x28 || reg == 0x2A || reg == 0x2B) {
+        FM.setYM2612(0, reg, dat, 0);
+      }
       break;
 
     case 0x53:  // YM2612 port 1, write value dd to register aa
       reg = ndFile.get_ui8();
       dat = ndFile.get_ui8();
-      FM.setYM2612(1, reg, dat, 0);
+      if (reg >= 0x30 && reg <= 0xB6) {
+        FM.setYM2612(1, reg, dat, 0);
+      }
       break;
 #endif
 
@@ -1541,7 +1545,8 @@ bool VGM::_xgm2ProcessSN() {
       delta = ((command & 4) != 0) ? -delta : delta;
       _xgmPsgState[0][channel] = delta + (_xgmPsgState[0][channel] & 0xf);
       value = (0x90 + (channel << 5)) | _xgmPsgState[0][channel];
-      // Serial.printf("0x%x - %2x: PSG ENV DELTA ch %d 0x%x\n", _xgm2_psg_pos - _xgm2_psg_offset - 1, command, channel,
+      // Serial.printf("0x%x - %2x: PSG ENV DELTA ch %d 0x%x\n", _xgm2_psg_pos - _xgm2_psg_offset - 1, command,
+      // channel,
       //              value);
       FM.writeRaw(value, 1, freq[chipSlot[CHIP_SN76489_0]]);
       break;
@@ -1596,7 +1601,8 @@ bool VGM::_xgm2ProcessSN() {
         value = ((0x80 + (channel << 5)) | (lvalue & 0x0f));
       }
       FM.writeRaw(value, 1, freq[chipSlot[CHIP_SN76489_0]]);
-      // Serial.printf("0x%x - %2x: PSG_FREQ_LOW ch %d 0x%x\n", _xgm2_psg_pos - _xgm2_psg_offset - 2, command, channel,
+      // Serial.printf("0x%x - %2x: PSG_FREQ_LOW ch %d 0x%x\n", _xgm2_psg_pos - _xgm2_psg_offset - 2, command,
+      // channel,
       //               value);
 
       break;
