@@ -340,9 +340,24 @@ void serialModeDraw() {
   render.setFontSize(13);
   render.setFontColor(C_YELLOW, C_DARK);
   render.setCursor(27, 284);
-  render.printf("YM2612 @ 7.670 MHz");
+
+  if (vgm.freq[0] != SI5351_UNDEFINED) {
+    char buf[7];
+    dtostrf((double)vgm.freq[0] / 1000000.0, 1, 4, buf);
+    String st = "YM2612 @ " + String(buf).substring(0, 5) + " MHz";
+    render.printf(st.c_str());
+  } else {
+    render.printf("YM2612 @ -- MHz");
+  }
   render.setCursor(27, 303);
-  render.printf("SN76489 @ 3.579 MHz");
+  if (vgm.freq[1] != SI5351_UNDEFINED) {
+    char buf[7];
+    dtostrf((double)vgm.freq[1] / 1000000.0, 1, 4, buf);
+    String st = "SN76489 @ " + String(buf).substring(0, 5) + " MHz";
+    render.printf(st.c_str());
+  } else {
+    render.printf("SN76489 @ -- MHz");
+  }
 
   render.setFontColor(C_LIGHTGRAY, C_FOOTER_INACTIVE);
   render.setCursor(11, 284);
@@ -365,12 +380,12 @@ void serialModeDraw() {
 
   if (ndConfig.get(CFG_LANG) == LANG_JA) {
     lblTitle.setCaption("シリアルモード");
-    lblGame.setCaption("テスト版");
+    lblGame.setCaption("ベータ版");
     lblAuthor.setCaption("--");
     lblSystem.setCaption("メガドライブ");
   } else {
     lblTitle.setCaption("Serial Mode");
-    lblGame.setCaption("Test Support");
+    lblGame.setCaption("Beta Version");
     lblAuthor.setCaption("--");
     lblSystem.setCaption("Mega Drive / Genesis");
   }

@@ -9,6 +9,22 @@
 
 #define SERIAL_SIZE_RX 65535
 
+constexpr std::array<si5351Freq_t, 5> YM2612ClockOptions = {
+    SI5351_7670,  // 7.670453 MHz
+    SI5351_8000,  // 8 MHz
+    SI5351_6000,  // 6 MHz
+    SI5351_7600,  // 7.600489 MHz
+    SI5351_7159,  // 7.159000 MHz
+};
+
+constexpr std::array<si5351Freq_t, 5> SN76489ClockOptions = {
+    SI5351_3579,  // 3.57954545 MHz
+    SI5351_4000,  // 4 MHz
+    SI5351_2000,  // 2 MHz
+    SI5351_1789,  // 1.789772 MHz
+    SI5351_1536,  // 1.536 MHz
+};
+
 u8_t getSerial() {
   while (1) {
     if (Serial.available()) {
@@ -122,6 +138,8 @@ void SerialMan::init() {
   Serial.setRxBufferSize(SERIAL_SIZE_RX);  // シリアルバッファサイズ設定
 
   // 画面描画
+  vgm.freq[0] = YM2612ClockOptions[YM2612Clock];
+  vgm.freq[1] = SN76489ClockOptions[SN76489Clock];
   serialModeDraw();
 
   // 音出す
@@ -134,6 +152,31 @@ void SerialMan::init() {
 // シリアル受信用タスク開始
 void SerialMan::startSerialTask() {
   xTaskCreateUniversal(serialCheckerTask, "serialTask", 10000, NULL, 1, NULL, APP_CPU_NUM);
+}
+
+// YM2612クロック変更
+void SerialMan::changeYM2612Clock() {
+  if (YM2612Clock == YM2612ClockOptions.size() - 1) {
+    YM2612Clock = 0;
+  } else {
+    YM2612Clock++;
+  }
+
+  vgm.freq[0] = YM2612ClockOptions[YM2612Clock];
+  SI5351.setFreq(YM2612ClockOptions[YM2612Clock], 0);
+  serialModeDraw();
+}
+
+// SN76489クロック変更
+void SerialMan::changeSN76489Clock() {
+  if (SN76489Clock == SN76489ClockOptions.size() - 1) {
+    SN76489Clock = 0;
+  } else {
+    SN76489Clock++;
+  }
+  vgm.freq[1] = SN76489ClockOptions[SN76489Clock];
+  SI5351.setFreq(SN76489ClockOptions[SN76489Clock], 1);
+  serialModeDraw();
 }
 
 // シリアルマネージャのインスタンス

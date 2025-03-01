@@ -4,6 +4,7 @@
 
 #include "disp.h"
 #include "file.h"
+#include "serialman.h"
 
 void inputTask(void *param) {
   while (1) {
@@ -116,19 +117,17 @@ void Input::inputHandler() {
           break;
         }
         case btnUP: {
-          // ndFile.dirPlay(1);
+          serialMan.changeYM2612Clock();
           break;
         }
         case btnDOWN: {
-          // ndFile.dirPlay(-1);
+          serialMan.changeSN76489Clock();
           break;
         }
         case btnRIGHT: {
-          // ndFile.filePlay(-1);
           break;
         }
         case btnLEFT: {
-          // ndFile.filePlay(1);
           break;
         }
         case btnSELECT: {
