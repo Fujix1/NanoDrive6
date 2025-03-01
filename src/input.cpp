@@ -74,10 +74,6 @@ void Input::inputHandler() {
         cfgWindow.close();  // 設定ウィンドウ閉じる
         break;
       }
-      case btnFUNC: {
-        cfgWindow.close();  // 設定ウィンドウ閉じる
-        break;
-      }
     }
 
   } else {
@@ -103,10 +99,6 @@ void Input::inputHandler() {
           break;
         }
         case btnSELECT: {
-          cfgWindow.show();  // 設定ウィンドウ表示
-          break;
-        }
-        case btnFUNC: {
           cfgWindow.show();  // 設定ウィンドウ表示
           break;
         }

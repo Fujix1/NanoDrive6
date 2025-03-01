@@ -569,7 +569,19 @@ void CFGWindowEventLoop(void* pvPrams) {
         }
         case cfgEvent::Close: {
           cfgWindow.isVisible = false;
-          redraw();
+
+          // モードが違えば再起動
+          if ((tMode)ndConfig.items[CFG_MODE].index != ndConfig.currentMode) {
+            ESP.restart();
+            return;
+          }
+
+          // 現在のモードに合わせて再描画
+          if (ndConfig.currentMode == MODE_PLAYER) {
+            redraw();
+          } else if (ndConfig.currentMode == MODE_SERIAL) {
+            serialModeDraw();
+          }
           break;
         }
         case cfgEvent::Up: {
