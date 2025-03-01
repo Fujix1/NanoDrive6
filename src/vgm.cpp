@@ -659,7 +659,9 @@ void VGM::vgmProcessMain() {
     case 0xa4:
       reg = ndFile.get_ui8();
       dat = ndFile.get_ui8();
-      FM.setRegisterOPM(reg, dat, 0);
+      if (reg != 0x10 || reg != 0x11) {  // タイマー設定は無視
+        FM.setRegisterOPM(reg, dat, 0);
+      }
       break;
 #endif
 
