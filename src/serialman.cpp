@@ -85,39 +85,39 @@ void serialCheckerTask(void *param) {
         break;
 
         // Additional Commands
-        /*
-        case 0xf0: {
-          // クロック0の周波数設定
-          clock0 = getSerial32();
-          SI5351.setFreq((si5351Freq_t)clock0, 0);
-          lcd.setCursor(0, 24);
-          lcd.printf("CLOCK 0: %d", clock0);
-          break;
-        }
 
-        case 0xf1: {
-          // クロック1の周波数設定
-          clock1 = getSerial32();
-          SI5351.setFreq((si5351Freq_t)clock1, 1);
-          lcd.setCursor(0, 40);
-          lcd.printf("CLOCK 1: %d", clock1);
-          break;
-        }
+      case 0xf0: {
+        // クロック0の周波数設定
+        clock0 = getSerial32();
+        SI5351.setFreq((si5351Freq_t)clock0, 0);
+        vgm.freq[0] = (si5351Freq_t)clock0;
+        serialModeDraw();
+        break;
+      }
 
-        case 0x00: {
-          // PSG mute
-          FM.write(0x9f, 1, SI5351_1500);
-          FM.write(0xbf, 1, SI5351_1500);
-          FM.write(0xdf, 1, SI5351_1500);
-          FM.write(0xff, 1, SI5351_1500);
+      case 0xf1: {
+        // クロック1の周波数設定
+        clock1 = getSerial32();
+        SI5351.setFreq((si5351Freq_t)clock1, 1);
+        vgm.freq[1] = (si5351Freq_t)clock1;
+        serialModeDraw();
+        break;
+      }
 
-          FM.write(0x9f, 2, SI5351_1500);
-          FM.write(0xbf, 2, SI5351_1500);
-          FM.write(0xdf, 2, SI5351_1500);
-          FM.write(0xff, 2, SI5351_1500);
-          break;
-        }
-        */
+      case 0x00: {
+        // リセット
+        // PSG mute
+        FM.write(0x9f, 1, SI5351_1500);
+        FM.write(0xbf, 1, SI5351_1500);
+        FM.write(0xdf, 1, SI5351_1500);
+        FM.write(0xff, 1, SI5351_1500);
+
+        FM.write(0x9f, 2, SI5351_1500);
+        FM.write(0xbf, 2, SI5351_1500);
+        FM.write(0xdf, 2, SI5351_1500);
+        FM.write(0xff, 2, SI5351_1500);
+        break;
+      }
 
       default:
         // lcd.setCursor(5, 77);
