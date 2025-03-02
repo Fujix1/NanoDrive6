@@ -106,16 +106,7 @@ void serialCheckerTask(void *param) {
 
       case 0x00: {
         // リセット
-        // PSG mute
-        FM.write(0x9f, 1, SI5351_1500);
-        FM.write(0xbf, 1, SI5351_1500);
-        FM.write(0xdf, 1, SI5351_1500);
-        FM.write(0xff, 1, SI5351_1500);
-
-        FM.write(0x9f, 2, SI5351_1500);
-        FM.write(0xbf, 2, SI5351_1500);
-        FM.write(0xdf, 2, SI5351_1500);
-        FM.write(0xff, 2, SI5351_1500);
+        FM.reset();
         break;
       }
 

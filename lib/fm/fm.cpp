@@ -62,17 +62,15 @@ void FMChip::reset(void) {
   A0_LOW;
   IC_LOW;
 
-  ets_delay_us(64);
+  ets_delay_us(32);
   // 72 cycles for YM2151 at 4MHz: 0.25us * 72 = 18us
   // 192 cycles for YM3438 -> 8MHz 0.125us * 192 = 24us
-
   IC_HIGH;
   CS0_HIGH;
   CS1_HIGH;
   CS2_HIGH;
 
   // stop sound output from SN76489
-
   FM.write(0x9f, 1, SI5351_1500);
   FM.write(0xbf, 1, SI5351_1500);
   FM.write(0xdf, 1, SI5351_1500);
@@ -85,7 +83,7 @@ void FMChip::reset(void) {
 
   _psgFrqLowByte = 0;
 
-  ets_delay_us(12000);
+  delay(16);
 }
 
 // SN76489
