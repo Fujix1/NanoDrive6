@@ -236,7 +236,6 @@ bool VGM::ready() {
   SI5351.enableOutputs(true);
 
   vgmLoaded = true;  // VGM 開始できる
-
   // GD3 tags
   _parseGD3(gd3Offset);
 
@@ -262,7 +261,6 @@ bool VGM::ready() {
   }
 
   u32_t n = 1 + ndFile.currentFile;  // フォルダ内曲番
-
   updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
               gd3.date, chip[0], chip[1], FORMAT_LABEL[vgm.format], 0, n, ndFile.files[ndFile.currentDir].size()});
 
@@ -363,6 +361,7 @@ si5351Freq_t VGM::normalizeFreq(u32_t freq, t_chip chip) {
     case CHIP_YM2203_0:
     case CHIP_YM2203_1: {
       switch (freq) {
+        case 1500000:     // 1.5MHz
         case 1076741824:  // デュアル 1.5MHz
         case 1075241824:  // デュアル 1.5MHz
           return SI5351_1500;
@@ -685,17 +684,18 @@ void VGM::vgmProcessMain() {
     case 0x5A:  // YM3812
       reg = ndFile.get_ui8();
       dat = ndFile.get_ui8();
-      FM.setRegisterOPL3(0, reg, dat, 1);
+      FM.setRegister(reg, dat, 1);
       break;
 
+#endif
+
+#ifdef USE_YMF262
+    case 0x5A:  // YM3812
     case 0x5E:  // YMF262 Port 0
       reg = ndFile.get_ui8();
       dat = ndFile.get_ui8();
       FM.setRegisterOPL3(0, reg, dat, 1);
       break;
-#endif
-
-#ifdef USE_YMF262
     case 0x5F:  // YMF262 Port 1
       reg = ndFile.get_ui8();
       dat = ndFile.get_ui8();
