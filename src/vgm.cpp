@@ -61,7 +61,14 @@ bool VGM::ready() {
 
   // VGM ident
   if (ndFile.get_ui32_at(0) != 0x206d6756) {
-    Serial.println("ERROR: VGMファイル解析失敗");
+    if (ndFile.get_ui16_at(0) != 0x1f8b) {
+      lcd.printf("ERROR: The file is VGZ archive. Extract it and add a .vgm extension.\n");
+      Serial.println("ERROR: VGZファイルです。解凍してください。");
+
+    } else {
+      lcd.printf("ERROR: File format is not VGM.\n");
+      Serial.println("ERROR: VGM以外のファイルです。");
+    }
     vgmLoaded = false;
     return false;
   }
