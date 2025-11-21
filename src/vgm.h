@@ -106,6 +106,8 @@ class VGM {
   u32_t dataOffset;  // データオフセット
   u32_t loopOffset;  // ループオフセット
   u32_t gd3Offset;   // gd3オフセット
+  u32_t gd3Size;     // gd3サイズ
+  u32_t size;        // ファイルサイズ
   // u32_t totalSamples;  // 全サンプル数
   boolean SN76489_Freq0is0X400;  // SN76489 が Sega VDP ではない
 
@@ -173,7 +175,9 @@ class VGM {
 
   u32_t _gd3p;
   void _parseGD3(u32_t pos);
+  void _parseGD3Cache();
   String _digGD3();
+  String _digGD3Cache();
   void _resetGD3();
 
   // when reach the end of the song

@@ -45,6 +45,8 @@ VGM::VGM() {
 //---------------------------------------------------------------------
 // vgm 再生準備
 bool VGM::ready() {
+  ndFile.accessMode = ACCESS_CACHE;
+
   vgmLoaded = false;
   xgmLoaded = false;
   ndFile.pos = 0;
@@ -58,10 +60,19 @@ bool VGM::ready() {
   _vgmLoop = 0;
   _vgmSamples = 0;
   _vgmRealSamples = 0;
+  size = 0;
+
+  // ヘッダキャッシュ版
+  if (!ndFile.getHeaderCache(ndFile.dirs[ndFile.currentDir] + "/" +
+                             ndFile.files[ndFile.currentDir][ndFile.currentFile])) {
+    Serial.println("ERROR: Failed to read file header.");
+    vgmLoaded = false;
+    return false;
+  }
 
   // VGM ident
-  if (ndFile.get_ui32_at(0) != 0x206d6756) {
-    if (ndFile.get_ui16_at(0) != 0x1f8b) {
+  if (ndFile.get_ui32_at_header(0) != 0x206d6756) {
+    if (ndFile.get_ui16_at_header(0) != 0x1f8b) {
       lcd.printf("ERROR: The file is VGZ archive. Extract it and add a .vgm extension.\n");
       Serial.println("ERROR: VGZファイルです。解凍してください。");
 
@@ -76,23 +87,27 @@ bool VGM::ready() {
   format = FORMAT_VGM;
 
   // version
-  version = ndFile.get_ui32_at(8);
+  version = ndFile.get_ui32_at_header(8);
   // total # samples
-  // totalSamples = get_ui32_at(0x18);
+  // totalSamples = get_ui32_at_header(0x18);
 
   // loop offset
-  loopOffset = ndFile.get_ui32_at(0x1c);
-  // vg3 offset
-  gd3Offset = ndFile.get_ui32_at(0x14) + 0x14;
+  loopOffset = ndFile.get_ui32_at_header(0x1c);
+  // gd3 offset
+  gd3Offset = ndFile.get_ui32_at_header(0x14) + 0x14;
 
-  u32_t gd3Size = ndFile.get_ui32_at(gd3Offset + 0x8);
+  gd3Size = 0;
+
+  // u32_t gd3Size = ndFile.get_ui32_at_header(gd3Offset + 0x8);
 
   // data offset
-  dataOffset = (version >= 0x150) ? ndFile.get_ui32_at(0x34) + 0x34 : 0x40;
+  dataOffset = (version >= 0x150) ? ndFile.get_ui32_at_header(0x34) + 0x34 : 0x40;
   ndFile.pos = dataOffset;
 
+  cachePos = dataOffset;  // キャッシュ
+
   // Setup Clocks
-  u32_t sn76489_clock = ndFile.get_ui32_at(0x0c);
+  u32_t sn76489_clock = ndFile.get_ui32_at_header(0x0c);
   if (sn76489_clock) {
     if (CHIP0 == CHIP_SN76489_0) {
       freq[CHIP0_CLOCK] = normalizeFreq(sn76489_clock, CHIP_SN76489_0);
@@ -107,11 +122,11 @@ bool VGM::ready() {
       if (version < 0x170) {
         freq[2] = normalizeFreq(sn76489_clock, CHIP_SN76489_0);
       } else {
-        u32_t headerSize = ndFile.get_ui32_at(0xbc);
-        u32_t chpClockOffset = ndFile.get_ui32_at(0xbc + headerSize);
-        u8_t entryCount = ndFile.get_ui8_at(0xbc + headerSize + chpClockOffset);
-        u8_t chipID = ndFile.get_ui8_at(0xbc + headerSize + chpClockOffset + 1);
-        u32_t clock = ndFile.get_ui32_at(0xbc + headerSize + chpClockOffset + 2);
+        u32_t headerSize = ndFile.get_ui32_at_header(0xbc);
+        u32_t chpClockOffset = ndFile.get_ui32_at_header(0xbc + headerSize);
+        u8_t entryCount = ndFile.get_ui8_at_header(0xbc + headerSize + chpClockOffset);
+        u8_t chipID = ndFile.get_ui8_at_header(0xbc + headerSize + chpClockOffset + 1);
+        u32_t clock = ndFile.get_ui32_at_header(0xbc + headerSize + chpClockOffset + 2);
 
         // Serial.printf("chipId: %d, freq: %x\n", chipID, clock);
 
@@ -127,11 +142,11 @@ bool VGM::ready() {
     // SN76489 フラグ
     SN76489_Freq0is0X400 = false;
     if (version >= 0x151) {
-      SN76489_Freq0is0X400 = ndFile.get_ui8_at(0x2b) & 0x0001;
+      SN76489_Freq0is0X400 = ndFile.get_ui8_at_header(0x2b) & 0x0001;
     }
   }
 
-  u32_t ym2413_clock = ndFile.get_ui32_at(0x10);
+  u32_t ym2413_clock = ndFile.get_ui32_at_header(0x10);
   if (ym2413_clock) {
     if (CHIP0 == CHIP_YM2413) {
       freq[CHIP0_CLOCK] = normalizeFreq(ym2413_clock, CHIP_YM2413);
@@ -141,7 +156,7 @@ bool VGM::ready() {
     }
   }
 
-  u32_t ym2612_clock = ndFile.get_ui32_at(0x2c);
+  u32_t ym2612_clock = ndFile.get_ui32_at_header(0x2c);
   if (ym2612_clock) {
     if (CHIP0 == CHIP_YM2612) {
       freq[CHIP0_CLOCK] = normalizeFreq(ym2612_clock, CHIP_YM2612);
@@ -150,7 +165,7 @@ bool VGM::ready() {
     }
   }
 
-  u32_t ay8910_clock = (version >= 0x151 && dataOffset >= 0x78) ? ndFile.get_ui32_at(0x74) : 0;
+  u32_t ay8910_clock = (version >= 0x151 && dataOffset >= 0x78) ? ndFile.get_ui32_at_header(0x74) : 0;
   if (ay8910_clock) {
     if (CHIP0 == CHIP_AY8910) {
       freq[CHIP0_CLOCK] = normalizeFreq(ay8910_clock, CHIP_AY8910);
@@ -162,7 +177,7 @@ bool VGM::ready() {
     }
   }
 
-  u32_t ym2203_clock = (version >= 0x151 && dataOffset >= 0x78) ? ndFile.get_ui32_at(0x44) : 0;
+  u32_t ym2203_clock = (version >= 0x151 && dataOffset >= 0x78) ? ndFile.get_ui32_at_header(0x44) : 0;
   if (ym2203_clock) {
     if (ym2203_clock & 0x40000000) {  // check the second chip
       if (CHIP0 == CHIP_YM2203_0) {
@@ -193,7 +208,7 @@ bool VGM::ready() {
     }
   }
 
-  u32_t ym2151_clock = ndFile.get_ui32_at(0x30);
+  u32_t ym2151_clock = ndFile.get_ui32_at_header(0x30);
   if (ym2151_clock) {
     if (CHIP0 == CHIP_YM2151) {
       freq[CHIP0_CLOCK] = normalizeFreq(ym2151_clock, CHIP_YM2151);
@@ -203,7 +218,7 @@ bool VGM::ready() {
     }
   }
 
-  u32_t ym3812_clock = ndFile.get_ui32_at(0x50);
+  u32_t ym3812_clock = ndFile.get_ui32_at_header(0x50);
   if (ym3812_clock) {
     if (CHIP0 == CHIP_YM3812) {
       freq[CHIP0_CLOCK] = normalizeFreq(ym3812_clock, CHIP_YM3812);
@@ -219,7 +234,7 @@ bool VGM::ready() {
     }
   }
 
-  u32_t ymf262_clock = ndFile.get_ui32_at(0x5c);
+  u32_t ymf262_clock = ndFile.get_ui32_at_header(0x5c);
   if (ymf262_clock) {
     if (CHIP0 == CHIP_YMF262) {
       freq[CHIP0_CLOCK] = normalizeFreq(ymf262_clock, CHIP_YMF262);
@@ -244,7 +259,19 @@ bool VGM::ready() {
 
   vgmLoaded = true;  // VGM 開始できる
   // GD3 tags
-  _parseGD3(gd3Offset);
+  //_parseGD3(gd3Offset);
+
+  // GD3タグ専用キャッシュから取得
+  u16_t res = ndFile.getGD3Cache(
+      ndFile.dirs[ndFile.currentDir] + "/" + ndFile.files[ndFile.currentDir][ndFile.currentFile], gd3Offset);
+
+  if (res != 0) {
+    _parseGD3Cache();
+  } else {
+    _resetGD3();
+  }
+
+  Serial.printf("gd3size: 0x%x \n", gd3Size);
 
   String chip[2] = {"", ""};
   int c = 0;
@@ -270,6 +297,10 @@ bool VGM::ready() {
   u32_t n = 1 + ndFile.currentFile;  // フォルダ内曲番
   updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
               gd3.date, chip[0], chip[1], FORMAT_LABEL[vgm.format], 0, n, ndFile.files[ndFile.currentDir].size()});
+
+  Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
+  Serial.printf("Flash - %'d Bytes at %'d\n", ESP.getFlashChipSize(), ESP.getFlashChipSpeed());
+  Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(), ESP.getFreePsram());
 
   _vgmStart = micros64();
   return true;
@@ -302,6 +333,44 @@ String VGM::_digGD3() {
   wst.clear();
   while (ndFile.data[_gd3p] != 0 || ndFile.data[_gd3p + 1] != 0) {
     wst += (char16_t)((ndFile.data[_gd3p + 1] << 8) | ndFile.data[_gd3p]);
+    _gd3p += 2;
+  }
+  _gd3p += 2;
+  std::string sst = wstringToUTF8(wst);
+  return (String)sst.c_str();
+}
+
+void VGM::_parseGD3Cache() {
+  _gd3p = 12;
+
+  gd3.trackEn = _digGD3Cache();
+  gd3.trackJp = _digGD3Cache();
+  gd3.gameEn = _digGD3Cache();
+  gd3.gameJp = _digGD3Cache();
+  gd3.systemEn = _digGD3Cache();
+  gd3.systemJp = _digGD3Cache();
+  gd3.authorEn = _digGD3Cache();
+  gd3.authorJp = _digGD3Cache();
+  gd3.date = _digGD3Cache();
+  gd3.converted = _digGD3Cache();
+  // gd3.notes = _digGD3Cache();
+
+  if (gd3.trackJp == "") gd3.trackJp = gd3.trackEn;
+  if (gd3.gameJp == "") gd3.gameJp = gd3.gameEn;
+  if (gd3.systemJp == "") gd3.systemJp = gd3.systemEn;
+  if (gd3.authorJp == "") gd3.authorJp = gd3.authorEn;
+
+  gd3Size = u32_t(ndFile.gd3Cache[0x8]) + (u32_t(ndFile.gd3Cache[0x9]) << 8) + (u32_t(ndFile.gd3Cache[0xa]) << 16) +
+            (u32_t(ndFile.gd3Cache[0xb]) << 24) + 12;  // ヘッダ分 GD3 VER SIZE 12バイト
+
+  ndFile.gd3Cache.clear();
+}
+
+String VGM::_digGD3Cache() {
+  std::wstring wst;
+  wst.clear();
+  while (ndFile.gd3Cache[_gd3p] != 0 || ndFile.gd3Cache[_gd3p + 1] != 0) {
+    wst += (char16_t)((ndFile.gd3Cache[_gd3p + 1] << 8) | ndFile.gd3Cache[_gd3p]);
     _gd3p += 2;
   }
   _gd3p += 2;
@@ -593,8 +662,8 @@ void VGM::vgmProcess() {
   _vgmRealSamples = _vgmSamples;
   _vgmWaitUntil = _vgmStart + _vgmRealSamples * 22.67573696145125;
 
-  while (_vgmWaitUntil - 22 > micros64()) {
-    ets_delay_us(22);
+  while (_vgmWaitUntil > micros64()) {
+    // ets_delay_us(22);
   }
 }
 
