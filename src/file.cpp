@@ -23,38 +23,39 @@ volatile int cachePos = 0;
 void fillCache(u32_t pos, int chaceIndex) {
   int readSize = vgm.size - vgm.gd3Size - pos - CACHE_SIZE;  // 読み込みサイズ
 
-  int newCacheIndex = 1 - chaceIndex;
   //
   // |  キャッシュ  |  キャッシュ  |
   // |              vgm               | gd3 |
 
   // キャッシュサイズ全部読めるとき
   if (readSize >= CACHE_SIZE) {
-    int bytesRead = _cacheFile.read(cache[newCacheIndex], CACHE_SIZE);
+    int bytesRead = _cacheFile.read(cache[chaceIndex], CACHE_SIZE);
     Serial.printf("Bytes read: readSize: 0x%x, 0x%x\n", CACHE_SIZE, bytesRead);
-    Serial.printf("cache[%d]: %0x, %x, %x\n", newCacheIndex, pos + CACHE_SIZE, cache[newCacheIndex][0],
-                  cache[newCacheIndex][CACHE_SIZE - 1]);
+    Serial.printf("cache[%d]: %0x, %x, %x\n", chaceIndex, pos + CACHE_SIZE, cache[chaceIndex][0],
+                  cache[chaceIndex][CACHE_SIZE - 1]);
   } else if (0 <= readSize && readSize < CACHE_SIZE) {
     // |  キャッシュ  |  キャッシュ  |
     // |        vgm        | gd3 |
 
     // キャッシュ終了またぐとき
-    int bytesRead = _cacheFile.read(cache[newCacheIndex], readSize);
-    Serial.printf("[またぐ] readSize: 0x%x, Bytes read: 0x%x\n", readSize, bytesRead);
-    Serial.printf("cache[%d]: %0x, %x, %x\n", newCacheIndex, pos + CACHE_SIZE, cache[newCacheIndex][0],
-                  cache[newCacheIndex][readSize - 1]);
+    int bytesRead = _cacheFile.read(cache[chaceIndex], readSize);
+    /*Serial.printf("[またぐ] readSize: 0x%x, Bytes read: 0x%x\n", readSize, bytesRead);
+    Serial.printf("cache[%d]: %0x, %x, %x\n", chaceIndex, pos + CACHE_SIZE, cache[chaceIndex][0],
+                  cache[chaceIndex][readSize - 1]);
+*/
 
     // ループ開始部分補充
     if (vgm.loopOffset != 0) {
       int padSize = CACHE_SIZE - readSize;
       _cacheFile.seek(vgm.loopOffset + 0x1C);  // ループ開始地点
 
-      int bytesRead = _cacheFile.read(cache[newCacheIndex] + readSize, padSize);
-
-      Serial.printf("[ループ開始] loopOffset: 0x%x, readSize: 0x%x, Bytes read: 0x%x\n", vgm.loopOffset + 0x1C,
-                    readSize, bytesRead);
-      Serial.printf("cache[%d]: @0x%0x %x, @0x%x %x\n", newCacheIndex, readSize, cache[newCacheIndex][readSize],
-                    CACHE_SIZE, cache[newCacheIndex][CACHE_SIZE - 1]);
+      int bytesRead = _cacheFile.read(cache[chaceIndex] + readSize, padSize);
+      /*
+            Serial.printf("[ループ開始] loopOffset: 0x%x, readSize: 0x%x, Bytes read: 0x%x\n", vgm.loopOffset + 0x1C,
+                          readSize, bytesRead);
+            Serial.printf("cache[%d]: @0x%0x %x, @0x%x %x\n", chaceIndex, readSize, cache[chaceIndex][readSize],
+         CACHE_SIZE, cache[chaceIndex][CACHE_SIZE - 1]);
+                          */
     }
   } else {
     // |  キャッシュ  |  キャッシュ  |
@@ -68,12 +69,12 @@ void fillCache(u32_t pos, int chaceIndex) {
       // int start = vgm.loopOffset + 0x1C + CACHE_SIZE - readSize;
       //_cacheFile.seek(vgm.loopOffset + 0x1C + CACHE_SIZE - readSize);
 
-      int bytesRead = _cacheFile.read(cache[newCacheIndex], readSize);
-      Serial.printf("[ループ続き]: %x, %x\n", cache[newCacheIndex][0], cache[newCacheIndex][readSize - 1]);
+      int bytesRead = _cacheFile.read(cache[chaceIndex], readSize);
+      Serial.printf("[ループ続き]: %x, %x\n", cache[chaceIndex][0], cache[chaceIndex][readSize - 1]);
     }
   }
 
-  Serial.printf("file size: 0x%x, gd3Size: 0x%x\n", vgm.size, vgm.gd3Size);
+  //  Serial.printf("file size: 0x%x, gd3Size: 0x%x\n", vgm.size, vgm.gd3Size);
 }
 
 void fillCacheTask(void* pvParameters) {
@@ -393,12 +394,12 @@ bool NDFile::getHeaderCache(String filePath) {
     return false;
   }
 
-  Serial.println("getHeaderCache: read header");
+  // Serial.println("getHeaderCache: read header");
   int readBytes = file.read(header, 256);
-  Serial.print("getHeaderCache: read bytes = ");
-  Serial.println(readBytes);
+  // Serial.print("getHeaderCache: read bytes = ");
+  // Serial.println(readBytes);
   file.close();
-  Serial.println("getHeaderCache: success");
+  // Serial.println("getHeaderCache: success");
   return true;
 }
 
@@ -435,10 +436,11 @@ u8_t NDFile::get_ui8() {
     result = data[pos++];
   } else {
     result = cache[activeCache][cachePos++];
-
+    pos++;
     if (cachePos == CACHE_SIZE) {
       CacheTaskParam* param = new CacheTaskParam;
-      param->pos = pos + 1;
+
+      param->pos = pos;
       param->cacheIndex = activeCache;
 
       xTaskCreateUniversal(fillCacheTask, "fillCacheTask", 8192, param, 1, NULL, PRO_CPU_NUM);
