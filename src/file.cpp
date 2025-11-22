@@ -13,8 +13,8 @@ struct CacheTaskParam {
 };
 
 // キャッシュ
-uint8_t cache[NUM_CACHE][CACHE_SIZE] __attribute__((aligned(4)));  // SRAM キャッシュ
-// uint8_t* cache[NUM_CACHE];  // PSRAM用キャッシュ
+// uint8_t cache[NUM_CACHE][CACHE_SIZE] __attribute__((aligned(4)));  // SRAM キャッシュ
+uint8_t* cache[NUM_CACHE];  // PSRAM用キャッシュ
 
 volatile int activeCache = 0;
 static File _cacheFile;
@@ -70,7 +70,7 @@ void fillCache(u32_t pos, int chaceIndex) {
       //_cacheFile.seek(vgm.loopOffset + 0x1C + CACHE_SIZE - readSize);
 
       int bytesRead = _cacheFile.read(cache[chaceIndex], readSize);
-      Serial.printf("[ループ続き]: %x, %x\n", cache[chaceIndex][0], cache[chaceIndex][readSize - 1]);
+      // Serial.printf("[ループ続き]: %x, %x\n", cache[chaceIndex][0], cache[chaceIndex][readSize - 1]);
     }
   }
 
@@ -157,11 +157,11 @@ bool NDFile::init() {
   data = (u8_t*)ps_calloc(MAX_FILE_SIZE, sizeof(u8_t));
 
   // PSRAMキャッシュ確保
-  /*for (int i = 0; i < NUM_CACHE; i++) {
+  for (int i = 0; i < NUM_CACHE; i++) {
     if (!cache[i]) {
       cache[i] = (uint8_t*)ps_calloc(CACHE_SIZE, sizeof(uint8_t));
     }
-  }*/
+  }
 
   return true;
 }
@@ -249,7 +249,7 @@ void NDFile::listDir(const char* dirname) {
 // ファイル開いてPSRAMに配置
 bool NDFile::readFile(String path) {
   int n = 0;
-
+  Serial.printf("File name: %s\n", path.c_str());
   _vgmFile = SD.open(path.c_str());
   if (!_vgmFile) {
     lcd.printf("ERROR: Failed to open file.\n%s", path.c_str());
@@ -257,18 +257,29 @@ bool NDFile::readFile(String path) {
     return false;
   }
 
-  /*if (_vgmFile.size() > MAX_FILE_SIZE) {
-    lcd.printf("ERROR: The file is too large.\nMax file size is %d.\n%s", MAX_FILE_SIZE, path.c_str());
-    _vgmFile.close();
-    return false;
-  }*/
-
   vgm.size = _vgmFile.size();
-  //_vgmFile.read(data, _vgmFile.size());
-  Serial.printf("File name: %s\n", path.c_str());
+  Serial.printf("vgm.size: %u Bytes.\n", vgm.size);
+
+  if (vgm.size > MAX_FILE_SIZE) {
+    // lcd.printf("ERROR: The file is too large.\nMax file size is %d.\n%s", MAX_FILE_SIZE, path.c_str());
+    //_vgmFile.close();
+    // return false;
+    //  シーケンシャルモード始動
+    accessMode = ACCESS_CACHE;
+    Serial.printf("Cache mode.\n");
+  } else {
+    accessMode = ACCESS_PSRAM;
+    Serial.printf("PSRAM mode.\n");
+  }
+
+  if (accessMode == ACCESS_PSRAM) {
+    _vgmFile.read(data, vgm.size);
+  }
   _vgmFile.close();
 
-  initCache(path.c_str());
+  if (accessMode == ACCESS_CACHE) {
+    initCache(path.c_str());
+  }
 
   return true;
 }

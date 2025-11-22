@@ -45,8 +45,6 @@ VGM::VGM() {
 //---------------------------------------------------------------------
 // vgm 再生準備
 bool VGM::ready() {
-  ndFile.accessMode = ACCESS_CACHE;
-
   vgmLoaded = false;
   xgmLoaded = false;
   ndFile.pos = 0;
@@ -271,7 +269,7 @@ bool VGM::ready() {
     _resetGD3();
   }
 
-  Serial.printf("gd3size: 0x%x \n", gd3Size);
+  // Serial.printf("gd3size: 0x%x \n", gd3Size);
 
   String chip[2] = {"", ""};
   int c = 0;
@@ -299,7 +297,6 @@ bool VGM::ready() {
               gd3.date, chip[0], chip[1], FORMAT_LABEL[vgm.format], 0, n, ndFile.files[ndFile.currentDir].size()});
 
   Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
-  Serial.printf("Flash - %'d Bytes at %'d\n", ESP.getFlashChipSize(), ESP.getFlashChipSpeed());
   Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(), ESP.getFreePsram());
 
   _vgmStart = micros64();

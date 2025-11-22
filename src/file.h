@@ -12,11 +12,11 @@
 
 int mod(int i, int j);
 
-#define CACHE_SIZE (32 * 1024)
+#define CACHE_SIZE (128 * 1024)
 #define NUM_CACHE 2
 
-extern uint8_t cache[NUM_CACHE][CACHE_SIZE] __attribute__((aligned(4)));
-// extern uint8_t* cache[NUM_CACHE];  // PSRAM用キャッシュ
+// extern uint8_t cache[NUM_CACHE][CACHE_SIZE] __attribute__((aligned(4)));
+extern uint8_t* cache[NUM_CACHE];  // PSRAM用キャッシュ
 
 // 読み込みキャッシュ
 extern volatile int activeCache;  // アクティブなキャッシュ

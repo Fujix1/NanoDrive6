@@ -235,6 +235,7 @@ void dispTimerHandler(void* param) {
 void drawBG() {
   frameBuffer.fillSprite(C_BASEBG);
   frameBuffer.fillRect(0, 0, LCD_W, 19, C_HEADER);
+
   // frameBuffer.fillRect(0, 75, LCD_W, 125, C_DARK);
   frameBuffer.fillRoundRect(1, 279, LCD_W - 2, 40, 2, C_DARK);
   frameBuffer.pushImage(8, 211, ICONS_WIDTH, ICONS_HEIGHT, icons);
@@ -289,7 +290,12 @@ void redraw() {
   }
 
   render.setFontSize(13);
-  render.setFontColor(C_ORANGE, C_HEADER);
+  if (ndFile.accessMode == ACCESS_CACHE) {
+    render.setFontColor(C_ACCENT_LIGHT, C_HEADER);
+  } else {
+    render.setFontColor(C_ORANGE, C_HEADER);
+  }
+
   render.setCursor(4, 4);
   render.setAlignment(Align::TopLeft);
   render.printf(_dispData.type.c_str());
