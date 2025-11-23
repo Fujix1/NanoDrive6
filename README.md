@@ -70,9 +70,8 @@ https://github.com/110-kenichi/mame
 
 ## Firmware Update 手順
 
-ファームウェアのアップデート手順を[ほくとさん](https://x.com/NightBird_hoku)にまとめていただきました。ありがとうございます。
+[ファームウェアのアップデート手順PDF](https://github.com/user-attachments/files/23695653/nd6_fimwareupdate.pdf)
 
-[NanoDrive6のFirmwareVersionUP手順.pdf](https://github.com/user-attachments/files/17610335/NanoDrive6.FirmwareVersionUP.pdf)
 <br>
 <br>
 <br>
