@@ -8,7 +8,7 @@
 
 #include "./file.h"
 
-void _saveCFGonCore0(void *param) {
+void _saveCFGonCore0(void* param) {
   File file = SPIFFS.open(CONFIG_FILE_PATH, FILE_WRITE, true);
   if (!file) {
     Serial.println("There was an error opening the file for writing.");
@@ -22,7 +22,7 @@ void _saveCFGonCore0(void *param) {
 }
 
 // 開いたフォルダ名を SPIFFS に記録
-void _saveHistoryonCore0(void *param) {
+void _saveHistoryonCore0(void* param) {
   if (ndFile.dirs.size() > 0) {
     File file = SPIFFS.open(CONFIG_LAST_FOLDER, FILE_WRITE, true);
     if (!file) {
@@ -46,6 +46,7 @@ bool NDConfig::init() {
       {"1", "2", "3", "4", "5", "Infinite"},
       {LOOP_1, LOOP_2, LOOP_3, LOOP_4, LOOP_5, LOOP_INIFITE},
   });
+
   items.push_back({0,  // 初期値
                    "リピート",
                    "Repeat",
@@ -74,7 +75,12 @@ bool NDConfig::init() {
   items.push_back({0, "画面更新", "LCD Update", {"する", "しない"}, {"On", "Off"}, {UPDATE_YES, UPDATE_NO}});
   items.push_back(
       {0, "動作モード", "Mode", {"プレーヤー", "シリアル"}, {"Player", "Serial"}, {MODE_PLAYER, MODE_SERIAL}});
-
+  items.push_back({0,  // 初期値
+                   "FM/PCM",
+                   "FM/PCM",
+                   {"両方", "FMのみ", "PCMのみ"},
+                   {"Both", "FM Only", "PCM Only"},
+                   {FMPCM_BOTH, FMPCM_FM, FMPCM_PCM}});
   if (!SPIFFS.begin(true)) {
     return false;
   }

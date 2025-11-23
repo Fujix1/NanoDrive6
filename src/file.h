@@ -12,7 +12,7 @@
 
 int mod(int i, int j);
 
-#define CACHE_SIZE (128 * 1024)
+#define CACHE_SIZE (64 * 1024)
 #define NUM_CACHE 2
 
 // extern uint8_t cache[NUM_CACHE][CACHE_SIZE] __attribute__((aligned(4)));
