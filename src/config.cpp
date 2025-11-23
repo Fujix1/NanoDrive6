@@ -8,17 +8,25 @@
 
 #include "./file.h"
 
-void _saveCFGonCore0(void* param) {
-  File file = SPIFFS.open(CONFIG_FILE_PATH, FILE_WRITE, true);
-  if (!file) {
-    Serial.println("There was an error opening the file for writing.");
-  } else {
-    for (int i = 0; i < ndConfig.items.size(); i++) {
-      file.printf("%d:%d\n", i, ndConfig.items[i].index);
+QueueHandle_t cfgSaveQueue;  // 設定保存用メッセージキュー
+
+// 設定保存メッセージ待ち受け
+void cfgSaveTask(void* pvParameters) {
+  while (1) {
+    u32_t dummy;
+    if (xQueueReceive(cfgSaveQueue, &dummy, portMAX_DELAY) == pdTRUE) {
+      // 保存
+      File file = SPIFFS.open(CONFIG_FILE_PATH, FILE_WRITE, true);
+      if (file) {
+        for (int i = 0; i < ndConfig.items.size(); i++) {
+          file.printf("%d:%d\n", i, ndConfig.items[i].index);
+        }
+        file.close();
+        Serial.println("Config saved.");
+      }
     }
-    file.close();
+    vTaskDelay(1);
   }
-  vTaskDelete(NULL);
 }
 
 bool NDConfig::init() {
@@ -70,11 +78,16 @@ bool NDConfig::init() {
     return false;
   }
 
+  // キュー初期化
+  cfgSaveQueue = xQueueCreate(2, sizeof(uint32_t));
+  xTaskCreateUniversal(cfgSaveTask, "cfgSaveTask", 4096, NULL, 1, NULL, PRO_CPU_NUM);
+
   return true;
 }
 
 void NDConfig::saveCfg() {
-  xTaskCreateUniversal(_saveCFGonCore0, "saveCFG", 8192, NULL, 1, NULL, PRO_CPU_NUM);
+  uint32_t dummy = 0;
+  xQueueSend(cfgSaveQueue, &dummy, 0);
   nju72341.setFadeoutDuration(get(CFG_FADEOUT));
   return;
 }
