@@ -21,21 +21,6 @@ void _saveCFGonCore0(void* param) {
   vTaskDelete(NULL);
 }
 
-// 開いたフォルダ名を SPIFFS に記録
-void _saveHistoryonCore0(void* param) {
-  if (ndFile.dirs.size() > 0) {
-    File file = SPIFFS.open(CONFIG_LAST_FOLDER, FILE_WRITE, true);
-    if (!file) {
-      Serial.println("There was an error opening the file for writing.");
-    } else {
-      file.printf("%s\n", ndFile.dirs[ndFile.currentDir].c_str());
-      file.printf("%s\n", ndFile.files[ndFile.currentDir][ndFile.currentFile].c_str());
-      file.close();
-    }
-  }
-  vTaskDelete(NULL);
-}
-
 bool NDConfig::init() {
   items.push_back({LANG_JA, "言語", "Language", {"日本語", "英語"}, {"Japanese", "English"}, {LANG_JA, LANG_EN}});
   items.push_back({
@@ -95,8 +80,17 @@ void NDConfig::saveCfg() {
 }
 
 void NDConfig::saveHistory() {
-  xTaskCreateUniversal(_saveHistoryonCore0, "saveHistory", 8192, NULL, 1, NULL, PRO_CPU_NUM);
-  return;
+  // メインスレッドで保存
+  if (ndFile.dirs.size() > 0) {
+    File file = SPIFFS.open(CONFIG_LAST_FOLDER, FILE_WRITE, true);
+    if (!file) {
+      Serial.println("There was an error opening the file for writing.");
+    } else {
+      file.printf("%s\n", ndFile.dirs[ndFile.currentDir].c_str());
+      file.printf("%s\n", ndFile.files[ndFile.currentDir][ndFile.currentFile].c_str());
+      file.close();
+    }
+  }
 }
 
 void NDConfig::loadCfg() {

@@ -177,14 +177,14 @@ bool NDFile::init() {
   }
 
   // キューを初期化
-  cacheQueue = xQueueCreate(2, sizeof(CacheTaskParam));
-  if (!cacheQueue) {
-    Serial.println("ERROR: cacheQueue create failed!");
-    return false;
-  }
-
+  /*  cacheQueue = xQueueCreate(2, sizeof(CacheTaskParam));
+    if (!cacheQueue) {
+      Serial.println("ERROR: cacheQueue create failed!");
+      return false;
+    }
+  */
   // キャッシュタスク
-  xTaskCreatePinnedToCore(cacheTask, "cacheTask", 4096, NULL, 1, NULL, PRO_CPU_NUM);
+  // xTaskCreatePinnedToCore(cacheTask, "cacheTask", 4096, NULL, 1, NULL, PRO_CPU_NUM);
 
   return true;
 }
