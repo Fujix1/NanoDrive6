@@ -657,7 +657,7 @@ void VGM::vgmProcess() {
   }
 
   _vgmRealSamples = _vgmSamples;
-  _vgmWaitUntil = _vgmStart + _vgmRealSamples * 22.67573696145125;
+  _vgmWaitUntil = _vgmStart + (_vgmRealSamples * 1000000) / 44100;
 
   while (_vgmWaitUntil > micros64()) {
     // ets_delay_us(22);
