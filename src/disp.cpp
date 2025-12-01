@@ -635,12 +635,11 @@ void CFGWindowEventLoop(void* pvPrams) {
             }
             ndConfig.saveCfg();
           }
-          break;
-        }
+        } break;
       }
     }
-    vTaskDelay(66);
   }
+  vTaskDelay(66);
 }
 
 void CFGWindow::init() {

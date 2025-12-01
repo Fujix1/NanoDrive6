@@ -28,6 +28,7 @@ typedef enum { HISTORY_NONE, HISTORY_FOLDER, HISTORY_FILE } tHistory;
 typedef enum { FO_0 = 0, FO_2 = 2000, FO_5 = 5000, FO_8 = 8000, FO_10 = 10000, FO_12 = 12000, FO_15 = 15000 } tFadeout;
 typedef enum { UPDATE_YES, UPDATE_NO } tUpdate;
 typedef enum { MODE_PLAYER, MODE_SERIAL } tMode;
+typedef enum { FMPCM_BOTH, FMPCM_FM, FMPCM_PCM } tFMPCM;
 
 typedef enum {
   CFG_LANG,      // 言語
@@ -38,6 +39,7 @@ typedef enum {
   CFG_FADEOUT,   // フェードアウト時間
   CFG_UPDATE,    // 画面更新有無
   CFG_MODE,      // 動作モード
+  CFG_FMPCM,     // FM PCM 再生モード
 } tConfig;
 
 // 設定用構造体

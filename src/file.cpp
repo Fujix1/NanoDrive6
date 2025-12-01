@@ -13,6 +13,8 @@ struct CacheTaskParam {
 };
 
 // キャッシュ
+QueueHandle_t cacheQueue;  // メッセージキュー
+
 // uint8_t cache[NUM_CACHE][CACHE_SIZE] __attribute__((aligned(4)));  // SRAM キャッシュ
 uint8_t* cache[NUM_CACHE];  // PSRAM用キャッシュ
 
@@ -30,9 +32,9 @@ void fillCache(u32_t pos, int chaceIndex) {
   // キャッシュサイズ全部読めるとき
   if (readSize >= CACHE_SIZE) {
     int bytesRead = _cacheFile.read(cache[chaceIndex], CACHE_SIZE);
-    Serial.printf("Bytes read: readSize: 0x%x, 0x%x\n", CACHE_SIZE, bytesRead);
-    Serial.printf("cache[%d]: %0x, %x, %x\n", chaceIndex, pos + CACHE_SIZE, cache[chaceIndex][0],
-                  cache[chaceIndex][CACHE_SIZE - 1]);
+    // Serial.printf("Bytes read: readSize: 0x%x, 0x%x\n", CACHE_SIZE, bytesRead);
+    //  Serial.printf("cache[%d]: %0x, %x, %x\n", chaceIndex, pos + CACHE_SIZE, cache[chaceIndex][0],
+    //               cache[chaceIndex][CACHE_SIZE - 1]);
   } else if (0 <= readSize && readSize < CACHE_SIZE) {
     // |  キャッシュ  |  キャッシュ  |
     // |        vgm        | gd3 |
@@ -83,7 +85,19 @@ void fillCacheTask(void* pvParameters) {
   int cacheIndex = param->cacheIndex;
 
   fillCache(pos, cacheIndex);
+  delete param;
+  Serial.printf("Task End.\n");
   vTaskDelete(NULL);
+}
+
+void cacheTask(void* pvParameters) {
+  CacheTaskParam param;
+  while (1) {
+    if (xQueueReceive(cacheQueue, &param, portMAX_DELAY) == pdTRUE) {
+      fillCache(param.pos, param.cacheIndex);
+    }
+    delay(1);
+  }
 }
 
 // キャッシュ初期化
@@ -162,6 +176,16 @@ bool NDFile::init() {
       cache[i] = (uint8_t*)ps_calloc(CACHE_SIZE, sizeof(uint8_t));
     }
   }
+
+  // キューを初期化
+  cacheQueue = xQueueCreate(2, sizeof(CacheTaskParam));
+  if (!cacheQueue) {
+    Serial.println("ERROR: cacheQueue create failed!");
+    return false;
+  }
+
+  // キャッシュタスク
+  xTaskCreatePinnedToCore(cacheTask, "cacheTask", 4096, NULL, 1, NULL, PRO_CPU_NUM);
 
   return true;
 }
@@ -381,7 +405,7 @@ uint8_t NDFile::getFolderAttenuation(String path) {
       }
     }
   }
-
+  dir.close();
   return 0;
 }
 
@@ -389,7 +413,7 @@ uint8_t NDFile::getFolderAttenuation(String path) {
 // ヘッダのキャッシュ取得
 // true: 成功
 bool NDFile::getHeaderCache(String filePath) {
-  Serial.println("getHeaderCache: open file");
+  // Serial.println("getHeaderCache: open file");
   File file = SD.open(filePath);
   if (!file) {
     Serial.println("getHeaderCache: failed to open file");
@@ -405,12 +429,8 @@ bool NDFile::getHeaderCache(String filePath) {
     return false;
   }
 
-  // Serial.println("getHeaderCache: read header");
   int readBytes = file.read(header, 256);
-  // Serial.print("getHeaderCache: read bytes = ");
-  // Serial.println(readBytes);
   file.close();
-  // Serial.println("getHeaderCache: success");
   return true;
 }
 
@@ -449,12 +469,11 @@ u8_t NDFile::get_ui8() {
     result = cache[activeCache][cachePos++];
     pos++;
     if (cachePos == CACHE_SIZE) {
-      CacheTaskParam* param = new CacheTaskParam;
+      CacheTaskParam param;
+      param.pos = pos;
+      param.cacheIndex = activeCache;
+      xQueueSend(cacheQueue, &param, 0);
 
-      param->pos = pos;
-      param->cacheIndex = activeCache;
-
-      xTaskCreateUniversal(fillCacheTask, "fillCacheTask", 8192, param, 1, NULL, PRO_CPU_NUM);
       cachePos = 0;
       activeCache = 1 - activeCache;
     }
