@@ -288,6 +288,7 @@ bool NDFile::readFile(String path) {
     // lcd.printf("ERROR: The file is too large.\nMax file size is %d.\n%s", MAX_FILE_SIZE, path.c_str());
     //_vgmFile.close();
     // return false;
+
     //  シーケンシャルモード始動
     accessMode = ACCESS_CACHE;
     Serial.printf("Cache mode.\n");

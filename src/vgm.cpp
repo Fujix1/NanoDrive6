@@ -93,7 +93,6 @@ bool VGM::ready() {
   loopOffset = ndFile.get_ui32_at_header(0x1c);
   // gd3 offset
   gd3Offset = ndFile.get_ui32_at_header(0x14) + 0x14;
-
   gd3Size = 0;
 
   // u32_t gd3Size = ndFile.get_ui32_at_header(gd3Offset + 0x8);
