@@ -44,6 +44,7 @@ typedef enum {
 
 // 設定用構造体
 typedef struct {
+  String slug;                    // スラッグ
   u8_t index;                     // 選択中のインデックス
   String labelJp, labelEn;        // 設定表示名
   std::vector<String> optionsJp;  // 選択肢ラベル日本語
@@ -55,7 +56,7 @@ class NDConfig {
  public:
   tMode currentMode;
   std::vector<sConfig> items;
-  bool init();
+  void init();
   void saveCfg();
   void saveHistory();
   void loadCfg();

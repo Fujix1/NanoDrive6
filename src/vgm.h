@@ -63,11 +63,12 @@
 typedef enum {
   FORMAT_UNKNOWN,
   FORMAT_VGM,
+  FORMAT_VGZ,
   FORMAT_XGM,
   FORMAT_XGM2,
 } t_format;
 
-const std::vector<String> FORMAT_LABEL = {"--", "VGM", "XGM1", "XGM2"};
+const std::vector<String> FORMAT_LABEL = {"--", "VGM", "VGZ", "XGM1", "XGM2"};
 
 // GD3 構造体
 typedef struct {
