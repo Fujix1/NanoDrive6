@@ -414,24 +414,28 @@ uint8_t NDFile::getFolderAttenuation(String path) {
 // ヘッダのキャッシュ取得
 // true: 成功
 bool NDFile::getHeaderCache(String filePath) {
-  // Serial.println("getHeaderCache: open file");
-  File file = SD.open(filePath);
-  if (!file) {
-    Serial.println("getHeaderCache: failed to open file");
-    return false;
-  }
+  if (accessMode == ACCESS_PSRAM) {
+    // PSRAMモードのとき
+    memcpy(header, data, sizeof(header));
 
-  // Serial.print("getHeaderCache: file size = ");
-  // Serial.println(file.size());
-  vgm.size = file.size();
-  if (file.size() < 256) {
-    Serial.println("getHeaderCache: file too small");
+  } else if (accessMode == ACCESS_CACHE) {
+    // キャッシュモードのとき
+    File file = SD.open(filePath);
+    if (!file) {
+      Serial.println("getHeaderCache: failed to open file");
+      return false;
+    }
+
+    if (file.size() < 256) {
+      Serial.println("getHeaderCache: file too small");
+      file.close();
+      return false;
+    }
+
+    file.read(header, 256);
     file.close();
-    return false;
   }
 
-  int readBytes = file.read(header, 256);
-  file.close();
   return true;
 }
 
@@ -441,21 +445,31 @@ bool NDFile::getHeaderCache(String filePath) {
 u16_t NDFile::getGD3Cache(String filePath, u32_t gd3Offset) {
   if (gd3Offset == 0x14) return 0;  // 0x14 = data offset
 
-  File file = SD.open(filePath);
-  if (!file) {
-    return 0;
+  gd3Cache.clear();
+
+  // PSRAM のときはメモリから
+  if (accessMode == ACCESS_PSRAM) {
+    if (gd3Offset >= vgm.size) return 0;
+    gd3Cache.assign(data + gd3Offset, data + vgm.size);
+    return gd3Cache.size();
   }
 
-  if (gd3Offset >= file.size()) {
+  // CACHE のときはファイルから
+  File file = SD.open(filePath);
+  if (!file) return 0;
+
+  const u32_t fileSize = file.size();
+  if (gd3Offset >= fileSize) {
     file.close();
     return 0;
   }
+
+  const u32_t readSize = fileSize - gd3Offset;
+  gd3Cache.resize(readSize);
   file.seek(gd3Offset);
-  gd3Cache.clear();
-  while (file.available()) {
-    gd3Cache.push_back(file.read());
-  }
+  const size_t bytesRead = file.read(gd3Cache.data(), readSize);
   file.close();
+  gd3Cache.resize(bytesRead);
   return gd3Cache.size();
 }
 

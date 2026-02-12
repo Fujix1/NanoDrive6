@@ -58,7 +58,6 @@ bool VGM::ready() {
   _vgmLoop = 0;
   _vgmSamples = 0;
   _vgmRealSamples = 0;
-  size = 0;
 
   // ヘッダキャッシュ版
   if (!ndFile.getHeaderCache(ndFile.dirs[ndFile.currentDir] + "/" +
