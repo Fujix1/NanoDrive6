@@ -1,4 +1,4 @@
-#include "./config.h"
+#include "config.h"
 
 #include <Arduino.h>
 #include <FS.h>
@@ -6,7 +6,7 @@
 
 #include <vector>
 
-#include "./file.h"
+#include "file.h"
 
 Preferences preferences;
 

@@ -36,7 +36,7 @@ u8_t getSerial() {
 u32_t getSerial32() { return getSerial() + (getSerial() << 8) + (getSerial() << 16) + (getSerial() << 24); }
 
 // シリアル受信用タスク
-void serialCheckerTask(void *param) {
+void serialCheckerTask(void* param) {
   u8_t command, reg, dat, samples;
   u32_t clock0 = SI5351_3579, clock1 = SI5351_2000;
   int32_t wait = 0;
@@ -90,7 +90,7 @@ void serialCheckerTask(void *param) {
         // クロック0の周波数設定
         clock0 = getSerial32();
         SI5351.setFreq((si5351Freq_t)clock0, 0);
-        vgm.freq[0] = (si5351Freq_t)clock0;
+        ND::freq[0] = (si5351Freq_t)clock0;
         serialModeDraw();
         break;
       }
@@ -99,7 +99,7 @@ void serialCheckerTask(void *param) {
         // クロック1の周波数設定
         clock1 = getSerial32();
         SI5351.setFreq((si5351Freq_t)clock1, 1);
-        vgm.freq[1] = (si5351Freq_t)clock1;
+        ND::freq[1] = (si5351Freq_t)clock1;
         serialModeDraw();
         break;
       }
@@ -129,8 +129,8 @@ void SerialMan::init() {
   Serial.setRxBufferSize(SERIAL_SIZE_RX);  // シリアルバッファサイズ設定
 
   // 画面描画
-  vgm.freq[0] = YM2612ClockOptions[YM2612Clock];
-  vgm.freq[1] = SN76489ClockOptions[SN76489Clock];
+  ND::freq[0] = YM2612ClockOptions[YM2612Clock];
+  ND::freq[1] = SN76489ClockOptions[SN76489Clock];
   serialModeDraw();
 
   // 音出す
@@ -153,7 +153,7 @@ void SerialMan::changeYM2612Clock() {
     YM2612Clock++;
   }
 
-  vgm.freq[0] = YM2612ClockOptions[YM2612Clock];
+  ND::freq[0] = YM2612ClockOptions[YM2612Clock];
   SI5351.setFreq(YM2612ClockOptions[YM2612Clock], 0);
   serialModeDraw();
 }
@@ -165,7 +165,7 @@ void SerialMan::changeSN76489Clock() {
   } else {
     SN76489Clock++;
   }
-  vgm.freq[1] = SN76489ClockOptions[SN76489Clock];
+  ND::freq[1] = SN76489ClockOptions[SN76489Clock];
   SI5351.setFreq(SN76489ClockOptions[SN76489Clock], 1);
   serialModeDraw();
 }

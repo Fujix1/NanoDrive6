@@ -65,7 +65,7 @@ void setup() {
   lcd.setFont(&fonts::Font2);
   lcd.println("NANO DRIVE 6");
   lcd.println("2024-2026 fujix@e2j.net");
-  lcd.printf("Version 2.1.2\n\n");
+  lcd.printf("Version 2.2.0\n\n");
 
   // PSRAM 初期化確認
   if (psramInit()) {
@@ -81,7 +81,7 @@ void setup() {
 
   // I2C機器初期化
   // NJU72341/NJU72342 初期化
-  nju72341.init(ndConfig.get(CFG_FADEOUT), false);
+  nju72341.init(I2C_SDA, I2C_SCL, NJU72341_MUTE_PIN, ndConfig.get(CFG_FADEOUT), false);
 
   // SI5351 初期化
   SI5351.begin();

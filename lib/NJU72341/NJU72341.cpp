@@ -2,16 +2,14 @@
 
 #include <Wire.h>
 
-#include "../../src/common.h"
-#include "../../src/config.h"
-
 #define FADEOUT_STEPS 50
 
+typedef enum { FO_0 = 0, FO_2 = 2000, FO_5 = 5000, FO_8 = 8000, FO_10 = 10000, FO_12 = 12000, FO_15 = 15000 } tFadeout;
+
 // Aカーブの音量マップ
-static const uint8_t NJU72341_db[FADEOUT_STEPS] = {
-    0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,  2,  2,  2,  3,  3,
-    4,  5,  5,  6,  7,  8,  9,  11, 12, 13, 15, 17, 18, 20, 22, 24, 26,
-    28, 30, 32, 35, 38, 41, 44, 48, 52, 57, 62, 68, 74, 80, 88, 96};
+static const uint8_t NJU72341_db[FADEOUT_STEPS] = {0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,  2,  2,  2,  3,  3,
+                                                   4,  5,  5,  6,  7,  8,  9,  11, 12, 13, 15, 17, 18, 20, 22, 24, 26,
+                                                   28, 30, 32, 35, 38, 41, 44, 48, 52, 57, 62, 68, 74, 80, 88, 96};
 
 static TimerHandle_t hFadeOutTimer;  // フェードアウト用タイマー
 static u32_t _fadeOutStartMS;
@@ -31,8 +29,8 @@ static void fadeOutTimerHandler(void* param) {
   }
 }
 
-void NJU72341::init(uint16_t fadeOutDuration, bool NJU72342) {
-  Wire.begin(I2C_SDA, I2C_SCL, 600000);
+void NJU72341::init(u8_t SDA, u8_t SCL, u8_t MUTE, uint16_t fadeOutDuration, bool NJU72342) {
+  Wire.begin(SDA, SCL, 600000);
 
   if (NJU72342) {
     _slaveAddress = NJU72342_ADDR;
@@ -46,7 +44,7 @@ void NJU72341::init(uint16_t fadeOutDuration, bool NJU72342) {
   fadeOutStatus = FADEOUT_BEFORE;
 
   _isFadeoutEnabled = (fadeOutDuration != FO_0);
-  pinMode(NJU72341_MUTE_PIN, OUTPUT);
+  pinMode(MUTE, OUTPUT);
   mute();
 
   setInputGain(GAIN9);
@@ -58,9 +56,7 @@ void NJU72341::init(uint16_t fadeOutDuration, bool NJU72342) {
     _fadeOutDuration = fadeOutDuration;
   }
 
-  hFadeOutTimer =
-      xTimerCreate("FADEOUT_TIMER", _fadeOutDuration / FADEOUT_STEPS, pdTRUE,
-                   NULL, fadeOutTimerHandler);
+  hFadeOutTimer = xTimerCreate("FADEOUT_TIMER", _fadeOutDuration / FADEOUT_STEPS, pdTRUE, NULL, fadeOutTimerHandler);
 }
 
 void NJU72341::setFadeoutDuration(uint16_t fadeOutDuration) {

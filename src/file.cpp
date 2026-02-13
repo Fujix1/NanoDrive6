@@ -4,15 +4,21 @@ static SPIClass SPI_SD;
 std::vector<String> dirs;                // ルートのディレクトリ一覧
 std::vector<String> pngs;                // ディレクトリごとのpng
 std::vector<std::vector<String>> files;  // 各ディレクトリ内のファイル一覧
-static File _vgmFile;
+static File hFile;
 static SemaphoreHandle_t spFileOpen;  // ファイル開く処理用セマフォ
 
+void showError(String message) {
+  lcd.setCursor(0, 75);
+  lcd.print(message.c_str());
+}
+
+//-------------------------------------------------------------------------
+// キャッシュ
 struct CacheTaskParam {
   u32_t pos;
   int cacheIndex;
 };
 
-// キャッシュ
 QueueHandle_t cacheQueue;  // メッセージキュー
 
 // uint8_t cache[NUM_CACHE][CACHE_SIZE] __attribute__((aligned(4)));  // SRAM キャッシュ
@@ -220,6 +226,8 @@ void NDFile::listDir(const char* dirname) {
           String ext = filename.substring(filename.length() - 4);
           if (ext.equalsIgnoreCase(".vgm")) {
             validFileCount++;
+          } else if (ext.equalsIgnoreCase(".vgz")) {
+            validFileCount++;
           } else if (ext.equalsIgnoreCase(".xgm")) {
             validFileCount++;
           }
@@ -254,6 +262,9 @@ void NDFile::listDir(const char* dirname) {
         if (ext.equalsIgnoreCase(".vgm")) {
           totalSongs++;
           files[i].push_back(filename.substring(dirs[i].length() + 1));
+        } else if (ext.equalsIgnoreCase(".vgz")) {
+          totalSongs++;
+          files[i].push_back(filename.substring(dirs[i].length() + 1));
         } else if (ext.equalsIgnoreCase(".xgm")) {
           totalSongs++;
           files[i].push_back(filename.substring(dirs[i].length() + 1));
@@ -271,42 +282,270 @@ void NDFile::listDir(const char* dirname) {
 
 //----------------------------------------------------------------------
 // ファイル開いてPSRAMに配置
-bool NDFile::readFile(String path) {
+FileFormat NDFile::readFile(String path) {
   int n = 0;
-  Serial.printf("File name: %s\n", path.c_str());
-  _vgmFile = SD.open(path.c_str());
-  if (!_vgmFile) {
+  vgm.size = 0;
+  Serial.printf("readFile: %s\n", path.c_str());
+
+  hFile = SD.open(path.c_str());
+  if (!hFile) {
     lcd.printf("ERROR: Failed to open file.\n%s", path.c_str());
-    _vgmFile.close();
-    return false;
+    hFile.close();
+    return FileFormat::Unknown;
   }
 
-  vgm.size = _vgmFile.size();
-  Serial.printf("vgm.size: %u Bytes.\n", vgm.size);
+  // ヘッダチェック
+  uint8_t header[4] = {0};
+  if (hFile.read(header, sizeof(header)) != sizeof(header)) {
+    lcd.printf("ERROR: Invalid file.\n%s", path.c_str());
+    hFile.close();
+    return FileFormat::Unknown;
+  }
 
-  if (vgm.size > MAX_FILE_SIZE) {
-    // lcd.printf("ERROR: The file is too large.\nMax file size is %d.\n%s", MAX_FILE_SIZE, path.c_str());
-    //_vgmFile.close();
-    // return false;
+  bool isVgm = (header[0] == 'V' && header[1] == 'g' && header[2] == 'm' && header[3] == ' ');
+  bool isGz = (header[0] == 0x1F && header[1] == 0x8B);
+  bool isXGM1 = (header[0] == 'X' && header[1] == 'G' && header[2] == 'M' && header[3] == ' ');
+  bool isXGM2 = (header[0] == 'X' && header[1] == 'G' && header[2] == 'M' && header[3] == '2');
 
-    //  シーケンシャルモード始動
-    accessMode = ACCESS_CACHE;
-    Serial.printf("Cache mode.\n");
-  } else {
+  vgm.size = hFile.size();
+  Serial.printf("file size: %u Bytes.\n", vgm.size);
+
+  if (isXGM1) {  // XGM1 のとき
     accessMode = ACCESS_PSRAM;
-    Serial.printf("PSRAM mode.\n");
+    hFile.seek(0);
+    hFile.read(data, vgm.size);
+    Serial.printf("XGM1 file name: %s\n", path.c_str());
+    hFile.close();
+    return FileFormat::XGM1;
   }
 
-  if (accessMode == ACCESS_PSRAM) {
-    _vgmFile.read(data, vgm.size);
+  if (isXGM2) {  // XGM2 のとき
+    accessMode = ACCESS_PSRAM;
+    hFile.seek(0);
+    hFile.read(data, vgm.size);
+    Serial.printf("XGM2 file name: %s\n", path.c_str());
+    hFile.close();
+    return FileFormat::XGM2;
   }
-  _vgmFile.close();
 
-  if (accessMode == ACCESS_CACHE) {
-    initCache(path.c_str());
+  if (isVgm) {  // VGM のとき
+
+    if (hFile.size() > MAX_FILE_SIZE) {
+      //  シーケンシャルモード
+      accessMode = ACCESS_CACHE;
+      Serial.printf("Sequential mode.\n");
+    } else {
+      // PSRAM モード
+      accessMode = ACCESS_PSRAM;
+      Serial.printf("PSRAM mode.\n");
+    }
+
+    if (accessMode == ACCESS_PSRAM) {
+      hFile.seek(0);
+      hFile.read(data, vgm.size);
+      Serial.printf("File name: %s\n", path.c_str());
+    }
+    hFile.close();
+
+    if (accessMode == ACCESS_CACHE) {
+      initCache(path.c_str());
+    }
+    return FileFormat::VGM;
   }
 
-  return true;
+  if (isGz) {  // VGZ のとき
+    Serial.printf("isGz\n");
+
+    // gzip footer(ISIZE) から解凍後サイズを先読みして上限チェック
+    const u32_t gzFileSize = hFile.size();
+    if (gzFileSize < 18) {  // minimal gzip size: header(10) + trailer(8)
+      showError("ERROR: Invalid gzip file.\n" + path);
+      hFile.close();
+      return FileFormat::Unknown;
+    }
+    uint8_t isizeBuf[4];
+    hFile.seek(gzFileSize - 4);
+    if (hFile.read(isizeBuf, sizeof(isizeBuf)) != sizeof(isizeBuf)) {
+      showError("ERROR: Invalid gzip file.\n" + path);
+      hFile.close();
+      return FileFormat::Unknown;
+    }
+    u32_t unzipSize =
+        (u32_t)isizeBuf[0] | ((u32_t)isizeBuf[1] << 8) | ((u32_t)isizeBuf[2] << 16) | ((u32_t)isizeBuf[3] << 24);
+    if (unzipSize > MAX_FILE_SIZE) {
+      showError("ERROR: The original VGM file is too large.\nMax file size is " + String(MAX_FILE_SIZE) + ".\n" + path);
+      hFile.close();
+      return FileFormat::Unknown;
+    }
+
+    // gzip 解凍して PSRAM に展開する
+    hFile.seek(0);
+
+    auto readByte = [&](void) -> int {
+      int c = hFile.read();
+      if (c < 0) return -1;
+      return c & 0xFF;
+    };
+
+    auto skipBytes = [&](size_t count) -> bool {
+      while (count--) {
+        if (readByte() < 0) return false;
+      }
+      return true;
+    };
+
+    // Parse gzip header.
+    int id1 = readByte();
+    int id2 = readByte();
+    int cm = readByte();
+    int flg = readByte();
+    if (id1 != 0x1F || id2 != 0x8B || cm != 8 || flg < 0) {
+      showError("ERROR: Invalid gzip header\n" + path);
+      hFile.close();
+      return FileFormat::Unknown;
+    }
+    // MTIME(4), XFL(1), OS(1)
+    if (!skipBytes(6)) {
+      showError("ERROR: Invalid gzip header\n" + path);
+      hFile.close();
+      return FileFormat::Unknown;
+    }
+
+    if (flg & 0x04) {  // FEXTRA
+      int xlen0 = readByte();
+      int xlen1 = readByte();
+      if (xlen0 < 0 || xlen1 < 0) {
+        showError("ERROR: Invalid gzip header\n" + path);
+        hFile.close();
+        return FileFormat::Unknown;
+      }
+      uint16_t xlen = (uint16_t)xlen0 | ((uint16_t)xlen1 << 8);
+      if (!skipBytes(xlen)) {
+        showError("ERROR: Invalid gzip header\n" + path);
+        hFile.close();
+        return FileFormat::Unknown;
+      }
+    }
+    if (flg & 0x08) {  // FNAME
+      while (true) {
+        int c = readByte();
+        if (c < 0) {
+          showError("ERROR: Invalid gzip header\n" + path);
+          hFile.close();
+          return FileFormat::Unknown;
+        }
+        if (c == 0) break;
+      }
+    }
+    if (flg & 0x10) {  // FCOMMENT
+      while (true) {
+        int c = readByte();
+        if (c < 0) {
+          showError("ERROR: Invalid gzip header\n" + path);
+          hFile.close();
+          return FileFormat::Unknown;
+        }
+        if (c == 0) break;
+      }
+    }
+    if (flg & 0x02) {  // FHCRC
+      if (!skipBytes(2)) {
+        showError("ERROR: Invalid gzip header\n" + path);
+        hFile.close();
+        return FileFormat::Unknown;
+      }
+    }
+
+    static uint8_t zlib_buf[sizeof(inflate_state) + 32768];
+    z_stream stream;
+    memset(&stream, 0, sizeof(stream));
+    memset(zlib_buf, 0, sizeof(zlib_buf));
+    stream.zalloc = (alloc_func)0;
+    stream.zfree = (free_func)0;
+    stream.opaque = (voidpf)0;
+
+    inflate_state* state = (inflate_state*)zlib_buf;
+    stream.state = (struct internal_state*)state;
+    state->window = &zlib_buf[sizeof(inflate_state)];
+    if (inflateInit2(&stream, -15) != Z_OK) {
+      showError("ERROR: gzip init failed.\n" + path);
+      hFile.close();
+      return FileFormat::Unknown;
+    }
+
+    uint8_t inbuf[1024];
+    size_t out_pos = 0;
+    int status = Z_OK;
+
+    while (true) {
+      if (stream.avail_in == 0) {
+        int r = hFile.read(inbuf, sizeof(inbuf));
+        if (r <= 0) {
+          status = Z_DATA_ERROR;
+          break;
+        }
+        stream.next_in = inbuf;
+        stream.avail_in = (unsigned int)r;
+      }
+
+      if (out_pos >= MAX_FILE_SIZE) {
+        status = Z_BUF_ERROR;
+        break;
+      }
+      stream.next_out = data + out_pos;
+      stream.avail_out = (unsigned int)(MAX_FILE_SIZE - out_pos);
+
+      int ret = inflate(&stream, Z_NO_FLUSH, 0);
+      size_t produced = (MAX_FILE_SIZE - out_pos) - stream.avail_out;
+      out_pos += produced;
+      if (out_pos > MAX_FILE_SIZE) {
+        status = Z_BUF_ERROR;
+        break;
+      }
+
+      if (ret == Z_STREAM_END) {
+        status = Z_STREAM_END;
+        break;
+      }
+      if (ret == Z_BUF_ERROR && stream.avail_out == 0) {
+        status = Z_BUF_ERROR;
+        break;
+      }
+      if (ret == Z_BUF_ERROR && stream.avail_in == 0) {
+        continue;
+      }
+      if (ret != Z_OK && ret != Z_BUF_ERROR) {
+        status = ret;
+        break;
+      }
+    }
+
+    inflateEnd(&stream);
+
+    if (status != Z_STREAM_END) {
+      if (status == Z_BUF_ERROR) {
+        showError("ERROR: The file is too large.\nMax file size is " + String(MAX_FILE_SIZE) + ".\n" + path);
+      } else {
+        showError("ERROR: gzip decode failed.\n" + path);
+      }
+      hFile.close();
+      return FileFormat::Unknown;
+    }
+
+    if (get_ui32_at(0) != 0x206d6756) {
+      showError("ERROR: File format is not VGM.\n" + path);
+      hFile.close();
+      return FileFormat::Unknown;
+    }
+
+    Serial.printf("File name: %s\n", path.c_str());
+    vgm.size = (u32_t)out_pos;
+    hFile.close();
+
+    return FileFormat::VGZ;
+  }
+
+  return FileFormat::Unknown;
 }
 
 //----------------------------------------------------------------------
@@ -325,7 +564,6 @@ bool NDFile::filePlay(int count) {
 bool NDFile::dirPlay(int count) {
   currentFile = 0;
   currentDir = mod(currentDir + count, dirs.size());
-  ndConfig.saveHistory();
   return fileOpen(currentDir, currentFile, ndFile.getFolderAttenuation(dirs[currentDir]));
 }
 
@@ -335,7 +573,6 @@ bool NDFile::dirPlay(int count) {
 bool NDFile::play(uint16_t d, uint16_t f, int8_t att) {
   currentFile = f;
   currentDir = d;
-  ndConfig.saveHistory();
   return fileOpen(currentDir, currentFile, ndFile.getFolderAttenuation(dirs[currentDir]));
 }
 
@@ -352,22 +589,30 @@ bool NDFile::fileOpen(uint16_t d, uint16_t f, int8_t att) {
 
   nju72341.mute();
   nju72341.resetFadeout();
+  ndConfig.saveHistory();
   FM.reset();
 
   String st = dirs[d] + "/" + files[d][f];
 
-  bool result = false;
+  ND::fileFormat = readFile(st);
+  Serial.printf("After readFile: format is %d\n", ND::fileFormat);
 
-  // check file type
-  String ext = st.substring(st.length() - 4);
-  if (ext.equalsIgnoreCase(".vgm")) {
-    if (readFile(st)) {
-      result = vgm.ready();
+  switch (ND::fileFormat) {
+    case FileFormat::VGM: {
+      ND::canPlay = vgm.ready();
+      break;
     }
-
-  } else if (ext.equalsIgnoreCase(".xgm")) {
-    if (readFile(st)) {
-      result = vgm.XGMReady();
+    case FileFormat::VGZ: {
+      ND::canPlay = vgm.ready();
+      break;
+    }
+    case FileFormat::XGM1: {
+      ND::canPlay = vgm.XGMReady();
+      break;
+    }
+    case FileFormat::XGM2: {
+      ND::canPlay = vgm.XGMReady();
+      break;
     }
   }
 
@@ -375,7 +620,7 @@ bool NDFile::fileOpen(uint16_t d, uint16_t f, int8_t att) {
   xSemaphoreGive(spFileOpen);
   nju72341.unmute();
 
-  return result;
+  return ND::canPlay;
 }
 
 //----------------------------------------------------------------------

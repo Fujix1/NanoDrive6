@@ -8,6 +8,7 @@
 #include "common.h"
 #include "disp.h"
 #include "fm.h"
+#include "nd.h"
 #include "vgm.h"
 
 int mod(int i, int j);
@@ -31,7 +32,7 @@ class NDFile {
  public:
   bool init();
   void listDir(const char* dirname);
-  bool readFile(String path);
+  FileFormat readFile(String path);
   bool filePlay(int count);
   bool dirPlay(int count);
   bool play(uint16_t d, uint16_t f, int8_t att = -1);

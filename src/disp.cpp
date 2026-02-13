@@ -1,4 +1,4 @@
-#include "./disp.h"
+#include "disp.h"
 
 #include "pics.h"
 
@@ -347,18 +347,18 @@ void serialModeDraw() {
   render.setFontColor(C_YELLOW, C_DARK);
   render.setCursor(27, 284);
 
-  if (vgm.freq[0] != SI5351_UNDEFINED) {
+  if (ND::freq[0] != SI5351_UNDEFINED) {
     char buf[7];
-    dtostrf((double)vgm.freq[0] / 1000000.0, 1, 4, buf);
+    dtostrf((double)ND::freq[0] / 1000000.0, 1, 4, buf);
     String st = "YM2612 @ " + String(buf).substring(0, 5) + " MHz";
     render.printf(st.c_str());
   } else {
     render.printf("YM2612 @ -- MHz");
   }
   render.setCursor(27, 303);
-  if (vgm.freq[1] != SI5351_UNDEFINED) {
+  if (ND::freq[1] != SI5351_UNDEFINED) {
     char buf[7];
-    dtostrf((double)vgm.freq[1] / 1000000.0, 1, 4, buf);
+    dtostrf((double)ND::freq[1] / 1000000.0, 1, 4, buf);
     String st = "SN76489 @ " + String(buf).substring(0, 5) + " MHz";
     render.printf(st.c_str());
   } else {

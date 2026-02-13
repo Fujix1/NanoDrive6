@@ -59,50 +59,13 @@
 
 #define XGM2_PCM_DELAY 72
 
-// Current format
-typedef enum {
-  FORMAT_UNKNOWN,
-  FORMAT_VGM,
-  FORMAT_VGZ,
-  FORMAT_XGM,
-  FORMAT_XGM2,
-} t_format;
-
-const std::vector<String> FORMAT_LABEL = {"--", "VGM", "VGZ", "XGM1", "XGM2"};
-
 // GD3 構造体
 typedef struct {
   String trackEn, trackJp, gameEn, gameJp, systemEn, systemJp, authorEn, authorJp, date, converted, notes;
 } t_gd3;
 
-// チップ定義
-typedef enum {
-  CHIP_NONE,
-  CHIP_SN76489_0,
-  CHIP_SN76489_1,
-  CHIP_YM2413,
-  CHIP_YM2612,
-  CHIP_YM2151,
-  CHIP_YM2203_0,
-  CHIP_YM2203_1,
-  CHIP_YM2608,
-  CHIP_YM2610,
-  CHIP_YM3812,
-  CHIP_AY8910,
-  CHIP_YMF262,
-} t_chip;
-
-// クロック使用番号
-typedef enum { CLK_0, CLK_1, CLK_2, CLK_3 } t_clockSlot;
-
-// チップ名
-const std::vector<String> CHIP_LABEL = {"",       "SN76489", "SN76489", "YM2413", "YM2612", "YM2151", "YM2203",
-                                        "YM2203", "YM2608",  "YM2610",  "YM3812", "AY8910", "YMF262"};
-
 class VGM {
  public:
-  t_format format;
-
   u32_t version;     // VGM バージョン
   u32_t dataOffset;  // データオフセット
   u32_t loopOffset;  // ループオフセット

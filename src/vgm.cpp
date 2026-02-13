@@ -49,8 +49,6 @@ bool VGM::ready() {
   xgmLoaded = false;
   ndFile.pos = 0;
 
-  format = FORMAT_UNKNOWN;
-
   freq[0] = SI5351_UNDEFINED;
   freq[1] = SI5351_UNDEFINED;
   freq[2] = SI5351_UNDEFINED;
@@ -69,19 +67,11 @@ bool VGM::ready() {
 
   // VGM ident
   if (ndFile.get_ui32_at_header(0) != 0x206d6756) {
-    if (ndFile.get_ui16_at_header(0) != 0x1f8b) {
-      lcd.printf("ERROR: The file is VGZ archive. Extract it and add a .vgm extension.\n");
-      Serial.println("ERROR: VGZファイルです。解凍してください。");
-
-    } else {
-      lcd.printf("ERROR: File format is not VGM.\n");
-      Serial.println("ERROR: VGM以外のファイルです。");
-    }
+    lcd.printf("ERROR: File format is not VGM.\n");
+    Serial.println("ERROR: VGM以外のファイルです。");
     vgmLoaded = false;
     return false;
   }
-
-  format = FORMAT_VGM;
 
   // version
   version = ndFile.get_ui32_at_header(8);
@@ -267,8 +257,6 @@ bool VGM::ready() {
     _resetGD3();
   }
 
-  // Serial.printf("gd3size: 0x%x \n", gd3Size);
-
   String chip[2] = {"", ""};
   int c = 0;
 
@@ -292,7 +280,8 @@ bool VGM::ready() {
 
   u32_t n = 1 + ndFile.currentFile;  // フォルダ内曲番
   updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
-              gd3.date, chip[0], chip[1], FORMAT_LABEL[vgm.format], 0, n, ndFile.files[ndFile.currentDir].size()});
+              gd3.date, chip[0], chip[1], FORMAT_LABEL[(int)ND::fileFormat], 0, n,
+              ndFile.files[ndFile.currentDir].size()});
 
   Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
   Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(), ESP.getFreePsram());
@@ -907,18 +896,18 @@ bool VGM::XGMReady() {
   // XGM ident
   if (ndFile.get_ui32_at(0) == 0x204d4758) {
     XGMVersion = 1;
-    format = FORMAT_XGM;
+    ND::fileFormat = FileFormat::XGM1;
     Serial.println("XGM Version 1.1");
   } else if (ndFile.get_ui32_at(0) == 0x324d4758) {
     XGMVersion = 2;
-    format = FORMAT_XGM2;
+    ND::fileFormat = FileFormat::XGM2;
     Serial.println("XGM Version 2");
   } else {
     Serial.println("ERROR: XGM ファイル解析失敗");
-    format = FORMAT_UNKNOWN;
+    ND::fileFormat = FileFormat::Unknown;
     u32_t n = 1 + ndFile.currentFile;
     updateDisp({"Bad XGM file ident", "XGMファイル解析失敗", "", "", "--", "--", "--", "--", "--", "", "",
-                FORMAT_LABEL[vgm.format], 0, n, ndFile.files[ndFile.currentDir].size()});
+                FORMAT_LABEL[(int)ND::fileFormat], 0, n, ndFile.files[(int)ndFile.currentDir].size()});
     Serial.println("ERROR: Bad XGM file ident.");
 
     xgmLoaded = false;
@@ -1067,7 +1056,8 @@ bool VGM::XGMReady() {
   u32_t n = 1 + ndFile.currentFile;  // フォルダ内曲番
 
   updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
-              gd3.date, chip[0], chip[1], FORMAT_LABEL[vgm.format], 0, n, ndFile.files[ndFile.currentDir].size()});
+              gd3.date, chip[0], chip[1], FORMAT_LABEL[(int)ND::fileFormat], 0, n,
+              ndFile.files[ndFile.currentDir].size()});
 
   xgmLoaded = true;
   _xgmStartTick = micros64();

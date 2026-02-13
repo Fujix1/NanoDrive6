@@ -5,9 +5,6 @@
 
 #include <vector>
 
-#define CONFIG_FILE_PATH "/config.txt"
-#define CONFIG_LAST_FOLDER "/lastfolder.txt"
-
 typedef enum {
   LANG_JA,
   LANG_EN,
