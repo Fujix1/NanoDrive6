@@ -595,7 +595,6 @@ bool NDFile::fileOpen(uint16_t d, uint16_t f, int8_t att) {
   String st = dirs[d] + "/" + files[d][f];
 
   ND::fileFormat = readFile(st);
-  Serial.printf("After readFile: format is %d\n", ND::fileFormat);
 
   switch (ND::fileFormat) {
     case FileFormat::VGM: {

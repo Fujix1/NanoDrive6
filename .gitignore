@@ -5,3 +5,6 @@
 .vscode/ipch
 PCB
 docs
+*.vgm
+*.vgz
+AGENTS.md

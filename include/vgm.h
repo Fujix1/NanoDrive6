@@ -102,6 +102,28 @@ class VGM {
   u64_t getCurrentTime();
 
  private:
+  static const int VGM_STREAM_MAX = 4;
+  struct t_vgmDataBlock {
+    u32_t pos;
+    u32_t size;
+  };
+  struct t_vgmStreamState {
+    bool configured = false;
+    bool playing = false;
+    u8_t chipType = 0;
+    u8_t port = 0;
+    u8_t command = 0;
+    u8_t dataBankId = 0;
+    u8_t stepSize = 1;
+    u8_t stepBase = 0;
+    u32_t frequency = 0;
+    u32_t startPos = 0;
+    u32_t pos = 0;
+    u32_t endPos = 0;
+    bool loop = false;
+    u64_t nextTickUs = 0;
+  };
+
   t_gd3 gd3;
 
   u16_t _vgmLoop;
@@ -110,7 +132,11 @@ class VGM {
   u64_t _vgmStart;
   u64_t _vgmWaitUntil;
   u32_t _pcmpos = 0;
+  std::vector<t_vgmDataBlock> _vgmDataBlocks[0x40];
+  t_vgmStreamState _vgmStreams[VGM_STREAM_MAX];
   s64_t micros64();
+  void _vgmProcessStreams();
+  void _vgmStopStream(u8_t streamID);
 
   u32_t _xgmSamplePos[XGM1_MAX_PCM_CH];
   u8_t _xgmSampleId[XGM1_MAX_PCM_CH];

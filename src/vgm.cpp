@@ -56,6 +56,13 @@ bool VGM::ready() {
   _vgmLoop = 0;
   _vgmSamples = 0;
   _vgmRealSamples = 0;
+  _pcmpos = 0;
+  for (int i = 0; i < 0x40; i++) {
+    _vgmDataBlocks[i].clear();
+  }
+  for (int i = 0; i < VGM_STREAM_MAX; i++) {
+    _vgmStreams[i] = t_vgmStreamState();
+  }
 
   // ヘッダキャッシュ版
   if (!ndFile.getHeaderCache(ndFile.dirs[ndFile.currentDir] + "/" +
@@ -647,7 +654,58 @@ void VGM::vgmProcess() {
   _vgmWaitUntil = _vgmStart + (_vgmRealSamples * 1000000) / 44100;
 
   while (_vgmWaitUntil > micros64()) {
-    // ets_delay_us(22);
+    _vgmProcessStreams();
+  }
+}
+
+void VGM::_vgmStopStream(u8_t streamID) {
+  if (streamID >= VGM_STREAM_MAX) {
+    return;
+  }
+  _vgmStreams[streamID].playing = false;
+}
+
+void VGM::_vgmProcessStreams() {
+  if (ndConfig.get(CFG_FMPCM) == FMPCM_FM) {
+    return;
+  }
+
+  u64_t now = micros64();
+
+  for (int i = 0; i < VGM_STREAM_MAX; i++) {
+    t_vgmStreamState& stream = _vgmStreams[i];
+    if (!stream.playing || stream.frequency == 0 || stream.stepSize == 0) {
+      continue;
+    }
+
+    if ((stream.chipType & 0x7F) != 0x02 || stream.command != 0x2A) {
+      continue;
+    }
+
+    u64_t intervalUs = 1000000ULL / stream.frequency;
+    if (intervalUs == 0) {
+      intervalUs = 1;
+    }
+
+    int guard = 0;
+    while (stream.playing && stream.nextTickUs <= now && guard < 512) {
+      if (stream.pos >= stream.endPos) {
+        if (!stream.loop) {
+          stream.playing = false;
+          break;
+        }
+        stream.pos = stream.startPos;
+      }
+
+      FM.setYM2612DAC(ndFile.get_ui8_at(stream.pos), (stream.chipType & 0x80) ? 1 : 0);
+      stream.pos += stream.stepSize;
+      stream.nextTickUs += intervalUs;
+      guard++;
+    }
+
+    if (stream.nextTickUs + intervalUs < now) {
+      stream.nextTickUs = now + intervalUs;
+    }
   }
 }
 
@@ -812,11 +870,19 @@ void VGM::vgmProcessMain() {
       }
       break;
 
-    case 0x67:
-      ndFile.get_ui8();                 // 0x66
-      ndFile.get_ui8();                 // 0x00 data type
-      ndFile.pos += ndFile.get_ui32();  // size of data, in bytes
+    case 0x67: {
+      ndFile.get_ui8();  // 0x66
+      u8_t dataType = ndFile.get_ui8();
+      u32_t blockSize = ndFile.get_ui32();
+      u32_t blockPos = ndFile.pos;
+
+      if (dataType <= 0x3F) {
+        _vgmDataBlocks[dataType].push_back({blockPos, blockSize});
+      }
+
+      ndFile.pos += blockSize;
       break;
+    }
 
     case 0x70 ... 0x7f:
       _vgmSamples += (command & 15) + 1;
@@ -830,29 +896,100 @@ void VGM::vgmProcessMain() {
       _vgmSamples += (command & 15);
       break;
 
-    case 0x90:
+    case 0x90: {
       // Setup Stream Control
-      // get_vgm_ui32();
+      u8_t streamID = ndFile.get_ui8();
+      u8_t chipType = ndFile.get_ui8();
+      u8_t port = ndFile.get_ui8();
+      u8_t commandReg = ndFile.get_ui8();
+
+      if (streamID < VGM_STREAM_MAX) {
+        _vgmStreams[streamID].configured = true;
+        _vgmStreams[streamID].chipType = chipType;
+        _vgmStreams[streamID].port = port;
+        _vgmStreams[streamID].command = commandReg;
+      }
+
+      Serial.printf("Setup Stream Control 0x90: stream %d chip 0x%02x port 0x%02x cmd 0x%02x\n", streamID, chipType, port,
+                    commandReg);
       break;
-    case 0x91:
+    }
+    case 0x91: {
       // Set Stream Data
-      // get_vgm_ui32();
+      u8_t streamID = ndFile.get_ui8();
+      u8_t dataBankID = ndFile.get_ui8();
+      u8_t stepSize = ndFile.get_ui8();
+      u8_t stepBase = ndFile.get_ui8();
+
+      if (streamID < VGM_STREAM_MAX) {
+        _vgmStreams[streamID].dataBankId = dataBankID;
+        _vgmStreams[streamID].stepSize = stepSize;
+        _vgmStreams[streamID].stepBase = stepBase;
+      }
+
+      Serial.printf("Set Stream Data 0x91: stream %d bank %d step %d base %d\n", streamID, dataBankID, stepSize, stepBase);
       break;
-    case 0x92:
+    }
+    case 0x92: {
       // Set Stream Frequency
-      // get_vgm_ui8();
-      // get_vgm_ui32();
+      u8_t streamID = ndFile.get_ui8();
+      u32_t frequency = ndFile.get_ui32();
+
+      if (streamID < VGM_STREAM_MAX) {
+        _vgmStreams[streamID].frequency = frequency;
+      }
+
+      Serial.printf("Set Stream Frequency 0x92: id %d, 0x%x\n", streamID, frequency);
       break;
-    case 0x93:
+    }
+    case 0x93: {
       // Start Stream
-      // get_vgm_ui8();
-      // pcmpos = get_vgm_ui32();
-      // get_vgm_ui8();
-      // pcmlength = get_vgm_ui32();
-      // pcmoffset = 0;
-      // 8KHz
-      // pause_pcm(5.5125);
+      u8_t streamID = ndFile.get_ui8();
+      u32_t dataStart = ndFile.get_ui32();
+      u8_t lengthMode = ndFile.get_ui8();
+      u32_t dataLength = ndFile.get_ui32();
+      Serial.printf("Start Stream 0x93: stream %d start 0x%x mode 0x%02x len 0x%x\n", streamID, dataStart, lengthMode,
+                    dataLength);
       break;
+    }
+    case 0x94: {
+      // Stop Stream
+      u8_t streamID = ndFile.get_ui8();
+      if (streamID == 0xFF) {
+        for (int i = 0; i < VGM_STREAM_MAX; i++) {
+          _vgmStopStream(i);
+        }
+      } else {
+        _vgmStopStream(streamID);
+      }
+      Serial.printf("Stop Stream 0x94: stream ID %d\n", streamID);
+      break;
+    }
+    case 0x95: {
+      // Start Stream Fast call
+      u8_t streamID = ndFile.get_ui8();
+      u16_t blockID = ndFile.get_ui16();
+      u8_t flags = ndFile.get_ui8();
+
+      if (streamID < VGM_STREAM_MAX) {
+        t_vgmStreamState& stream = _vgmStreams[streamID];
+        if (stream.dataBankId <= 0x3F && blockID < _vgmDataBlocks[stream.dataBankId].size()) {
+          t_vgmDataBlock& block = _vgmDataBlocks[stream.dataBankId][blockID];
+          u32_t blockStart = block.pos + stream.stepBase;
+          u32_t blockEnd = block.pos + block.size;
+          if (blockStart < blockEnd) {
+            stream.startPos = blockStart;
+            stream.pos = blockStart;
+            stream.endPos = blockEnd;
+            stream.loop = (flags & 0x01) != 0;
+            stream.playing = true;
+            stream.nextTickUs = micros64();
+          }
+        }
+      }
+      Serial.printf("Start Stream Fast 0x95: stream ID %d, blockID %d, flags 0x%x\n", streamID, blockID, flags);
+      break;
+    }
     case 0xe0:
       _pcmpos = 0x47 + ndFile.get_ui32();
       break;
