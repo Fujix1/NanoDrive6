@@ -758,17 +758,6 @@ void VGM::vgmProcessMain() {
       reg = ndFile.get_ui8();
       dat = ndFile.get_ui8();
       if ((reg >= 0x30 && reg <= 0xB6) || reg == 0x22 || reg == 0x27 || reg == 0x28 || reg == 0x2A || reg == 0x2B) {
-        if (ndConfig.get(CFG_FMPCM) == FMPCM_FM) {
-          if (reg == 0x2a) {
-            break;
-          }
-        }
-
-        if (ndConfig.get(CFG_FMPCM) == FMPCM_PCM) {
-          if (reg == 0x28) {
-            dat &= 0x0F;
-          }
-        }
         FM.setYM2612(0, reg, dat, 0);
       }
       break;
@@ -777,12 +766,6 @@ void VGM::vgmProcessMain() {
       reg = ndFile.get_ui8();
       dat = ndFile.get_ui8();
       if (reg >= 0x30 && reg <= 0xB6) {
-        if (ndConfig.get(CFG_FMPCM) == FMPCM_PCM) {
-          if (reg == 0x28) {
-            dat &= 0x0F;  // キーオフ
-          }
-        }
-
         FM.setYM2612(1, reg, dat, 0);
       }
       break;
@@ -910,8 +893,8 @@ void VGM::vgmProcessMain() {
         _vgmStreams[streamID].command = commandReg;
       }
 
-      Serial.printf("Setup Stream Control 0x90: stream %d chip 0x%02x port 0x%02x cmd 0x%02x\n", streamID, chipType, port,
-                    commandReg);
+      Serial.printf("Setup Stream Control 0x90: stream %d chip 0x%02x port 0x%02x cmd 0x%02x\n", streamID, chipType,
+                    port, commandReg);
       break;
     }
     case 0x91: {
@@ -927,7 +910,8 @@ void VGM::vgmProcessMain() {
         _vgmStreams[streamID].stepBase = stepBase;
       }
 
-      Serial.printf("Set Stream Data 0x91: stream %d bank %d step %d base %d\n", streamID, dataBankID, stepSize, stepBase);
+      Serial.printf("Set Stream Data 0x91: stream %d bank %d step %d base %d\n", streamID, dataBankID, stepSize,
+                    stepBase);
       break;
     }
     case 0x92: {
@@ -1247,7 +1231,9 @@ void VGM::_xgm1ProcessPCM() {
     } else if (samp < INT8_MIN)
       samp = INT8_MIN;
     samp += 128;
-    FM.setYM2612DAC(samp, 0);
+    if (ndConfig.get(CFG_FMPCM) != FMPCM_FM) {
+      FM.setYM2612DAC(samp, 0);
+    }
   }
 }
 
@@ -1380,7 +1366,9 @@ void VGM::_xgm2ProcessPCM() {
     } else if (samp < INT8_MIN)
       samp = INT8_MIN;
     samp += 128;
-    FM.setYM2612DAC(samp, 0);
+    if (ndConfig.get(CFG_FMPCM) != FMPCM_FM) {
+      FM.setYM2612DAC(samp, 0);
+    }
   }
 }
 

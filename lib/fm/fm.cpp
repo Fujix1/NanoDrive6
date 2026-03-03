@@ -2,6 +2,8 @@
 
 #include <driver/dedic_gpio.h>
 
+#include "../../include/config.h"
+
 dedic_gpio_bundle_handle_t dataBus = NULL;  // GPIOバンドル用ハンドラ
 
 // ------------------------------------------------------------------------------
@@ -145,6 +147,14 @@ void FMChip::writeRaw(byte data, byte chipno, si5351Freq_t freq) {
 
 byte lastAddr = 0;
 void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
+  if (ndConfig.get(CFG_FMPCM) == FMPCM_FM && addr == 0x2A) {
+    return;  // DAC data off (FM only)
+  }
+
+  if (ndConfig.get(CFG_FMPCM) == FMPCM_PCM && addr == 0x28) {
+    data &= 0x0F;  // キーオフ
+  }
+
   switch (chipno) {
     case 0:
       CS0_LOW;
@@ -214,6 +224,10 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
 
 // YM2612 の DAC データ送信専用
 void FMChip::setYM2612DAC(byte data, uint8_t chipno) {
+  if (ndConfig.get(CFG_FMPCM) == FMPCM_FM) {
+    return;  // DAC data off (FM only)
+  }
+
   switch (chipno) {
     case 0:
       CS0_LOW;
