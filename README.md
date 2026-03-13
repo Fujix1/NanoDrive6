@@ -96,6 +96,7 @@ Select the "Serial mode" via the option menu and reboot to enter the USB serial 
 <br>
 <br>
 <br>
+
 ## Credits and licenses
 
 - Open Font Render by takkaO: FTL license
@@ -106,5 +107,8 @@ Select the "Serial mode" via the option menu and reboot to enter the USB serial 
 
 - PNGdec by Larry Bank: Apache 2.0 license
   https://github.com/bitbank2/PNGdec
+
+- BIZ UDPGothic: SIL Open Font License 1.1
+  https://fonts.google.com/specimen/BIZ+UDPGothic/license
 
 - Portions of this software are copyright © The FreeTypeProject (www.freetype.org). All rights reserved.
