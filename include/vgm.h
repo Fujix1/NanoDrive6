@@ -120,7 +120,11 @@ class VGM {
     u32_t startPos = 0;
     u32_t pos = 0;
     u32_t endPos = 0;
+    u32_t startBankOffset = 0;
+    u32_t bankOffset = 0;
+    u32_t endBankOffset = 0;
     bool loop = false;
+    bool reverse = false;
     u64_t nextTickUs = 0;
   };
 
@@ -135,6 +139,10 @@ class VGM {
   std::vector<t_vgmDataBlock> _vgmDataBlocks[0x40];
   t_vgmStreamState _vgmStreams[VGM_STREAM_MAX];
   s64_t micros64();
+  bool _vgmResolveDataBankOffset(u8_t bankID, u32_t bankOffset, u32_t& filePos);
+  bool _vgmResolveDataBankRange(u8_t bankID, u32_t bankOffset, u32_t byteLength, u32_t& startPos, u32_t& endPos);
+  u32_t _vgmDataBankSize(u8_t bankID);
+  void _vgmStartStream(u8_t streamID, u32_t dataStart, u8_t lengthMode, u32_t dataLength);
   void _vgmProcessStreams();
   void _vgmStopStream(u8_t streamID);
 

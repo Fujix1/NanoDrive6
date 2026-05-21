@@ -665,6 +665,123 @@ void VGM::_vgmStopStream(u8_t streamID) {
   _vgmStreams[streamID].playing = false;
 }
 
+u32_t VGM::_vgmDataBankSize(u8_t bankID) {
+  if (bankID > 0x3F) {
+    return 0;
+  }
+
+  u32_t size = 0;
+  for (const t_vgmDataBlock& block : _vgmDataBlocks[bankID]) {
+    size += block.size;
+  }
+  return size;
+}
+
+bool VGM::_vgmResolveDataBankOffset(u8_t bankID, u32_t bankOffset, u32_t& filePos) {
+  if (bankID > 0x3F) {
+    return false;
+  }
+
+  for (const t_vgmDataBlock& block : _vgmDataBlocks[bankID]) {
+    if (bankOffset < block.size) {
+      filePos = block.pos + bankOffset;
+      return true;
+    }
+    bankOffset -= block.size;
+  }
+
+  return false;
+}
+
+bool VGM::_vgmResolveDataBankRange(u8_t bankID, u32_t bankOffset, u32_t byteLength, u32_t& startPos, u32_t& endPos) {
+  if (byteLength == 0 || !_vgmResolveDataBankOffset(bankID, bankOffset, startPos)) {
+    return false;
+  }
+
+  if (!_vgmResolveDataBankOffset(bankID, bankOffset + byteLength - 1, endPos)) {
+    return false;
+  }
+
+  endPos++;
+  return true;
+}
+
+void VGM::_vgmStartStream(u8_t streamID, u32_t dataStart, u8_t lengthMode, u32_t dataLength) {
+  if (streamID >= VGM_STREAM_MAX) {
+    return;
+  }
+
+  t_vgmStreamState& stream = _vgmStreams[streamID];
+  if (stream.dataBankId > 0x3F || _vgmDataBlocks[stream.dataBankId].empty()) {
+    return;
+  }
+
+  if (dataStart == 0xFFFFFFFF) {
+    dataStart = stream.bankOffset;
+  }
+
+  const u32_t bankSize = _vgmDataBankSize(stream.dataBankId);
+  if (stream.stepBase <= bankSize && dataStart <= bankSize - stream.stepBase) {
+    dataStart += stream.stepBase;
+  } else {
+    return;
+  }
+
+  if (dataStart >= bankSize) {
+    return;
+  }
+
+  const u8_t mode = lengthMode & 0x0F;
+  if (mode == 0x00) {
+    u32_t filePos;
+    if (_vgmResolveDataBankOffset(stream.dataBankId, dataStart, filePos)) {
+      stream.startPos = filePos;
+      stream.pos = filePos;
+      stream.startBankOffset = dataStart;
+      stream.bankOffset = dataStart;
+      stream.endBankOffset = dataStart;
+    }
+    stream.playing = false;
+    return;
+  }
+
+  u32_t byteLength = 0;
+  if (mode == 0x01) {
+    byteLength = dataLength * stream.stepSize;
+  } else if (mode == 0x02) {
+    byteLength = ((uint64_t)stream.frequency * dataLength * stream.stepSize) / 1000;
+  } else if (mode == 0x03) {
+    byteLength = bankSize - dataStart;
+  } else {
+    return;
+  }
+
+  if (byteLength > bankSize - dataStart) {
+    byteLength = bankSize - dataStart;
+  }
+
+  u32_t startPos;
+  u32_t endPos;
+  if (!_vgmResolveDataBankRange(stream.dataBankId, dataStart, byteLength, startPos, endPos)) {
+    return;
+  }
+
+  stream.startPos = startPos;
+  stream.endPos = endPos;
+  stream.startBankOffset = dataStart;
+  stream.endBankOffset = dataStart + byteLength;
+  stream.loop = (lengthMode & 0x80) != 0;
+  stream.reverse = (lengthMode & 0x10) != 0;
+  if (byteLength < stream.stepSize) {
+    stream.playing = false;
+    return;
+  }
+  stream.bankOffset = stream.reverse ? stream.endBankOffset - stream.stepSize : stream.startBankOffset;
+  stream.pos = stream.reverse ? endPos - stream.stepSize : startPos;
+  stream.playing = true;
+  stream.nextTickUs = micros64();
+}
+
 void VGM::_vgmProcessStreams() {
   if (ndConfig.get(CFG_FMPCM) == FMPCM_FM) {
     return;
@@ -674,7 +791,8 @@ void VGM::_vgmProcessStreams() {
 
   for (int i = 0; i < VGM_STREAM_MAX; i++) {
     t_vgmStreamState& stream = _vgmStreams[i];
-    if (!stream.playing || stream.frequency == 0 || stream.stepSize == 0) {
+    if (!stream.playing || stream.frequency == 0 || stream.stepSize == 0 ||
+        stream.startBankOffset >= stream.endBankOffset) {
       continue;
     }
 
@@ -689,16 +807,37 @@ void VGM::_vgmProcessStreams() {
 
     int guard = 0;
     while (stream.playing && stream.nextTickUs <= now && guard < 512) {
-      if (stream.pos >= stream.endPos) {
+      if (!stream.reverse && stream.bankOffset >= stream.endBankOffset) {
         if (!stream.loop) {
           stream.playing = false;
           break;
         }
-        stream.pos = stream.startPos;
+        stream.bankOffset = stream.startBankOffset;
+      } else if (stream.reverse && (stream.bankOffset == 0xFFFFFFFFUL || stream.bankOffset < stream.startBankOffset)) {
+        if (!stream.loop) {
+          stream.playing = false;
+          break;
+        }
+        stream.bankOffset = stream.endBankOffset - stream.stepSize;
       }
 
-      FM.setYM2612DAC(ndFile.get_ui8_at(stream.pos), (stream.chipType & 0x80) ? 1 : 0);
-      stream.pos += stream.stepSize;
+      u32_t filePos;
+      if (!_vgmResolveDataBankOffset(stream.dataBankId, stream.bankOffset, filePos)) {
+        stream.playing = false;
+        break;
+      }
+
+      stream.pos = filePos;
+      FM.setYM2612DAC(ndFile.get_ui8_at(filePos), (stream.chipType & 0x80) ? 1 : 0);
+      if (stream.reverse) {
+        if (stream.bankOffset < stream.startBankOffset + stream.stepSize) {
+          stream.bankOffset = 0xFFFFFFFFUL;
+        } else {
+          stream.bankOffset -= stream.stepSize;
+        }
+      } else {
+        stream.bankOffset += stream.stepSize;
+      }
       stream.nextTickUs += intervalUs;
       guard++;
     }
@@ -932,6 +1071,7 @@ void VGM::vgmProcessMain() {
       u32_t dataStart = ndFile.get_ui32();
       u8_t lengthMode = ndFile.get_ui8();
       u32_t dataLength = ndFile.get_ui32();
+      _vgmStartStream(streamID, dataStart, lengthMode, dataLength);
       Serial.printf("Start Stream 0x93: stream %d start 0x%x mode 0x%02x len 0x%x\n", streamID, dataStart, lengthMode,
                     dataLength);
       break;
@@ -962,11 +1102,23 @@ void VGM::vgmProcessMain() {
           u32_t blockStart = block.pos + stream.stepBase;
           u32_t blockEnd = block.pos + block.size;
           if (blockStart < blockEnd) {
+            u32_t bankOffset = 0;
+            for (u16_t i = 0; i < blockID; i++) {
+              bankOffset += _vgmDataBlocks[stream.dataBankId][i].size;
+            }
             stream.startPos = blockStart;
-            stream.pos = blockStart;
             stream.endPos = blockEnd;
+            stream.startBankOffset = bankOffset + stream.stepBase;
+            stream.endBankOffset = bankOffset + block.size;
             stream.loop = (flags & 0x01) != 0;
+            stream.reverse = (flags & 0x10) != 0;
+            if (block.size < stream.stepSize) {
+              stream.playing = false;
+              break;
+            }
+            stream.bankOffset = stream.reverse ? stream.endBankOffset - stream.stepSize : stream.startBankOffset;
             stream.playing = true;
+            stream.pos = stream.reverse ? blockEnd - stream.stepSize : blockStart;
             stream.nextTickUs = micros64();
           }
         }
