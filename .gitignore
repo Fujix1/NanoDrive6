@@ -4,6 +4,7 @@
 .vscode/launch.json
 .vscode/ipch
 PCB
+ND6
 docs
 *.vgm
 *.vgz
