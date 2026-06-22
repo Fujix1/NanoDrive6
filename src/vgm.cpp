@@ -13,6 +13,10 @@
   22675.737f  // 22.67573696145125 us
               // 1 / 44100 * 1 000 000
 
+namespace {
+constexpr u8_t kVgmCommandBudgetPerLoop = 64;
+}
+
 //---------------------------------------------------------------------
 static std::string wstringToUTF8(const std::wstring& src) {
   std::wstring_convert<std::codecvt_utf8<wchar_t> > converter;
@@ -55,6 +59,8 @@ bool VGM::ready() {
   _vgmLoop = 0;
   _vgmSamples = 0;
   _vgmRealSamples = 0;
+  _vgmWaitUntil = 0;
+  _vgmTimingStarted = false;
   _pcmpos = 0;
   for (int i = 0; i < 0x40; i++) {
     _vgmDataBlocks[i].clear();
@@ -294,7 +300,6 @@ bool VGM::ready() {
   // Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
   // Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(), ESP.getFreePsram());
 
-  _vgmStart = micros64() + 20000;
   return true;
 }
 
@@ -641,22 +646,38 @@ si5351Freq_t VGM::normalizeFreq(u32_t freq, t_chip chip) {
 // VGM処理
 
 void VGM::vgmProcess() {
+  // ready() 後の初期化や描画にかかった時間を再生時間へ含めない。
+  // 実際に再生処理へ入った時点をVGMの時刻原点にする。
+  if (!_vgmTimingStarted) {
+    _vgmStart = micros64();
+    _vgmWaitUntil = _vgmStart;
+    _vgmTimingStarted = true;
+  }
+
   // フェードアウト完了
   if (nju72341.fadeOutStatus == FADEOUT_COMPLETED) {
     endProcedure();
     return;
   }
 
+  // VGMのウェイト中も入力処理へ制御を返す。
+  if (_vgmWaitUntil > micros64()) {
+    _vgmProcessStreams();
+    taskYIELD();
+    return;
+  }
+
+  u8_t processedCommands = 0;
   while (_vgmSamples <= _vgmRealSamples) {
     vgmProcessMain();
+    if (++processedCommands >= kVgmCommandBudgetPerLoop && _vgmSamples <= _vgmRealSamples) {
+      taskYIELD();
+      return;
+    }
   }
 
   _vgmRealSamples = _vgmSamples;
   _vgmWaitUntil = _vgmStart + (_vgmRealSamples * 1000000) / 44100;
-
-  while (_vgmWaitUntil > micros64()) {
-    _vgmProcessStreams();
-  }
 }
 
 void VGM::_vgmStopStream(u8_t streamID) {
@@ -1156,6 +1177,7 @@ bool VGM::XGMReady() {
   _xgmPSGFrame = 0;
 
   _xgmWaitUntil = 0;
+  _xgmTimingStarted = false;
 
   XGMSampleAddressTable.clear();
   XGMSampleSizeTable.clear();
@@ -1334,7 +1356,6 @@ bool VGM::XGMReady() {
               ndFile.files[ndFile.currentDir].size()});
 
   xgmLoaded = true;
-  _xgmStartTick = micros64();
 
   return true;
 }
@@ -1342,6 +1363,13 @@ bool VGM::XGMReady() {
 //---------------------------------------------------------------
 // XGM1 処理
 void VGM::xgmProcess() {
+  // XGMReady() 後の初期化時間を再生時間へ含めない。
+  if (!_xgmTimingStarted) {
+    _xgmStartTick = micros64();
+    _xgmWaitUntil = _xgmStartTick;
+    _xgmTimingStarted = true;
+  }
+
   // フェードアウト完了
   if (nju72341.fadeOutStatus == FADEOUT_COMPLETED) {
     endProcedure();
@@ -1360,7 +1388,7 @@ void VGM::xgmProcess() {
   _vgmSamples = _xgmYMSNFrame * 735;                      // 44100 / 60
 
   // PCM Stream mixing
-  while (_xgmWaitUntil - XGM1_PCM_DELAY > micros()) {
+  while (_xgmWaitUntil - XGM1_PCM_DELAY > micros64()) {
     _xgm1ProcessPCM();
     ets_delay_us(XGM1_PCM_DELAY);
   }
@@ -1465,6 +1493,13 @@ bool VGM::_xgm1ProcessYMSN() {
 //---------------------------------------------------------------
 // XGM2 処理
 void VGM::xgm2Process() {
+  // XGMReady() 後の初期化時間を再生時間へ含めない。
+  if (!_xgmTimingStarted) {
+    _xgmStartTick = micros64();
+    _xgmWaitUntil = _xgmStartTick;
+    _xgmTimingStarted = true;
+  }
+
   // フェードアウト完了
   if (nju72341.fadeOutStatus == FADEOUT_COMPLETED) {
     endProcedure();
@@ -1488,7 +1523,7 @@ void VGM::xgm2Process() {
   _xgmWaitUntil = _xgmStartTick + _xgmFrame * 16666;  // 60Hz
   _vgmSamples = _xgmFrame * 735;                      // 44100 / 60
 
-  while (_xgmWaitUntil - XGM2_PCM_DELAY >= micros()) {
+  while (_xgmWaitUntil - XGM2_PCM_DELAY >= micros64()) {
     _xgm2ProcessPCM();
     ets_delay_us(XGM2_PCM_DELAY);
   }

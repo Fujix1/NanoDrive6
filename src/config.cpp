@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "file.h"
+#include "fm.h"
 
 Preferences preferences;
 
@@ -68,7 +69,6 @@ void NDConfig::init() {
                    {"None", "2 sec.", "5 sec.", "8 sec.", "10 sec.", "12 sec.", "15 sec."},
                    {FO_0, FO_2, FO_5, FO_8, FO_10, FO_12, FO_15}});
 
-  items.push_back({"update", 0, "画面更新", "LCD Update", {"する", "しない"}, {"On", "Off"}, {UPDATE_YES, UPDATE_NO}});
   items.push_back(
       {"mode", 0, "動作モード", "Mode", {"プレーヤー", "シリアル"}, {"Player", "Serial"}, {MODE_PLAYER, MODE_SERIAL}});
   items.push_back({"fmpcm",
@@ -90,6 +90,7 @@ void NDConfig::saveCfg() {
   uint32_t dummy = 0;
   xQueueSend(cfgSaveQueue, &dummy, 0);
   nju72341.setFadeoutDuration(get(CFG_FADEOUT));
+  FM.requestApplyYM2612OutputMode();
   return;
 }
 

@@ -1,10 +1,15 @@
 #include "disp.h"
 
 #include "pics.h"
+#include "png_renderer.h"
 
-enum class cfgEvent { Open, Close, Up, Down, Left, Right };
+enum class cfgEvent { Open,
+                      Close,
+                      Up,
+                      Down,
+                      Left,
+                      Right };
 
-static PNG png;
 static bool _stopTimerDrawing = true;  // タイマーによる描画更新を止める
 
 LGFX::LGFX(void) {
@@ -64,9 +69,6 @@ LGFX::LGFX(void) {
 
 LGFX lcd;
 static LGFX_Sprite frameBuffer(&lcd);
-static LGFX_Sprite sprPng(&lcd);
-static LGFX_Sprite sprPngResized(&lcd);
-static String lastPNGPath = "";
 
 static OpenFontRender render;
 static TimerHandle_t hDispTimer;
@@ -175,14 +177,6 @@ void Label::update() {
 void Label::setEnabled(bool state) { _enabled = state; }
 
 //---------------------------------------------------------------------------
-// PNG draw for PNGDec lib
-void pngDraw(PNGDRAW* pDraw) {
-  uint16_t lineBuffer[MAX_PNG_WIDTH];  // Line buffer for rendering
-  png.getLineAsRGB565(pDraw, lineBuffer, PNG_RGB565_BIG_ENDIAN, 0xffffffff);
-  sprPng.pushImage(0, pDraw->y, pDraw->iWidth, 1, lineBuffer);
-}
-
-//---------------------------------------------------------------------------
 // Draw header info
 static LGFX_Sprite sprHeader(&lcd);
 void updateHeader(uint64_t sec) {
@@ -207,11 +201,6 @@ void updateHeader(uint64_t sec) {
 // Timer Handler
 void dispTimerHandler(void* param) {
   if (cfgWindow.isVisible) {
-    return;
-  }
-
-  // 画面更新停止か
-  if (ndConfig.get(CFG_UPDATE) == UPDATE_NO) {
     return;
   }
 
@@ -281,13 +270,11 @@ void redraw() {
     render.printf("%02d/%02d", _dispData.no, _dispData.maxFiles);
   }
 
-  if (ndConfig.get(CFG_UPDATE) == UPDATE_YES) {
-    render.setAlignment(Align::TopCenter);
-    render.setFontSize(14);
-    render.setFontColor(C_LIGHTGRAY, C_HEADER);
-    render.setCursor(LCD_W / 2, 4);
-    render.printf("%d:%02d", (uint8_t)(_dispData.time / 60), (uint8_t)(_dispData.time % 60));
-  }
+  render.setAlignment(Align::TopCenter);
+  render.setFontSize(14);
+  render.setFontColor(C_LIGHTGRAY, C_HEADER);
+  render.setCursor(LCD_W / 2, 4);
+  render.printf("%d:%02d", (uint8_t)(_dispData.time / 60), (uint8_t)(_dispData.time % 60));
 
   render.setFontSize(13);
   if (ndFile.accessMode == ACCESS_CACHE) {
@@ -437,9 +424,9 @@ bool initDisp() {
   frameBuffer.setPsram(true);
   frameBuffer.createSprite(LCD_W, LCD_H);
 
-  // 縮小済み PNG スプライト
-  sprPngResized.setPsram(true);
-  sprPngResized.createSprite(LCD_W + 1, 125);
+  if (!initPNGRenderer()) {
+    return false;
+  }
 
   _stopTimerDrawing = true;
 
@@ -452,27 +439,6 @@ bool initDisp() {
 
 void startTimer() { xTimerStart(hDispTimer, 0); }
 void stopTimer() { xTimerStop(hDispTimer, 0); }
-
-// -----------------------------------------------------------------------
-// Opening a png file on the SD card
-File myfile;
-
-void* myOpen(const char* filename, int32_t* size) {
-  myfile = SD.open(filename);
-  *size = myfile.size();
-  return &myfile;
-}
-void myClose(void* handle) {
-  if (myfile) myfile.close();
-}
-int32_t myRead(PNGFILE* handle, uint8_t* buffer, int32_t length) {
-  if (!myfile) return 0;
-  return myfile.read(buffer, length);
-}
-int32_t mySeek(PNGFILE* handle, int32_t position) {
-  if (!myfile) return 0;
-  return myfile.seek(position);
-}
 
 /**
  * @brief PNGファイルを開いて配置する
@@ -489,72 +455,23 @@ bool openPNG(String dirName, String fileName, bool AA = false, bool toSprite = t
   if (dirName == "" || fileName == "") {
     return false;
   }
-  //
   String path = dirName + "/" + fileName;
 
-  if (lastPNGPath != path) {
-    //  PNG 開いて sprPNG に転送
-    if (!SD.exists(path)) {
-      return false;
-    }
-
-    myfile = SD.open(path.c_str());
-    if (!myfile) {
-      sprPng.deleteSprite();
-      lastPNGPath = "";
+  if (!loadPNG(path, AA)) {
+    const String& error = getPNGErrorMessage();
+    if (error != "") {
       frameBuffer.setFont(&fonts::Font2);
       frameBuffer.setCursor(0, 77);
-      frameBuffer.printf("PNG open error:\n%s", path);
-      return false;
+      frameBuffer.printf("%s", error.c_str());
     }
-
-    int16_t rc = png.open(path.c_str(), myOpen, myClose, myRead, mySeek, pngDraw);
-    if (rc == PNG_SUCCESS) {
-      sprPng.setPsram(true);
-      sprPng.createSprite(png.getWidth(), png.getHeight());
-      rc = png.decode(NULL, 0);
-
-      // リサイズ
-      float w, h;
-      // 640x400 の場合比率保持
-      if (sprPng.width() == 640 && sprPng.height() == 400) {
-        w = (float)(LCD_W + 1) / png.getWidth();
-        h = 0.2646;
-        sprPngResized.fillSprite(TFT_BLACK);
-      } else if (sprPng.width() > sprPng.height()) {
-        // 横長
-        w = (float)(LCD_W + 1) / png.getWidth();
-        h = 127.0 / png.getHeight();
-        sprPngResized.fillSprite(C_HEADER);
-      } else {
-        // 縦長画像
-        w = 94.5 / png.getWidth();
-        h = 127.0 / png.getHeight();
-        sprPngResized.fillSprite(C_HEADER);
-      }
-
-      if (AA) {
-        sprPng.pushRotateZoomWithAA(&sprPngResized, 84.5, 63, 0, w, h);
-      } else {
-        sprPng.pushRotateZoom(&sprPngResized, 84.5, 63, 0, w, h);
-      }
-      sprPng.deleteSprite();
-      lastPNGPath = path;
-    } else {
-      frameBuffer.setFont(&fonts::Font2);
-      frameBuffer.setCursor(0, 77);
-      frameBuffer.printf("PNG file error:\n%s", path);
-      sprPng.deleteSprite();
-      lastPNGPath = "";
-      return false;
-    }
-    png.close();
+    return false;
   }
 
+  LGFX_Sprite& pngSprite = getPNGSprite();
   if (toSprite) {
-    sprPngResized.pushSprite(&frameBuffer, 0, 75);
+    pngSprite.pushSprite(&frameBuffer, 0, 75);
   } else {
-    sprPngResized.pushSprite(&lcd, 0, 75);
+    pngSprite.pushSprite(&lcd, 0, 75);
   }
 
   return true;

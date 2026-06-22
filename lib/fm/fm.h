@@ -46,11 +46,19 @@ class FMChip {
   void setRegisterOPL3(byte port, byte addr, byte data, int chipno);
   void setYM2612(byte port, byte addr, byte data, uint8_t chipno);
   void setYM2612DAC(byte data, uint8_t chipno);
+  void requestApplyYM2612OutputMode();
+  void applyPendingYM2612OutputMode();
   void write(byte data, byte chipno, si5351Freq_t freq);
   void writeRaw(byte data, byte chipno, si5351Freq_t freq);
 
  private:
   u8_t _psgFrqLowByte = 0;
+  u8_t _ym2612TlReg[3][2][16] = {};
+  bool _ym2612TlRegValid[3][2][16] = {};
+  volatile bool _ym2612OutputModeApplyPending = false;
+
+  byte _applyYM2612OutputMode(byte bank, byte addr, byte data, uint8_t chipno) const;
+  void _writeCachedYM2612Tl(uint8_t chipno);
 };
 
 extern FMChip FM;

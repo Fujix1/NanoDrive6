@@ -1,5 +1,7 @@
 #include "file.h"
 
+#include <PNGdec.h>  // VGZ展開でPNGdec同梱のzlib型を使用
+
 static SPIClass SPI_SD;
 std::vector<String> dirs;                // ルートのディレクトリ一覧
 std::vector<String> pngs;                // ディレクトリごとのpng
@@ -343,7 +345,7 @@ FileFormat NDFile::readFile(String path) {
     if (accessMode == ACCESS_PSRAM) {
       hFile.seek(0);
       hFile.read(data, vgm.size);
-      Serial.printf("File name: %s\n", path.c_str());
+      // Serial.printf("File name: %s\n", path.c_str());
     }
     hFile.close();
 
@@ -538,7 +540,7 @@ FileFormat NDFile::readFile(String path) {
       return FileFormat::Unknown;
     }
 
-    Serial.printf("File name: %s\n", path.c_str());
+    // Serial.printf("File name: %s\n", path.c_str());
     vgm.size = (u32_t)out_pos;
     hFile.close();
 
@@ -552,8 +554,9 @@ FileFormat NDFile::readFile(String path) {
 // ディレクトリ内の count 個あとの曲再生。マイナスは前の曲
 // 戻り値: 成功/不成功
 bool NDFile::filePlay(int count) {
+  // 履歴保存やファイル処理より先に現在の音を止める。
+  nju72341.mute();
   currentFile = mod(currentFile + count, files[currentDir].size());
-  ndConfig.saveHistory();
   return fileOpen(currentDir, currentFile);
 }
 
@@ -562,6 +565,8 @@ bool NDFile::filePlay(int count) {
 // マイナスは前のディレクトリ
 // 戻り値: 成功/不成功
 bool NDFile::dirPlay(int count) {
+  // 減衰設定の検索はSDアクセスを伴うため、その前にミュートする。
+  nju72341.mute();
   currentFile = 0;
   currentDir = mod(currentDir + count, dirs.size());
   return fileOpen(currentDir, currentFile, ndFile.getFolderAttenuation(dirs[currentDir]));

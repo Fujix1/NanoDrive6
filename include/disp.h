@@ -2,7 +2,6 @@
 #define DISP_H
 
 #include <LovyanGFX.h>
-#include <PNGdec.h>
 #include <SPI.h>
 
 #include "OpenFontRender.h"

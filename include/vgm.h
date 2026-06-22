@@ -135,6 +135,7 @@ class VGM {
   u64_t _vgmRealSamples;
   u64_t _vgmStart;
   u64_t _vgmWaitUntil;
+  bool _vgmTimingStarted = false;
   u32_t _pcmpos = 0;
   std::vector<t_vgmDataBlock> _vgmDataBlocks[0x40];
   t_vgmStreamState _vgmStreams[VGM_STREAM_MAX];
@@ -156,6 +157,7 @@ class VGM {
   u32_t _xgmYMSNFrame;
   u64_t _xgmStartTick;
   u64_t _xgmWaitUntil;
+  bool _xgmTimingStarted = false;
   u64_t _xgmWaitYMUntil;
   u64_t _xgmWaitPsgUntil;
   bool _xgmIsNTSC;

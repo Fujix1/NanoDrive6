@@ -56,6 +56,15 @@ void FMChip::begin() {
 }
 
 void FMChip::reset(void) {
+  for (uint8_t chip = 0; chip < 3; chip++) {
+    for (uint8_t bank = 0; bank < 2; bank++) {
+      for (uint8_t reg = 0; reg < 16; reg++) {
+        _ym2612TlReg[chip][bank][reg] = 0;
+        _ym2612TlRegValid[chip][bank][reg] = false;
+      }
+    }
+  }
+
   CS0_LOW;
   CS1_LOW;
   CS2_LOW;
@@ -151,9 +160,15 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
     return;  // DAC data off (FM only)
   }
 
-  if (ndConfig.get(CFG_FMPCM) == FMPCM_PCM && addr == 0x28) {
-    data &= 0x0F;  // キーオフ
+  if (chipno >= 3 || bank >= 2) return;
+
+  if (addr >= 0x40 && addr <= 0x4F) {
+    const uint8_t reg = addr - 0x40;
+    _ym2612TlReg[chipno][bank][reg] = data;
+    _ym2612TlRegValid[chipno][bank][reg] = true;
   }
+
+  data = _applyYM2612OutputMode(bank, addr, data, chipno);
 
   switch (chipno) {
     case 0:
@@ -220,6 +235,40 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
 
   // データ-アドレスライト間, データデータ間 ($21 - $9E) 83サイクル = 10.79 us
   // データ-アドレスライト間  データデータ間 ($A0 - $B6) 47サイクル = 6.11 us
+}
+
+byte FMChip::_applyYM2612OutputMode(byte bank, byte addr, byte data, uint8_t chipno) const {
+  (void)bank;
+  (void)chipno;
+
+  if (ndConfig.get(CFG_FMPCM) != FMPCM_PCM || addr < 0x40 || addr > 0x4F) {
+    return data;
+  }
+
+  return 0x7F;  // 全FMオペレータを最大減衰。DAC出力には影響しない。
+}
+
+void FMChip::_writeCachedYM2612Tl(uint8_t chipno) {
+  if (chipno >= 3) return;
+
+  for (uint8_t bank = 0; bank < 2; bank++) {
+    for (uint8_t reg = 0; reg < 16; reg++) {
+      if (_ym2612TlRegValid[chipno][bank][reg]) {
+        setYM2612(bank, 0x40 + reg, _ym2612TlReg[chipno][bank][reg], chipno);
+      }
+    }
+  }
+}
+
+void FMChip::requestApplyYM2612OutputMode() { _ym2612OutputModeApplyPending = true; }
+
+void FMChip::applyPendingYM2612OutputMode() {
+  if (!_ym2612OutputModeApplyPending) return;
+  _ym2612OutputModeApplyPending = false;
+
+  for (uint8_t chipno = 0; chipno < 3; chipno++) {
+    _writeCachedYM2612Tl(chipno);
+  }
 }
 
 // YM2612 の DAC データ送信専用

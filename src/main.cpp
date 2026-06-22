@@ -166,6 +166,7 @@ void setup() {
 void loop() {
   if (ndConfig.currentMode == MODE_PLAYER) {
     while (1) {
+      FM.applyPendingYM2612OutputMode();
       if (vgm.vgmLoaded) {
         vgm.vgmProcess();
       } else if (vgm.xgmLoaded) {
@@ -179,6 +180,7 @@ void loop() {
 
   } else {
     while (1) {
+      FM.applyPendingYM2612OutputMode();
       input.inputHandler();
       delay(1);
     }
