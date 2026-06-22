@@ -6,6 +6,7 @@
 #include "SI5351.hpp"
 #include "disp.h"
 #include "fm.h"
+#include "nd.h"
 
 #define SERIAL_SIZE_RX 65535
 

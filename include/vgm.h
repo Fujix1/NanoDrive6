@@ -6,6 +6,7 @@
 #include "SI5351.hpp"
 #include "common.h"
 #include "disp.h"
+#include "nd.h"
 
 #define XGM1_MAX_PCM_CH 8
 #define XGM1_PCM_DELAY 68
@@ -74,13 +75,6 @@ class VGM {
   u32_t size;        // ファイルサイズ
   // u32_t totalSamples;  // 全サンプル数
   boolean SN76489_Freq0is0X400;  // SN76489 が Sega VDP ではない
-
-  std::vector<si5351Freq_t> freq = {SI5351_UNDEFINED, SI5351_UNDEFINED};
-
-  s8_t chipSlot[11];
-
-  bool vgmLoaded = false;
-  bool xgmLoaded = false;
 
   u8_t XGMVersion;  // XGM バージョン 1 or 2
   std::vector<u32_t> XGMSampleAddressTable;

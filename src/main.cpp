@@ -49,6 +49,7 @@
 #include "file.h"
 #include "fm.h"
 #include "input.h"
+#include "nd.h"
 #include "serialman.h"
 #include "vgm.h"
 
@@ -168,13 +169,21 @@ void loop() {
   if (ndConfig.currentMode == MODE_PLAYER) {
     while (1) {
       FM.applyPendingYM2612OutputMode();
-      if (vgm.vgmLoaded) {
-        vgm.vgmProcess();
-      } else if (vgm.xgmLoaded) {
-        if (vgm.XGMVersion == 1)
-          vgm.xgmProcess();
-        else
-          vgm.xgm2Process();
+      if (ND::canPlay) {
+        switch (ND::fileFormat) {
+          case FileFormat::VGM:
+          case FileFormat::VGZ:
+            vgm.vgmProcess();
+            break;
+          case FileFormat::XGM1:
+            vgm.xgmProcess();
+            break;
+          case FileFormat::XGM2:
+            vgm.xgm2Process();
+            break;
+          default:
+            break;
+        }
       }
       input.inputHandler();
     }

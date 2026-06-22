@@ -6,6 +6,7 @@
 
 #include <Arduino.h>
 
+#include <array>
 #include <vector>
 
 #include "SI5351_types.hpp"
@@ -30,9 +31,7 @@ typedef enum {
 } t_chip;
 
 // チップ名
-const std::vector<String> CHIP_LABEL = {"",       "SN76489", "SN76489", "YM2413", "YM2612",
-                                        "YM2151", "YM2203",  "YM2203",  "YM2608", "YM2610",
-                                        "YM3526", "YM3812",  "AY8910",  "YMF262", "M6258"};
+extern const std::array<String, 15> CHIP_LABEL;
 
 // クロック使用番号
 typedef enum { CLK_0, CLK_1, CLK_2, CLK_NONE, CLK_FIXED } t_clockSlot;
@@ -48,7 +47,7 @@ enum class FileFormat {
   S98,
 };
 
-const std::vector<String> FORMAT_LABEL = {"--", "VGM", "VGZ", "MDX", "XGM1", "XGM2", "S98"};
+extern const std::array<String, 7> FORMAT_LABEL;
 
 class ND {
  public:
@@ -67,6 +66,9 @@ class ND {
 
   // チップ名のフォーマット
   static String formatChipName(si5351Freq_t freq, t_chip chip);
+
+  // 新しいファイルを開く前に再生状態を初期化
+  static void resetPlaybackState();
 };
 
 #endif

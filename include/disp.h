@@ -10,6 +10,7 @@
 #include "file.h"
 #include "fonts.h"
 #include "input.h"
+#include "nd.h"
 
 #define C_BASEBG TFT_BLACK
 #define C_BASEFG TFT_WHITE

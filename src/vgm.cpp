@@ -29,32 +29,35 @@ static u32_t gd3p;
 //---------------------------------------------------------------------
 // VGM クラス
 VGM::VGM() {
-  // チップスロット
-  for (int i = 0; i < sizeof chipSlot / sizeof chipSlot[0]; i++) {
-    chipSlot[i] = -1;
+  // チップスロット クロックスロット
+  for (int i = 0; i < sizeof ND::chipSlot / sizeof ND::chipSlot[0]; i++) {
+    ND::chipSlot[i] = CHIP_NONE;
+    ND::clockSlot[i] = CLK_NONE;
   }
 
   if (CHIP0 != CHIP_NONE) {
-    chipSlot[CHIP0] = 0;
+    ND::chipSlot[CHIP0] = 0;
   }
   if (CHIP1 != CHIP_NONE) {
-    chipSlot[CHIP1] = 1;
+    ND::chipSlot[CHIP1] = 1;
   }
   if (CHIP2 != CHIP_NONE) {
-    chipSlot[CHIP2] = 2;
+    ND::chipSlot[CHIP2] = 2;
   }
+
+  ND::clockSlot[CHIP0] = CHIP0_CLOCK;
+  ND::clockSlot[CHIP1] = CHIP1_CLOCK;
+  ND::clockSlot[CHIP2] = CHIP2_CLOCK;
 }
 
 //---------------------------------------------------------------------
 // vgm 再生準備
 bool VGM::ready() {
-  vgmLoaded = false;
-  xgmLoaded = false;
+  ND::canPlay = false;
   ndFile.pos = 0;
 
-  freq[0] = SI5351_UNDEFINED;
-  freq[1] = SI5351_UNDEFINED;
-  freq[2] = SI5351_UNDEFINED;
+  ND::freq.fill(SI5351_UNDEFINED);
+  ND::chipNames.clear();
 
   _vgmLoop = 0;
   _vgmSamples = 0;
@@ -73,7 +76,7 @@ bool VGM::ready() {
   if (!ndFile.getHeaderCache(ndFile.dirs[ndFile.currentDir] + "/" +
                              ndFile.files[ndFile.currentDir][ndFile.currentFile])) {
     Serial.println("ERROR: Failed to read file header.");
-    vgmLoaded = false;
+    ND::canPlay = false;
     return false;
   }
 
@@ -81,7 +84,7 @@ bool VGM::ready() {
   if (ndFile.get_ui32_at_header(0) != 0x206d6756) {
     lcd.printf("ERROR: File format is not VGM.\n");
     Serial.println("ERROR: VGM以外のファイルです。");
-    vgmLoaded = false;
+    ND::canPlay = false;
     return false;
   }
 
@@ -108,9 +111,9 @@ bool VGM::ready() {
   u32_t sn76489_clock = ndFile.get_ui32_at_header(0x0c);
   if (sn76489_clock) {
     if (CHIP0 == CHIP_SN76489_0) {
-      freq[CHIP0_CLOCK] = normalizeFreq(sn76489_clock, CHIP_SN76489_0);
+      ND::freq[CHIP0_CLOCK] = normalizeFreq(sn76489_clock, CHIP_SN76489_0);
     } else if (CHIP1 == CHIP_SN76489_0) {
-      freq[CHIP1_CLOCK] = normalizeFreq(sn76489_clock, CHIP_SN76489_0);
+      ND::freq[CHIP1_CLOCK] = normalizeFreq(sn76489_clock, CHIP_SN76489_0);
     }
 
     // デュアルSN76489
@@ -118,7 +121,7 @@ bool VGM::ready() {
       // Serial.printf("DUAL, version: %x\n", version);
 
       if (version < 0x170) {
-        freq[2] = normalizeFreq(sn76489_clock, CHIP_SN76489_0);
+        ND::freq[2] = normalizeFreq(sn76489_clock, CHIP_SN76489_0);
       } else {
         u32_t headerSize = ndFile.get_ui32_at_header(0xbc);
         u32_t chpClockOffset = ndFile.get_ui32_at_header(0xbc + headerSize);
@@ -129,10 +132,10 @@ bool VGM::ready() {
         // Serial.printf("chipId: %d, freq: %x\n", chipID, clock);
 
         if (chipID == 0) {
-          freq[1] = normalizeFreq(sn76489_clock, CHIP_SN76489_0);
-          freq[2] = normalizeFreq(clock, CHIP_SN76489_0);
+          ND::freq[1] = normalizeFreq(sn76489_clock, CHIP_SN76489_0);
+          ND::freq[2] = normalizeFreq(clock, CHIP_SN76489_0);
         } else if (chipID == 1) {
-          freq[2] = normalizeFreq(clock, CHIP_SN76489_0);
+          ND::freq[2] = normalizeFreq(clock, CHIP_SN76489_0);
         }
       }
     }
@@ -147,31 +150,31 @@ bool VGM::ready() {
   u32_t ym2413_clock = ndFile.get_ui32_at_header(0x10);
   if (ym2413_clock) {
     if (CHIP0 == CHIP_YM2413) {
-      freq[CHIP0_CLOCK] = normalizeFreq(ym2413_clock, CHIP_YM2413);
+      ND::freq[CHIP0_CLOCK] = normalizeFreq(ym2413_clock, CHIP_YM2413);
     }
     if (CHIP1 == CHIP_YM2413) {
-      freq[CHIP1_CLOCK] = normalizeFreq(ym2413_clock, CHIP_YM2413);
+      ND::freq[CHIP1_CLOCK] = normalizeFreq(ym2413_clock, CHIP_YM2413);
     }
   }
 
   u32_t ym2612_clock = ndFile.get_ui32_at_header(0x2c);
   if (ym2612_clock) {
     if (CHIP0 == CHIP_YM2612) {
-      freq[CHIP0_CLOCK] = normalizeFreq(ym2612_clock, CHIP_YM2612);
+      ND::freq[CHIP0_CLOCK] = normalizeFreq(ym2612_clock, CHIP_YM2612);
     } else if (CHIP1 == CHIP_YM2612) {
-      freq[CHIP1_CLOCK] = normalizeFreq(ym2612_clock, CHIP_YM2612);
+      ND::freq[CHIP1_CLOCK] = normalizeFreq(ym2612_clock, CHIP_YM2612);
     }
   }
 
   u32_t ay8910_clock = (version >= 0x151 && dataOffset >= 0x78) ? ndFile.get_ui32_at_header(0x74) : 0;
   if (ay8910_clock) {
     if (CHIP0 == CHIP_AY8910) {
-      freq[CHIP0_CLOCK] = normalizeFreq(ay8910_clock, CHIP_AY8910);
+      ND::freq[CHIP0_CLOCK] = normalizeFreq(ay8910_clock, CHIP_AY8910);
     } else if (CHIP1 == CHIP_AY8910) {
-      freq[CHIP1_CLOCK] = normalizeFreq(ay8910_clock, CHIP_AY8910);
+      ND::freq[CHIP1_CLOCK] = normalizeFreq(ay8910_clock, CHIP_AY8910);
     }
     if (CHIP0 == CHIP_YM2203_0) {
-      freq[CHIP0_CLOCK] = normalizeFreq(ay8910_clock, CHIP_AY8910);
+      ND::freq[CHIP0_CLOCK] = normalizeFreq(ay8910_clock, CHIP_AY8910);
     }
   }
 
@@ -179,29 +182,29 @@ bool VGM::ready() {
   if (ym2203_clock) {
     if (ym2203_clock & 0x40000000) {  // check the second chip
       if (CHIP0 == CHIP_YM2203_0) {
-        freq[CHIP0_CLOCK] = normalizeFreq(ym2203_clock, CHIP_YM2203_0);
+        ND::freq[CHIP0_CLOCK] = normalizeFreq(ym2203_clock, CHIP_YM2203_0);
       }
       if (CHIP1 == CHIP_YM2203_1) {
-        freq[CHIP1_CLOCK] = normalizeFreq(ym2203_clock, CHIP_YM2203_1);
+        ND::freq[CHIP1_CLOCK] = normalizeFreq(ym2203_clock, CHIP_YM2203_1);
       }
     } else {
       if (CHIP0 == CHIP_YM2203_0) {
-        freq[CHIP0_CLOCK] = normalizeFreq(ym2203_clock, CHIP_YM2203_0);
+        ND::freq[CHIP0_CLOCK] = normalizeFreq(ym2203_clock, CHIP_YM2203_0);
       } else if (CHIP1 == CHIP_YM2203_0) {
-        freq[CHIP1_CLOCK] = normalizeFreq(ym2203_clock, CHIP_YM2203_0);
+        ND::freq[CHIP1_CLOCK] = normalizeFreq(ym2203_clock, CHIP_YM2203_0);
       }
 
       // Use YM2612 as YM2203
       if (CHIP0 == CHIP_YM2612) {
-        freq[CHIP0_CLOCK] = normalizeFreq(ym2203_clock, CHIP_YM2612);
+        ND::freq[CHIP0_CLOCK] = normalizeFreq(ym2203_clock, CHIP_YM2612);
       } else if (CHIP1 == CHIP_YM2612) {
-        freq[CHIP1_CLOCK] = normalizeFreq(ym2203_clock, CHIP_YM2612);
+        ND::freq[CHIP1_CLOCK] = normalizeFreq(ym2203_clock, CHIP_YM2612);
       }
       // Use YM2610 as YM2203
       if (CHIP0 == CHIP_YM2610) {
-        freq[CHIP0_CLOCK] = normalizeFreq(ym2203_clock, CHIP_YM2610);
+        ND::freq[CHIP0_CLOCK] = normalizeFreq(ym2203_clock, CHIP_YM2610);
       } else if (CHIP1 == CHIP_YM2610) {
-        freq[CHIP1_CLOCK] = normalizeFreq(ym2203_clock, CHIP_YM2612);
+        ND::freq[CHIP1_CLOCK] = normalizeFreq(ym2203_clock, CHIP_YM2612);
       }
     }
   }
@@ -209,53 +212,52 @@ bool VGM::ready() {
   u32_t ym2151_clock = ndFile.get_ui32_at_header(0x30);
   if (ym2151_clock) {
     if (CHIP0 == CHIP_YM2151) {
-      freq[CHIP0_CLOCK] = normalizeFreq(ym2151_clock, CHIP_YM2151);
+      ND::freq[CHIP0_CLOCK] = normalizeFreq(ym2151_clock, CHIP_YM2151);
     }
     if (CHIP1 == CHIP_YM2151) {
-      freq[CHIP1_CLOCK] = normalizeFreq(ym2151_clock, CHIP_YM2151);
+      ND::freq[CHIP1_CLOCK] = normalizeFreq(ym2151_clock, CHIP_YM2151);
     }
   }
 
   u32_t ym3812_clock = ndFile.get_ui32_at_header(0x50);
   if (ym3812_clock) {
     if (CHIP0 == CHIP_YM3812) {
-      freq[CHIP0_CLOCK] = normalizeFreq(ym3812_clock, CHIP_YM3812);
+      ND::freq[CHIP0_CLOCK] = normalizeFreq(ym3812_clock, CHIP_YM3812);
     }
     if (CHIP1 == CHIP_YM3812) {
-      freq[CHIP1_CLOCK] = normalizeFreq(ym3812_clock, CHIP_YM3812);
+      ND::freq[CHIP1_CLOCK] = normalizeFreq(ym3812_clock, CHIP_YM3812);
     }
     if (CHIP0 == CHIP_YMF262) {
-      freq[CHIP0_CLOCK] = normalizeFreq(ym3812_clock, CHIP_YM3812);
+      ND::freq[CHIP0_CLOCK] = normalizeFreq(ym3812_clock, CHIP_YM3812);
     }
     if (CHIP0 == CHIP_YMF262) {
-      freq[CHIP1_CLOCK] = normalizeFreq(ym3812_clock, CHIP_YM3812);
+      ND::freq[CHIP1_CLOCK] = normalizeFreq(ym3812_clock, CHIP_YM3812);
     }
   }
 
   u32_t ymf262_clock = ndFile.get_ui32_at_header(0x5c);
   if (ymf262_clock) {
     if (CHIP0 == CHIP_YMF262) {
-      freq[CHIP0_CLOCK] = normalizeFreq(ymf262_clock, CHIP_YMF262);
+      ND::freq[CHIP0_CLOCK] = normalizeFreq(ymf262_clock, CHIP_YMF262);
     }
     if (CHIP1 == CHIP_YMF262) {
-      freq[CHIP1_CLOCK] = normalizeFreq(ymf262_clock, CHIP_YMF262);
+      ND::freq[CHIP1_CLOCK] = normalizeFreq(ymf262_clock, CHIP_YMF262);
     }
   }
 
   // 周波数設定
-  if (freq[0] != SI5351_UNDEFINED) {
-    SI5351.setFreq(freq[0], 0);
+  if (ND::freq[0] != SI5351_UNDEFINED) {
+    SI5351.setFreq(ND::freq[0], 0);
   }
-  if (freq[1] != SI5351_UNDEFINED) {
-    SI5351.setFreq(freq[1], 1);
+  if (ND::freq[1] != SI5351_UNDEFINED) {
+    SI5351.setFreq(ND::freq[1], 1);
   }
-  if (freq[2] != SI5351_UNDEFINED) {
-    SI5351.setFreq(freq[2], 0);
+  if (ND::freq[2] != SI5351_UNDEFINED) {
+    SI5351.setFreq(ND::freq[2], 0);
   }
 
   SI5351.enableOutputs(true);
 
-  vgmLoaded = true;  // VGM 開始できる
   // GD3 tags
   //_parseGD3(gd3Offset);
 
@@ -269,30 +271,16 @@ bool VGM::ready() {
     _resetGD3();
   }
 
-  String chip[2] = {"", ""};
-  int c = 0;
-
-  if (freq[0] != 0) {
-    char buf[7];
-    dtostrf((double)freq[0] / 1000000.0, 1, 4, buf);
-    chip[c++] = CHIP_LABEL[CHIP0] + " @ " + String(buf).substring(0, 5) + " MHz";
+  if (ND::freq[0] != SI5351_UNDEFINED) ND::chipNames.push_back(ND::formatChipName(ND::freq[0], CHIP0));
+  if (ND::freq[1] != SI5351_UNDEFINED) ND::chipNames.push_back(ND::formatChipName(ND::freq[1], CHIP1));
+  if (ND::chipNames.size() < 2 && ND::freq[2] != SI5351_UNDEFINED) {
+    ND::chipNames.push_back(ND::formatChipName(ND::freq[2], CHIP2));
   }
-
-  if (freq[1] != 0) {
-    char buf[7];
-    dtostrf((double)freq[1] / 1000000.0, 1, 4, buf);
-    chip[c++] = CHIP_LABEL[CHIP1] + " @ " + String(buf).substring(0, 5) + " MHz";
-  }
-
-  if (c < 2 && freq[2] != 0) {
-    char buf[7];
-    dtostrf((double)freq[2] / 1000000.0, 1, 4, buf);
-    chip[c++] = CHIP_LABEL[CHIP2] + " @ " + String(buf).substring(0, 5) + " MHz";
-  }
+  while (ND::chipNames.size() < 2) ND::chipNames.push_back("");
 
   u32_t n = 1 + ndFile.currentFile;  // フォルダ内曲番
   playerWindow.updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
-              gd3.date, chip[0], chip[1], FORMAT_LABEL[(int)ND::fileFormat], 0, n,
+              gd3.date, ND::chipNames[0], ND::chipNames[1], FORMAT_LABEL[(int)ND::fileFormat], 0, n,
               ndFile.files[ndFile.currentDir].size()});
 
   Serial.printf("%s\n", gd3.trackJp.c_str());
@@ -300,7 +288,8 @@ bool VGM::ready() {
   // Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
   // Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(), ESP.getFreePsram());
 
-  return true;
+  ND::canPlay = true;
+  return ND::canPlay;
 }
 
 // GD3タグをパース
@@ -887,20 +876,20 @@ void VGM::vgmProcessMain() {
 #ifdef USE_SN76489
     case 0x30:  // SN76489 CHIP 2
       if (SN76489_Freq0is0X400) {
-        FM.writeRaw(ndFile.get_ui8(), 2, freq[chipSlot[CHIP_SN76489_1]]);
+        FM.writeRaw(ndFile.get_ui8(), 2, ND::freq[ND::chipSlot[CHIP_SN76489_1]]);
       } else {
-        FM.write(ndFile.get_ui8(), 2, freq[chipSlot[CHIP_SN76489_0]]);
+        FM.write(ndFile.get_ui8(), 2, ND::freq[ND::chipSlot[CHIP_SN76489_0]]);
       }
       break;
 
     case 0x50:  // SN76489 CHIP 1
       // WORKAROUND FOR COMMAND TO UNDEFINED SN CHIP
       // Sonic & Knuckles 30th song
-      if (freq[chipSlot[CHIP_SN76489_0]] != SI5351_UNDEFINED) {
+      if (ND::freq[ND::chipSlot[CHIP_SN76489_0]] != SI5351_UNDEFINED) {
         if (SN76489_Freq0is0X400) {
-          FM.writeRaw(ndFile.get_ui8(), 1, freq[chipSlot[CHIP_SN76489_0]]);
+          FM.writeRaw(ndFile.get_ui8(), 1, ND::freq[ND::chipSlot[CHIP_SN76489_0]]);
         } else {
-          FM.write(ndFile.get_ui8(), 1, freq[chipSlot[CHIP_SN76489_0]]);
+          FM.write(ndFile.get_ui8(), 1, ND::freq[ND::chipSlot[CHIP_SN76489_0]]);
         }
       }
       break;
@@ -1163,8 +1152,9 @@ void VGM::vgmProcessMain() {
 bool VGM::XGMReady() {
   bool hasGd3 = false;
 
-  vgmLoaded = false;
-  xgmLoaded = false;
+  ND::canPlay = false;
+  ND::freq.fill(SI5351_UNDEFINED);
+  ND::chipNames.clear();
   ndFile.pos = 0;
 
   _vgmSamples = 0;
@@ -1206,7 +1196,7 @@ bool VGM::XGMReady() {
                 FORMAT_LABEL[(int)ND::fileFormat], 0, n, ndFile.files[(int)ndFile.currentDir].size()});
     Serial.println("ERROR: Bad XGM file ident.");
 
-    xgmLoaded = false;
+    ND::canPlay = false;
     return false;
   }
 
@@ -1318,46 +1308,27 @@ bool VGM::XGMReady() {
   }
 
   // FM PCM 構成は固定
-  freq[0] = normalizeFreq(7670453, CHIP_YM2612);
-  freq[1] = normalizeFreq(3579545, CHIP_SN76489_0);
-  SI5351.setFreq(freq[0], 0);
-  SI5351.setFreq(freq[1], 1);
+  ND::freq[0] = normalizeFreq(7670453, CHIP_YM2612);
+  ND::freq[1] = normalizeFreq(3579545, CHIP_SN76489_0);
+  SI5351.setFreq(ND::freq[0], 0);
+  SI5351.setFreq(ND::freq[1], 1);
   SI5351.enableOutputs(true);
 
   // PCM DAC Select
   FM.setYM2612(0, 0x2b, 0b10000000, 0);
 
   // 表示
-  String chip[2] = {"", ""};
-  int c = 0;
-
-  if (freq[0] != SI5351_UNDEFINED) {
-    char buf[7];
-    dtostrf((double)freq[0] / 1000000.0, 1, 4, buf);
-    chip[c++] = CHIP_LABEL[CHIP0] + " @ " + String(buf).substring(0, 5) + " MHz";
-  }
-
-  if (freq[1] != SI5351_UNDEFINED) {
-    char buf[7];
-    dtostrf((double)freq[1] / 1000000.0, 1, 4, buf);
-    chip[c++] = CHIP_LABEL[CHIP1] + " @ " + String(buf).substring(0, 5) + " MHz";
-  }
-
-  if (c < 2 && freq[2] != SI5351_UNDEFINED) {
-    char buf[7];
-    dtostrf((double)freq[2] / 1000000.0, 1, 4, buf);
-    chip[c++] = CHIP_LABEL[CHIP2] + " @ " + String(buf).substring(0, 5) + " MHz";
-  }
+  ND::chipNames.push_back(ND::formatChipName(ND::freq[0], CHIP0));
+  ND::chipNames.push_back(ND::formatChipName(ND::freq[1], CHIP1));
 
   u32_t n = 1 + ndFile.currentFile;  // フォルダ内曲番
 
   playerWindow.updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
-              gd3.date, chip[0], chip[1], FORMAT_LABEL[(int)ND::fileFormat], 0, n,
+              gd3.date, ND::chipNames[0], ND::chipNames[1], FORMAT_LABEL[(int)ND::fileFormat], 0, n,
               ndFile.files[ndFile.currentDir].size()});
 
-  xgmLoaded = true;
-
-  return true;
+  ND::canPlay = true;
+  return ND::canPlay;
 }
 
 //---------------------------------------------------------------
@@ -1429,7 +1400,7 @@ bool VGM::_xgm1ProcessYMSN() {
 
     case 0x10 ... 0x1f:
       for (int i = 0; i < command % 16 + 1; i++) {
-        FM.write(ndFile.get_ui8(), 1, freq[chipSlot[CHIP_SN76489_0]]);
+        FM.write(ndFile.get_ui8(), 1, ND::freq[ND::chipSlot[CHIP_SN76489_0]]);
       }
       break;
 
@@ -1924,7 +1895,7 @@ bool VGM::_xgm2ProcessSN() {
       value = (0x90 + (channel << 5)) | _xgmPsgState[0][channel];
       // Serial.printf("0x%x - %2x: PSG ENV ch %d 0x%x\n", _xgm2_psg_pos - _xgm2_psg_offset - 1, command, channel,
       // value);
-      FM.writeRaw(value, 1, freq[chipSlot[CHIP_SN76489_0]]);
+      FM.writeRaw(value, 1, ND::freq[ND::chipSlot[CHIP_SN76489_0]]);
       break;
     }
 
@@ -1944,7 +1915,7 @@ bool VGM::_xgm2ProcessSN() {
       // Serial.printf("0x%x - %2x: PSG ENV DELTA ch %d 0x%x\n", _xgm2_psg_pos - _xgm2_psg_offset - 1, command,
       // channel,
       //              value);
-      FM.writeRaw(value, 1, freq[chipSlot[CHIP_SN76489_0]]);
+      FM.writeRaw(value, 1, ND::freq[ND::chipSlot[CHIP_SN76489_0]]);
       break;
     }
 
@@ -1968,14 +1939,14 @@ bool VGM::_xgm2ProcessSN() {
       } else {
         value = ((0x80 + (channel << 5)) | (lvalue & 0x0f));
       }
-      FM.writeRaw(value, 1, freq[chipSlot[CHIP_SN76489_0]]);
+      FM.writeRaw(value, 1, ND::freq[ND::chipSlot[CHIP_SN76489_0]]);
 
       // Always send High value for SN76489
       //      if ((oldHighFreq != (lvalue & 0x3F0)) && (channel < 3)) {
       if (channel < 3) {
         value = (0x00 | ((lvalue >> 4) & 0x3f));
         // Serial.printf("   PSG_FREQ+ ch %d 0x%0x\n", channel, value);
-        FM.writeRaw(value, 1, freq[chipSlot[CHIP_SN76489_0]]);
+        FM.writeRaw(value, 1, ND::freq[ND::chipSlot[CHIP_SN76489_0]]);
       }
       break;
     }
@@ -1996,7 +1967,7 @@ bool VGM::_xgm2ProcessSN() {
       } else {
         value = ((0x80 + (channel << 5)) | (lvalue & 0x0f));
       }
-      FM.writeRaw(value, 1, freq[chipSlot[CHIP_SN76489_0]]);
+      FM.writeRaw(value, 1, ND::freq[ND::chipSlot[CHIP_SN76489_0]]);
       // Serial.printf("0x%x - %2x: PSG_FREQ_LOW ch %d 0x%x\n", _xgm2_psg_pos - _xgm2_psg_offset - 2, command,
       // channel,
       //               value);
@@ -2027,7 +1998,7 @@ bool VGM::_xgm2ProcessSN() {
         value = ((0x80 + (channel << 5)) | (lvalue & 0x0f));
       }
 
-      FM.writeRaw(value, 1, freq[chipSlot[CHIP_SN76489_0]]);
+      FM.writeRaw(value, 1, ND::freq[ND::chipSlot[CHIP_SN76489_0]]);
       // Serial.printf("0x%x - %2x: PSG FREQ DELTA ch %d 0x%x\n", _xgm2_psg_pos - _xgm2_psg_offset - 1, command,
       // channel,
       //              value);
@@ -2036,7 +2007,7 @@ bool VGM::_xgm2ProcessSN() {
       if ((oldHighFreq != (lvalue & 0x3f0)) && (channel < 3)) {
         // if (channel < 3) {
         value = (0x00 | ((lvalue >> 4) & 0x3f));
-        FM.writeRaw(value, 1, freq[chipSlot[CHIP_SN76489_0]]);
+        FM.writeRaw(value, 1, ND::freq[ND::chipSlot[CHIP_SN76489_0]]);
         // Serial.printf(" %2x: PSG_FREQ_DELTA+ ch %d 0x%x\n", command, channel, value);
       }
       break;
@@ -2085,8 +2056,7 @@ u8_t VGM::_getChannel(u32_t pos) {
 //---------------------------------------------------------------
 // 曲終了時の処理
 void VGM::endProcedure() {
-  xgmLoaded = false;
-  vgmLoaded = false;
+  ND::canPlay = false;
 
   switch (ndConfig.get(CFG_REPEAT)) {
     case REPEAT_ONE: {

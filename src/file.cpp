@@ -596,6 +596,7 @@ bool NDFile::fileOpen(uint16_t d, uint16_t f, int8_t att) {
   nju72341.resetFadeout();
   ndConfig.saveHistory();
   FM.reset();
+  ND::resetPlaybackState();
 
   String st = dirs[d] + "/" + files[d][f];
 
@@ -618,6 +619,9 @@ bool NDFile::fileOpen(uint16_t d, uint16_t f, int8_t att) {
       ND::canPlay = vgm.XGMReady();
       break;
     }
+    default:
+      ND::canPlay = false;
+      break;
   }
 
   nju72341.reset(att);
