@@ -291,7 +291,7 @@ bool VGM::ready() {
   }
 
   u32_t n = 1 + ndFile.currentFile;  // フォルダ内曲番
-  updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
+  playerWindow.updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
               gd3.date, chip[0], chip[1], FORMAT_LABEL[(int)ND::fileFormat], 0, n,
               ndFile.files[ndFile.currentDir].size()});
 
@@ -1202,7 +1202,7 @@ bool VGM::XGMReady() {
     Serial.println("ERROR: XGM ファイル解析失敗");
     ND::fileFormat = FileFormat::Unknown;
     u32_t n = 1 + ndFile.currentFile;
-    updateDisp({"Bad XGM file ident", "XGMファイル解析失敗", "", "", "--", "--", "--", "--", "--", "", "",
+    playerWindow.updateDisp({"Bad XGM file ident", "XGMファイル解析失敗", "", "", "--", "--", "--", "--", "--", "", "",
                 FORMAT_LABEL[(int)ND::fileFormat], 0, n, ndFile.files[(int)ndFile.currentDir].size()});
     Serial.println("ERROR: Bad XGM file ident.");
 
@@ -1351,7 +1351,7 @@ bool VGM::XGMReady() {
 
   u32_t n = 1 + ndFile.currentFile;  // フォルダ内曲番
 
-  updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
+  playerWindow.updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
               gd3.date, chip[0], chip[1], FORMAT_LABEL[(int)ND::fileFormat], 0, n,
               ndFile.files[ndFile.currentDir].size()});
 

@@ -3,13 +3,6 @@
 #include "pics.h"
 #include "png_renderer.h"
 
-enum class cfgEvent { Open,
-                      Close,
-                      Up,
-                      Down,
-                      Left,
-                      Right };
-
 static bool _stopTimerDrawing = true;  // タイマーによる描画更新を止める
 
 LGFX::LGFX(void) {
@@ -68,6 +61,8 @@ LGFX::LGFX(void) {
 }
 
 LGFX lcd;
+Disp disp;
+PlayerWindow playerWindow;
 static LGFX_Sprite frameBuffer(&lcd);
 
 static OpenFontRender render;
@@ -79,13 +74,10 @@ static Label lblGame = Label(0, 53, LCD_W, C_LIGHTGRAY, C_BASEBG, 15, SCROLL_SPE
 static Label lblAuthor = Label(28, 233, LCD_W - 28, C_GRAY, C_BASEBG, 16, SCROLL_SPEED_AUTHOR, Align::TopLeft);
 static Label lblSystem = Label(28, 211, LCD_W - 28, C_GRAY, C_BASEBG, 16, SCROLL_SPEED_AUTHOR, Align::TopLeft);
 
-static tDispData _dispData;
 static SemaphoreHandle_t spFrameBuffer;  // 描画用セマフォ
-static QueueHandle_t xQueueCFGWindow;
-static TaskHandle_t tskCFGEventLoop;
 
 void redrawOnCore0Task(void* pvParameters) {
-  redraw();
+  playerWindow.redraw();
   vTaskDelete(NULL);
 }
 
@@ -179,7 +171,7 @@ void Label::setEnabled(bool state) { _enabled = state; }
 //---------------------------------------------------------------------------
 // Draw header info
 static LGFX_Sprite sprHeader(&lcd);
-void updateHeader(uint64_t sec) {
+void PlayerWindow::updateHeader(uint64_t sec) {
   if (xSemaphoreTake(spFrameBuffer, portMAX_DELAY) == pdTRUE) {
     sprHeader.createSprite(70, 14);
     sprHeader.fillSprite(C_HEADER);
@@ -200,7 +192,7 @@ void updateHeader(uint64_t sec) {
 //---------------------------------------------------------------------------
 // Timer Handler
 void dispTimerHandler(void* param) {
-  if (cfgWindow.isVisible) {
+  if (disp.currentView != ViewMode::Player) {
     return;
   }
 
@@ -213,15 +205,15 @@ void dispTimerHandler(void* param) {
       xSemaphoreGive(spFrameBuffer);
     }
     uint64_t sec = vgm.getCurrentTime();
-    if (_dispData.time != sec) {
-      updateHeader(sec);
-      _dispData.time = sec;
+    if (playerWindow.dispData.time != sec) {
+      playerWindow.updateHeader(sec);
+      playerWindow.dispData.time = sec;
     }
   }
 }
 
 // 背景描画
-void drawBG() {
+void PlayerWindow::drawBG() {
   frameBuffer.fillSprite(C_BASEBG);
   frameBuffer.fillRect(0, 0, LCD_W, 19, C_HEADER);
 
@@ -233,10 +225,10 @@ void drawBG() {
 }
 
 // プレーヤー描画
-void redraw() {
+void PlayerWindow::redraw() {
   xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
   _stopTimerDrawing = true;
-  drawBG();
+  playerWindow.drawBG();
   render.setUseRenderTask(false);
   render.setDrawer(frameBuffer);
   render.setAlignment(Align::TopLeft);
@@ -245,16 +237,16 @@ void redraw() {
   render.setFontSize(16);
   render.setFontColor(C_GRAY, C_BASEBG);
   render.setCursor(27, 256);
-  render.printf(_dispData.date.c_str());
+  render.printf(dispData.date.c_str());
   render.unloadFont();
 
   render.loadFont(nimbusBold, sizeof(nimbusBold));
   render.setFontSize(13);
   render.setFontColor(C_YELLOW, C_DARK);
   render.setCursor(27, 284);
-  render.printf(_dispData.chip0.c_str());
+  render.printf(dispData.chip0.c_str());
   render.setCursor(27, 303);
-  render.printf(_dispData.chip1.c_str());
+  render.printf(dispData.chip1.c_str());
 
   render.setFontColor(C_LIGHTGRAY, C_FOOTER_INACTIVE);
   render.setCursor(11, 284);
@@ -262,19 +254,19 @@ void redraw() {
   render.setCursor(11, 303);
   render.printf("2");
 
-  if (_dispData.no != 0 && _dispData.maxFiles != 0) {
+  if (dispData.no != 0 && dispData.maxFiles != 0) {
     render.setFontSize(14);
     render.setFontColor(C_GRAY, C_HEADER);
     render.setCursor(167, 4);
     render.setAlignment(Align::TopRight);
-    render.printf("%02d/%02d", _dispData.no, _dispData.maxFiles);
+    render.printf("%02d/%02d", dispData.no, dispData.maxFiles);
   }
 
   render.setAlignment(Align::TopCenter);
   render.setFontSize(14);
   render.setFontColor(C_LIGHTGRAY, C_HEADER);
   render.setCursor(LCD_W / 2, 4);
-  render.printf("%d:%02d", (uint8_t)(_dispData.time / 60), (uint8_t)(_dispData.time % 60));
+  render.printf("%d:%02d", (uint8_t)(dispData.time / 60), (uint8_t)(dispData.time % 60));
 
   render.setFontSize(13);
   if (ndFile.accessMode == ACCESS_CACHE) {
@@ -285,19 +277,19 @@ void redraw() {
 
   render.setCursor(4, 4);
   render.setAlignment(Align::TopLeft);
-  render.printf(_dispData.type.c_str());
+  render.printf(dispData.type.c_str());
   render.unloadFont();
 
   if (ndConfig.get(CFG_LANG) == LANG_JA) {
-    lblTitle.setCaption(_dispData.trackJp);
-    lblGame.setCaption(_dispData.gameJp);
-    lblAuthor.setCaption(_dispData.authorJp);
-    lblSystem.setCaption(_dispData.systemJp);
+    lblTitle.setCaption(dispData.trackJp);
+    lblGame.setCaption(dispData.gameJp);
+    lblAuthor.setCaption(dispData.authorJp);
+    lblSystem.setCaption(dispData.systemJp);
   } else {
-    lblTitle.setCaption(_dispData.trackEn);
-    lblGame.setCaption(_dispData.gameEn);
-    lblAuthor.setCaption(_dispData.authorEn);
-    lblSystem.setCaption(_dispData.systemEn);
+    lblTitle.setCaption(dispData.trackEn);
+    lblGame.setCaption(dispData.gameEn);
+    lblAuthor.setCaption(dispData.authorEn);
+    lblSystem.setCaption(dispData.systemEn);
   }
 
   // Snapshot
@@ -309,7 +301,7 @@ void redraw() {
   fileName = fileName.substring(0, fileName.length() - 4);
 
   if (openPNG(ndFile.dirs[ndFile.currentDir] + "/snap", fileName + ".png", true, true) == false) {
-    if (openPNG(ndFile.dirs[ndFile.currentDir] + "/snap", String(_dispData.no) + ".png", true, true) == false) {
+    if (openPNG(ndFile.dirs[ndFile.currentDir] + "/snap", String(dispData.no) + ".png", true, true) == false) {
       openPNG(ndFile.dirs[ndFile.currentDir], ndFile.pngs[ndFile.currentDir], true, true);
     }
   }
@@ -323,7 +315,7 @@ void redraw() {
 void serialModeDraw() {
   xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
   _stopTimerDrawing = true;
-  drawBG();
+  playerWindow.drawBG();
   render.setUseRenderTask(false);
   render.setDrawer(frameBuffer);
 
@@ -387,25 +379,12 @@ void serialModeDraw() {
   xSemaphoreGive(spFrameBuffer);
 }
 
-void updateDisp(tDispData data) {
+void PlayerWindow::updateDisp(tDispData data) {
   //
-  _dispData.authorEn = data.authorEn;
-  _dispData.authorJp = data.authorJp;
-  _dispData.chip0 = data.chip0;
-  _dispData.chip1 = data.chip1;
-  _dispData.date = data.date;
-  _dispData.gameEn = data.gameEn;
-  _dispData.gameJp = data.gameJp;
-  _dispData.no = data.no;
-  _dispData.maxFiles = data.maxFiles;
-  _dispData.systemEn = data.systemEn;
-  _dispData.systemJp = data.systemJp;
-  _dispData.trackEn = data.trackEn;
-  _dispData.trackJp = data.trackJp;
-  _dispData.type = data.type;
-  _dispData.time = 0;
+  dispData = data;
+  dispData.time = 0;
 
-  if (!cfgWindow.isVisible) {
+  if (disp.currentView == ViewMode::Player) {
     redraw();
   }
 }
@@ -480,262 +459,400 @@ bool openPNG(String dirName, String fileName, bool AA = false, bool toSprite = t
 //---------------------------------------------------------------------------
 // 設定画面クラスなど
 
-// CFGウィンドウのイベント処理
-void CFGWindowEventLoop(void* pvPrams) {
-  while (1) {
-    cfgEvent event;
-    if (xQueueReceive(xQueueCFGWindow, &event, 0) == pdTRUE) {
-      switch (event) {
-        case cfgEvent::Open: {
-          cfgWindow.draw();
-          break;
-        }
-        case cfgEvent::Close: {
-          cfgWindow.isVisible = false;
+//---------------------------------------------------------------------------
+// Player / Config view management
+void PlayerWindow::eventHandler(event ev) {
+  if (ev == event::Option) cfgWindow.show();
+}
 
-          // モードが違えば再起動
-          if ((tMode)ndConfig.items[CFG_MODE].index != ndConfig.currentMode) {
-            ESP.restart();
-            return;
-          }
+void PlayerWindow::show() {
+  disp.currentView = ViewMode::Player;
+  redraw();
+}
 
-          // 現在のモードに合わせて再描画
-          if (ndConfig.currentMode == MODE_PLAYER) {
-            redraw();
-          } else if (ndConfig.currentMode == MODE_SERIAL) {
-            serialModeDraw();
-          }
-          break;
-        }
-        case cfgEvent::Up: {
-          if (cfgWindow.currentItemIndex != 0) {
-            cfgWindow.currentItemIndex--;
-            cfgWindow.drawItem(cfgWindow.currentItemIndex + 1, false);
-            cfgWindow.drawItem(cfgWindow.currentItemIndex, false);
-            cfgWindow.drawFooter(false);
-          }
-          break;
-        }
-        case cfgEvent::Down: {
-          if (cfgWindow.currentItemIndex != ndConfig.items.size() - 1) {
-            cfgWindow.currentItemIndex++;
-            cfgWindow.drawItem(cfgWindow.currentItemIndex - 1, false);
-            cfgWindow.drawItem(cfgWindow.currentItemIndex, false);
-            cfgWindow.drawFooter(false);
-          }
-          break;
-        }
-        case cfgEvent::Left: {
-          if (ndConfig.items[cfgWindow.currentItemIndex].index != 0) {
-            ndConfig.items[cfgWindow.currentItemIndex].index--;
-            // 言語はすぐ再描画
-            if (cfgWindow.currentItemIndex == CFG_LANG) {
-              cfgWindow.draw();
-            } else {
-              cfgWindow.drawItem(cfgWindow.currentItemIndex, false);
-              cfgWindow.drawFooter(false);
-            }
-            ndConfig.saveCfg();
-          }
-          break;
-        }
-        case cfgEvent::Right: {
-          if (ndConfig.items[cfgWindow.currentItemIndex].index !=
-              ndConfig.items[cfgWindow.currentItemIndex].optionValues.size() - 1) {
-            ndConfig.items[cfgWindow.currentItemIndex].index++;
-            // 言語はすぐ再描画
-            if (cfgWindow.currentItemIndex == CFG_LANG) {
-              cfgWindow.draw();
-            } else {
-              cfgWindow.drawItem(cfgWindow.currentItemIndex, false);
-              cfgWindow.drawFooter(false);
-            }
-            ndConfig.saveCfg();
-          }
-        } break;
-      }
-    }
+//---------------------------------------------------------------------------
+// Panel class
+
+Panel::Panel(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint8_t itemHeight,
+             IPanelRenderer* renderer)
+    : x(x), y(y), width(width), height(height), _itemHeight(itemHeight), _renderer(renderer) {
+  _scrollbarBackground.createSprite(SCROLLBAR_WIDTH, height);
+  _scrollbar.createSprite(SCROLLBAR_WIDTH, height);
+  _scrollbarBackground.fillSprite(C_HIGHGRAY);
+  _scrollbarBackground.fillTriangle(SCROLLBAR_WIDTH / 2, 3, SCROLLBAR_WIDTH - 2,
+                                    SCROLLBAR_WIDTH - 3, 2, SCROLLBAR_WIDTH - 3, C_MID);
+  _scrollbarBackground.fillTriangle(SCROLLBAR_WIDTH / 2, height - 3, SCROLLBAR_WIDTH - 2,
+                                    height - SCROLLBAR_WIDTH + 3, 2,
+                                    height - SCROLLBAR_WIDTH + 3, C_MID);
+}
+
+uint16_t Panel::itemWidth() const { return width - SCROLLBAR_WIDTH; }
+
+// アイテムカウントを更新
+void Panel::setItemCount(int newCount) {
+  if (_itemCount != newCount) _needsFullRedraw = true;
+  _itemCount = newCount;
+  _innerHeight = _itemCount * _itemHeight;
+}
+
+// アイテムを見える場所に持ってくる
+void Panel::ensureVisible() {
+  const int itemTop = currentIndex * _itemHeight;
+  const int itemBottom = itemTop + _itemHeight;
+  if (itemTop < scrollTop) {
+    scrollTop = itemTop;
+  } else if (itemBottom > scrollTop + height) {
+    scrollTop = itemBottom - height;
   }
-  vTaskDelay(66);
+  int maxScroll = _innerHeight - height;
+  if (maxScroll < 0) maxScroll = 0;
+  if (scrollTop < 0) scrollTop = 0;
+  if (scrollTop > maxScroll) scrollTop = maxScroll;
+}
+
+void Panel::invalidate() { _needsFullRedraw = true; }
+
+// スクロールバー描画
+void Panel::drawScrollbar() {
+  // スクロールバー背景描画
+  _scrollbarBackground.pushSprite(&_scrollbar, 0, 0);
+  if (_innerHeight > height) {
+    const uint16_t maxBarHeight = height - INDICATOR_HEIGHT * 2;
+    const uint16_t barHeight = maxBarHeight * height / _innerHeight;
+    const uint16_t barTop = maxBarHeight * scrollTop / _innerHeight;
+    _scrollbar.fillRoundRect(PADDING, INDICATOR_HEIGHT + barTop,
+                             SCROLLBAR_WIDTH - PADDING * 2, barHeight,
+                             (SCROLLBAR_WIDTH - PADDING * 2) / 2, C_MID);
+  }
+}
+
+void Panel::redrawItem(LGFX_Sprite& targetBuffer, int index) {
+  if (_renderer == nullptr || index < 0 || index >= _itemCount) return;
+  int firstIndex = scrollTop / _itemHeight;
+  int lastIndex = (scrollTop + height - 1) / _itemHeight;
+  if (firstIndex < 0) firstIndex = 0;
+  if (lastIndex >= _itemCount) lastIndex = _itemCount - 1;
+  if (index < firstIndex || index > lastIndex) return;
+
+  const int drawY = y + index * _itemHeight - scrollTop;
+  _renderer->onDrawItem(targetBuffer, index, x, drawY, itemWidth(), index == currentIndex);
+}
+
+void Panel::redrawScrollEdgeItems(LGFX_Sprite& targetBuffer, int scrollDelta) {
+  if (scrollDelta == 0 || _itemCount <= 0) return;
+  int firstIndex = scrollTop / _itemHeight;
+  int lastIndex = (scrollTop + height - 1) / _itemHeight;
+  const int redrawCount = (abs(scrollDelta) + _itemHeight - 1) / _itemHeight + 1;
+  if (firstIndex < 0) firstIndex = 0;
+  if (lastIndex >= _itemCount) lastIndex = _itemCount - 1;
+
+  if (scrollDelta > 0) {
+    for (int i = 0; i < redrawCount; i++) redrawItem(targetBuffer, lastIndex - i);
+  } else {
+    for (int i = 0; i < redrawCount; i++) redrawItem(targetBuffer, firstIndex + i);
+  }
+}
+
+void Panel::drawVisibleItems(LGFX_Sprite& targetBuffer) {
+  if (_renderer == nullptr) return;
+  int firstIndex = scrollTop / _itemHeight;
+  int lastIndex = (scrollTop + height - 1) / _itemHeight;
+  if (firstIndex < 0) firstIndex = 0;
+  if (lastIndex >= _itemCount) lastIndex = _itemCount - 1;
+  for (int index = firstIndex; index <= lastIndex; index++) {
+    const int drawY = y + index * _itemHeight - scrollTop;
+    _renderer->onDrawItem(targetBuffer, index, x, drawY, itemWidth(), index == currentIndex);
+  }
+}
+
+// フレームバッファに内容を描画
+void Panel::update(LGFX_Sprite& targetBuffer) {
+  const int scrollDelta = scrollTop - _prevScrollTop;
+  const bool reuseScrolledContent = !_needsFullRedraw && _itemCount == _prevItemCount &&
+                                    scrollDelta != 0 && abs(scrollDelta) < height;
+  const bool fullRedraw = _needsFullRedraw || _itemCount != _prevItemCount ||
+                          (scrollTop != _prevScrollTop && !reuseScrolledContent);
+  const int contentWidth = itemWidth();
+
+  targetBuffer.setClipRect(x, y, contentWidth, height);
+  if (fullRedraw) targetBuffer.fillRect(x, y, contentWidth, height, TFT_WHITE);
+
+  if (fullRedraw) {
+    drawVisibleItems(targetBuffer);
+  } else if (reuseScrolledContent) {
+    if (scrollDelta > 0) {
+      targetBuffer.copyRect(x, y, contentWidth, height - scrollDelta, x, y + scrollDelta);
+      targetBuffer.fillRect(x, y + height - scrollDelta, contentWidth, scrollDelta, TFT_WHITE);
+    } else {
+      const int shift = -scrollDelta;
+      targetBuffer.copyRect(x, y + shift, contentWidth, height - shift, x, y);
+      targetBuffer.fillRect(x, y, contentWidth, shift, TFT_WHITE);
+    }
+    redrawScrollEdgeItems(targetBuffer, scrollDelta);
+    if (_prevCurrentIndex != currentIndex) {
+      redrawItem(targetBuffer, _prevCurrentIndex);
+      redrawItem(targetBuffer, currentIndex);
+    }
+  } else if (currentIndex != _prevCurrentIndex) {
+    redrawItem(targetBuffer, _prevCurrentIndex);
+    redrawItem(targetBuffer, currentIndex);
+  }
+  targetBuffer.clearClipRect();
+
+  // スクロールバーをバッファに描画
+  drawScrollbar();
+
+  // スクロールバースプライト転送
+  _scrollbar.pushSprite(&targetBuffer, x + width - SCROLLBAR_WIDTH, y);
+  _prevCurrentIndex = currentIndex;
+  _prevScrollTop = scrollTop;
+  _prevItemCount = _itemCount;
+  _needsFullRedraw = false;
+}
+
+//---------------------------------------------------------------------------
+// 設定画面クラス
+// 項目描画用
+ConfigPanelRenderer configRenderer;
+static Panel pnlConfig(0, 26, LCD_W, 264, CFG_ITEM_HEIGHT, &configRenderer);
+
+void ConfigPanelRenderer::onDrawItem(LGFX_Sprite& target, int itemIndex, int x, int y,
+                                     int width, bool selected) {
+  cfgWindow.drawItem(target, itemIndex, x, y, width, selected);
 }
 
 void CFGWindow::init() {
-  // キュ～作成
-  xQueueCFGWindow = xQueueCreate(2, sizeof(cfgEvent));
-  xTaskCreateUniversal(CFGWindowEventLoop, "CFG", 12192, NULL, 1, &tskCFGEventLoop, PRO_CPU_NUM);
-  _sprite.createSprite(LCD_W, ITEM_HEIGHT);
-  _sprFooter.createSprite(120, 23);
+  _sprite.createSprite(LCD_W, CFG_ITEM_HEIGHT);
+  _sprFooter.createSprite(LCD_W, 23);
+
+  // ヘッダーの初期化
+  initHeaders();
 }
 
-void CFGWindow::show() {
-  if (isVisible) return;
+// ヘッダ部初期化
+void CFGWindow::initHeaders() {
+  // スプライトが既に初期化されているかチェック
+  if (_sprHeaderJP.width() > 0 && _sprHeaderEN.width() > 0) return;
 
-  if (uxQueueSpacesAvailable(xQueueCFGWindow)) {
-    isVisible = true;
-    cfgEvent event = cfgEvent::Open;
-    xQueueSend(xQueueCFGWindow, &event, 0);
-  }
+  // 日本語ヘッダー作成
+  _sprHeaderJP.setPsram(true);
+  _sprHeaderJP.createSprite(LCD_W, 26);
+  _sprHeaderJP.fillSprite(C_HEADER);
+  _sprHeaderJP.pushImage(146, 3, CFG_ICON_WIDTH, CFG_ICON_HEIGHT, cfgIcon);
+  render.setDrawer(_sprHeaderJP);
+  render.setAlignment(Align::TopLeft);
+  render.loadFont(fontMain, sizeof(fontMain));
+  render.setFontSize(17);
+  render.setFontColor(C_LIGHTGRAY, C_HEADER);
+  render.setCursor(6, 4);
+  render.printf("設定");
+  render.unloadFont();
+
+  // 英語ヘッダー作成
+  _sprHeaderEN.setPsram(true);
+  _sprHeaderEN.createSprite(LCD_W, 26);
+  _sprHeaderEN.fillSprite(C_HEADER);
+  _sprHeaderEN.pushImage(146, 3, CFG_ICON_WIDTH, CFG_ICON_HEIGHT, cfgIcon);
+  render.setDrawer(_sprHeaderEN);
+  render.setAlignment(Align::TopLeft);
+  render.loadFont(fontMain, sizeof(fontMain));
+  render.setFontSize(16);
+  render.setFontColor(C_LIGHTGRAY, C_HEADER);
+  render.setCursor(6, 4);
+  render.printf("Settings");
+  render.unloadFont();
+}
+
+// 表示
+void CFGWindow::show() {
+  disp.currentView = ViewMode::Config;
+  _stopTimerDrawing = true;
+  drawPanelView();
 }
 
 void CFGWindow::close() {
-  if (uxQueueSpacesAvailable(xQueueCFGWindow)) {
-    cfgEvent event = cfgEvent::Close;
-    xQueueSend(xQueueCFGWindow, &event, 1);
+  if ((tMode)ndConfig.items[CFG_MODE].index != ndConfig.currentMode) {
+    ESP.restart();
+    return;
+  }
+  playerWindow.show();
+}
+
+void CFGWindow::eventHandler(event ev) {
+  if (disp.currentView != ViewMode::Config) return;
+  switch (ev) {
+    case event::Up:
+      moveSelection(-1);
+      break;
+    case event::Down:
+      moveSelection(1);
+      break;
+    case event::Left:
+      if (ndConfig.items[currentItemIndex].index > 0) {
+        ndConfig.items[currentItemIndex].index--;
+        ndConfig.saveCfg();
+        // 言語はすぐ再描画
+        if (currentItemIndex == CFG_LANG) {
+          drawPanelView();
+        } else {
+          refreshCurrentItem();
+        }
+      }
+      break;
+    case event::Right:
+      if (ndConfig.items[currentItemIndex].index + 1 <
+          ndConfig.items[currentItemIndex].optionValues.size()) {
+        ndConfig.items[currentItemIndex].index++;
+        ndConfig.saveCfg();
+        // 言語はすぐ再描画
+        if (currentItemIndex == CFG_LANG) {
+          drawPanelView();
+        } else {
+          refreshCurrentItem();
+        }
+      }
+      break;
+    case event::Close:
+      close();
+      break;
+    default:
+      break;
   }
 }
 
-void CFGWindow::up() {
-  if (!isVisible) return;
-  if (uxQueueSpacesAvailable(xQueueCFGWindow)) {
-    cfgEvent event = cfgEvent::Up;
-    xQueueSend(xQueueCFGWindow, &event, 0);
-  }
-}
-void CFGWindow::down() {
-  if (!isVisible) return;
-  if (uxQueueSpacesAvailable(xQueueCFGWindow)) {
-    cfgEvent event = cfgEvent::Down;
-    xQueueSend(xQueueCFGWindow, &event, 0);
-  }
-}
-void CFGWindow::left() {
-  if (!isVisible) return;
-  if (uxQueueSpacesAvailable(xQueueCFGWindow)) {
-    cfgEvent event = cfgEvent::Left;
-    xQueueSend(xQueueCFGWindow, &event, 0);
-  }
-}
-void CFGWindow::right() {
-  if (!isVisible) return;
-  if (uxQueueSpacesAvailable(xQueueCFGWindow)) {
-    cfgEvent event = cfgEvent::Right;
-    xQueueSend(xQueueCFGWindow, &event, 0);
-  }
-}
+void CFGWindow::drawPanelView() {
+  if (ndConfig.items.empty()) return;
+  if (currentItemIndex < 0) currentItemIndex = 0;
+  if (currentItemIndex >= ndConfig.items.size()) currentItemIndex = ndConfig.items.size() - 1;
 
-void CFGWindow::draw() {
   xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
-
   frameBuffer.fillSprite(TFT_WHITE);
-  frameBuffer.fillRect(0, 0, LCD_W, 26, C_HEADER);
-  frameBuffer.pushImage(146, 3, CFG_ICON_WIDTH, CFG_ICON_HEIGHT, cfgIcon);
-
-  frameBuffer.fillRoundRect(124, 293, 42, 23, 2, C_FOOTER_ACTIVE);
-
-  render.setDrawer(frameBuffer);
-  render.setAlignment(Align::TopLeft);
-  render.setFontColor(C_LIGHTGRAY, C_FOOTER_ACTIVE);
-
   if (ndConfig.get(CFG_LANG) == LANG_JA) {
-    render.loadFont(fontMain, sizeof(fontMain));
-    render.setFontSize(17);
-    render.setCursor(6, 4);
-    render.printf("設定");
-    render.setCursor(130, 297);
-    render.printf("戻る");
+    _sprHeaderJP.pushSprite(&frameBuffer, 0, 0);
   } else {
-    render.loadFont(nimbusBold, sizeof(nimbusBold));
-    render.setFontSize(16);
-    render.setCursor(6, 5);
-    render.printf("Settings");
-    render.setCursor(133, 298);
-    render.printf("OK");
+    _sprHeaderEN.pushSprite(&frameBuffer, 0, 0);
   }
-
+  pnlConfig.setItemCount(ndConfig.items.size());
+  pnlConfig.currentIndex = currentItemIndex;
+  pnlConfig.ensureVisible();
+  pnlConfig.invalidate();
+  pnlConfig.update(frameBuffer);
+  currentItemIndex = pnlConfig.currentIndex;
   drawFooter(true);
-
-  for (int i = 0; i < ndConfig.items.size(); i++) {
-    cfgWindow.drawItem(i, true);
-  }
-
-  render.unloadFont();
   frameBuffer.pushSprite(0, 0);
-  xSemaphoreGive(spFrameBuffer);  // 描画完了
+  xSemaphoreGive(spFrameBuffer);
 }
 
-void CFGWindow::drawItem(int index, bool toFrameBuffer) {
-  int titleTextColor = C_DARK, optionTextColor = C_MID, backgroundColor = TFT_WHITE, borderColor = C_BORDER;
+void CFGWindow::selectItem(int index) {
+  if (ndConfig.items.empty()) return;
+  if (index < 0) index = 0;
+  if (index >= ndConfig.items.size()) index = ndConfig.items.size() - 1;
+  if (index == currentItemIndex) return;
 
-  if (currentItemIndex == index) {
-    titleTextColor = TFT_WHITE;
-    optionTextColor = C_YELLOW;
-    backgroundColor = C_ACCENT_DARK;
+  xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
+  currentItemIndex = index;
+  pnlConfig.setItemCount(ndConfig.items.size());
+  pnlConfig.currentIndex = currentItemIndex;
+  pnlConfig.ensureVisible();
+  pnlConfig.update(frameBuffer);
+  currentItemIndex = pnlConfig.currentIndex;
+  drawFooter(true);
+  frameBuffer.pushSprite(0, 0);
+  xSemaphoreGive(spFrameBuffer);
+}
+
+void CFGWindow::refreshCurrentItem() {
+  if (ndConfig.items.empty()) return;
+
+  xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
+  pnlConfig.setItemCount(ndConfig.items.size());
+  pnlConfig.currentIndex = currentItemIndex;
+  pnlConfig.ensureVisible();
+  currentItemIndex = pnlConfig.currentIndex;
+
+  const int itemY = pnlConfig.y + currentItemIndex * CFG_ITEM_HEIGHT - pnlConfig.scrollTop;
+  const bool fullyVisible =
+      itemY >= pnlConfig.y && itemY + CFG_ITEM_HEIGHT <= pnlConfig.y + pnlConfig.height;
+  if (fullyVisible) {
+    drawItem(frameBuffer, currentItemIndex, pnlConfig.x, itemY, pnlConfig.itemWidth(), true);
+    _sprite.pushSprite(&lcd, pnlConfig.x, itemY);
+    drawFooter(true);
+    _sprFooter.pushSprite(&lcd, 0, 293);
+  } else {
+    pnlConfig.invalidate();
+    pnlConfig.update(frameBuffer);
+    drawFooter(true);
+    frameBuffer.pushSprite(0, 0);
   }
+  xSemaphoreGive(spFrameBuffer);
+}
+
+void CFGWindow::moveSelection(int delta) { selectItem(currentItemIndex + delta); }
+
+void CFGWindow::drawItem(LGFX_Sprite& target, int index, int x, int y, int width,
+                         bool selected) {
+  if (index < 0 || index >= ndConfig.items.size() || width <= 0) return;
+  if (_sprite.width() != width || _sprite.height() != CFG_ITEM_HEIGHT) {
+    _sprite.createSprite(width, CFG_ITEM_HEIGHT);
+  }
+
+  const uint16_t titleColor = selected ? TFT_WHITE : C_DARK;
+  const uint16_t optionColor = selected ? C_YELLOW : C_MID;
+  const uint16_t background = selected ? C_LV_PEAK : TFT_WHITE;
 
   OpenFontRender ofr;
   ofr.setDrawer(_sprite);
+  ofr.loadFont(fontMain, sizeof(fontMain));
+  const int fontSize = ndConfig.get(CFG_LANG) == LANG_JA ? 17 : 16;
+  const String label = ndConfig.get(CFG_LANG) == LANG_JA ? ndConfig.items[index].labelJp
+                                                         : ndConfig.items[index].labelEn;
+  const String option = ndConfig.get(CFG_LANG) == LANG_JA
+                            ? ndConfig.items[index].optionsJp[ndConfig.items[index].index]
+                            : ndConfig.items[index].optionsEn[ndConfig.items[index].index];
 
-  String label, option;
-  int fontSize;
-  if (ndConfig.get(CFG_LANG) == LANG_JA) {
-    ofr.loadFont(fontMain, sizeof(fontMain));
-    fontSize = 17;
-    label = ndConfig.items[index].labelJp;
-    option = ndConfig.items[index].optionsJp[ndConfig.items[index].index];
-  } else {
-    fontSize = 16;
-    ofr.loadFont(nimbusBold, sizeof(nimbusBold));
-    label = ndConfig.items[index].labelEn;
-    option = ndConfig.items[index].optionsEn[ndConfig.items[index].index];
-  }
-
-  _sprite.fillSprite(backgroundColor);
-  _sprite.drawLine(0, ITEM_HEIGHT - 1, LCD_W, ITEM_HEIGHT - 1, borderColor);
-
+  _sprite.fillSprite(background);
+  _sprite.drawLine(0, CFG_ITEM_HEIGHT - 1, width - 1, CFG_ITEM_HEIGHT - 1, C_BORDER);
   ofr.setFontSize(fontSize);
   ofr.setAlignment(Align::TopLeft);
-  ofr.setFontColor(titleTextColor, backgroundColor);
-  ofr.setCursor(6, (ITEM_HEIGHT - fontSize) / 2);
+  ofr.setFontColor(titleColor, background);
+  ofr.setCursor(5, (CFG_ITEM_HEIGHT - fontSize) / 2);
   ofr.printf(label.c_str());
-
-  /*
-  if (ndConfig.get(CFG_LANG) == LANG_EN) {
-    ofr.unloadFont();
-    ofr.loadFont(nimbusRegular, sizeof(nimbusRegular));
-  }
-  */
-  ofr.setFontColor(optionTextColor, backgroundColor);
   ofr.setAlignment(Align::TopRight);
-  ofr.setCursor(LCD_W - 6, (ITEM_HEIGHT - fontSize) / 2);
+  ofr.setFontColor(optionColor, background);
+  ofr.setCursor(width - 5, (CFG_ITEM_HEIGHT - fontSize) / 2);
   ofr.printf(option.c_str());
-
   ofr.unloadFont();
-  if (toFrameBuffer) {
-    _sprite.pushSprite(&frameBuffer, 0, 26 + ITEM_HEIGHT * (index));
-  } else {
-    _sprite.pushSprite(&lcd, 0, 26 + ITEM_HEIGHT * (index));
-  }
+  _sprite.pushSprite(&target, x, y);
 }
 
 void CFGWindow::drawFooter(bool toFrameBuffer) {
-  bool up, down, left, right;
-  int color;
+  const bool up = currentItemIndex > 0;
+  const bool down = currentItemIndex + 1 < ndConfig.items.size();
+  const bool left = ndConfig.items[currentItemIndex].index > 0;
+  const bool right = ndConfig.items[currentItemIndex].index + 1 <
+                     ndConfig.items[currentItemIndex].optionValues.size();
 
   _sprFooter.fillSprite(TFT_WHITE);
-
-  up = (cfgWindow.currentItemIndex != 0);
-  down = (cfgWindow.currentItemIndex != ndConfig.items.size() - 1);
-  left = (ndConfig.items[cfgWindow.currentItemIndex].index != 0);
-  right = (ndConfig.items[cfgWindow.currentItemIndex].index !=
-           ndConfig.items[cfgWindow.currentItemIndex].optionValues.size() - 1);
-
   _sprFooter.fillRoundRect(4, 0, 27, 23, 2, up ? C_FOOTER_ACTIVE : C_FOOTER_INACTIVE);
-  _sprFooter.fillRoundRect(33, 0, 27, 23, 2, color = down ? C_FOOTER_ACTIVE : C_FOOTER_INACTIVE);
-  _sprFooter.fillRoundRect(64, 0, 27, 23, 2, color = left ? C_FOOTER_ACTIVE : C_FOOTER_INACTIVE);
-  _sprFooter.fillRoundRect(93, 0, 27, 23, 2, color = right ? C_FOOTER_ACTIVE : C_FOOTER_INACTIVE);
-  if (up) {
-    _sprFooter.pushImage(12, 6, CFG_ICON_ARROR_WIDTH, CFG_ICON_ARROR_HEIGHT, cfgUP);
-  }
-  if (down) {
-    _sprFooter.pushImage(41, 6, CFG_ICON_ARROR_WIDTH, CFG_ICON_ARROR_HEIGHT, cfgDOWN);
-  }
-  if (left) {
-    _sprFooter.pushImage(72, 6, CFG_ICON_ARROR_WIDTH, CFG_ICON_ARROR_HEIGHT, cfgLEFT);
-  }
-  if (right) {
-    _sprFooter.pushImage(101, 6, CFG_ICON_ARROR_WIDTH, CFG_ICON_ARROR_HEIGHT, cfgRIGHT);
-  }
+  _sprFooter.fillRoundRect(33, 0, 27, 23, 2, down ? C_FOOTER_ACTIVE : C_FOOTER_INACTIVE);
+  _sprFooter.fillRoundRect(64, 0, 27, 23, 2, left ? C_FOOTER_ACTIVE : C_FOOTER_INACTIVE);
+  _sprFooter.fillRoundRect(93, 0, 27, 23, 2, right ? C_FOOTER_ACTIVE : C_FOOTER_INACTIVE);
+  _sprFooter.fillRoundRect(124, 0, 42, 23, 2, C_FOOTER_ACTIVE);
+  if (up) _sprFooter.pushImage(12, 6, CFG_ICON_ARROR_WIDTH, CFG_ICON_ARROR_HEIGHT, cfgUP);
+  if (down) _sprFooter.pushImage(41, 6, CFG_ICON_ARROR_WIDTH, CFG_ICON_ARROR_HEIGHT, cfgDOWN);
+  if (left) _sprFooter.pushImage(72, 6, CFG_ICON_ARROR_WIDTH, CFG_ICON_ARROR_HEIGHT, cfgLEFT);
+  if (right) _sprFooter.pushImage(101, 6, CFG_ICON_ARROR_WIDTH, CFG_ICON_ARROR_HEIGHT, cfgRIGHT);
 
+  OpenFontRender ofr;
+  ofr.setUseRenderTask(false);
+  ofr.setDrawer(_sprFooter);
+  ofr.loadFont(fontMain, sizeof(fontMain));
+  ofr.setFontSize(18);
+  ofr.setAlignment(Align::TopCenter);
+  ofr.setFontColor(C_LIGHTGRAY, C_FOOTER_ACTIVE);
+  ofr.setCursor(124 + 42 / 2, 4);
+  ofr.printf("OK");
+  ofr.unloadFont();
   if (toFrameBuffer) {
     _sprFooter.pushSprite(&frameBuffer, 0, 293);
   } else {
@@ -743,4 +860,4 @@ void CFGWindow::drawFooter(bool toFrameBuffer) {
   }
 }
 
-CFGWindow cfgWindow = CFGWindow();
+CFGWindow cfgWindow;

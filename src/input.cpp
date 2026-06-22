@@ -10,7 +10,9 @@
 namespace {
 Adafruit_TCA8418 keypad;
 TaskHandle_t tcaTaskHandle = nullptr;
+TaskHandle_t eventTaskHandle = nullptr;
 TimerHandle_t keyRepeatTimer = nullptr;
+QueueHandle_t inputEventQueue = nullptr;
 
 enum class KeyRepeatState : uint8_t { Idle, Waiting, Repeating };
 
@@ -104,6 +106,26 @@ void tcaTask(void*) {
     keypad.writeRegister(TCA8418_REG_INT_STAT, 0x01);
   }
 }
+
+// イベントループ
+void eventTask(void*) {
+  event ev;
+  while (true) {
+    if (xQueueReceive(inputEventQueue, &ev, portMAX_DELAY) != pdTRUE) continue;
+
+    // 表示中の画面にイベントを送信
+    if (disp.currentView == ViewMode::Config) {
+      cfgWindow.eventHandler(ev);
+    } else {
+      playerWindow.eventHandler(ev);
+    }
+  }
+}
+
+// イベント送信
+void sendEvent(event ev) {
+  if (inputEventQueue != nullptr) xQueueOverwrite(inputEventQueue, &ev);
+}
 }  // namespace
 
 Input::Input() {}
@@ -141,6 +163,21 @@ bool Input::init() {
     return false;
   }
 
+  // キュー作成
+  inputEventQueue = xQueueCreate(1, sizeof(event));
+  if (inputEventQueue == nullptr) {
+    Serial.println("Failed: input event queue init.");
+    return false;
+  }
+
+  // イベントループタスク
+  BaseType_t eventTaskCreated = xTaskCreatePinnedToCore(
+      eventTask, "inputEvent", 8192, nullptr, 1, &eventTaskHandle, PRO_CPU_NUM);
+  if (eventTaskCreated != pdPASS) {
+    Serial.println("Failed: input event task init.");
+    return false;
+  }
+
   BaseType_t taskCreated = xTaskCreatePinnedToCore(tcaTask, "tcaTask", 4096, nullptr, 1,
                                                    &tcaTaskHandle, PRO_CPU_NUM);
   if (taskCreated != pdPASS) {
@@ -156,22 +193,22 @@ bool Input::init() {
 void Input::inputHandler() {
   if (!_enabled || inputBuffer == btnNONE) return;
 
-  if (cfgWindow.isVisible) {
+  if (disp.currentView == ViewMode::Config) {
     switch (inputBuffer) {
       case btnUP:
-        cfgWindow.up();
+        sendEvent(event::Up);
         break;
       case btnDOWN:
-        cfgWindow.down();
+        sendEvent(event::Down);
         break;
       case btnLEFT:
-        cfgWindow.left();
+        sendEvent(event::Left);
         break;
       case btnRIGHT:
-        cfgWindow.right();
+        sendEvent(event::Right);
         break;
       case btnSELECT:
-        cfgWindow.close();
+        sendEvent(event::Close);
         break;
       default:
         break;
@@ -191,7 +228,7 @@ void Input::inputHandler() {
         ndFile.filePlay(1);
         break;
       case btnSELECT:
-        cfgWindow.show();
+        sendEvent(event::Option);
         break;
       default:
         break;
@@ -205,7 +242,7 @@ void Input::inputHandler() {
         serialMan.changeSN76489Clock();
         break;
       case btnSELECT:
-        cfgWindow.show();
+        sendEvent(event::Option);
         break;
       default:
         break;

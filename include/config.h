@@ -36,6 +36,10 @@ typedef enum { FO_0 = 0,
                FO_10 = 10000,
                FO_12 = 12000,
                FO_15 = 15000 } tFadeout;
+typedef enum { AMP_0 = 0,
+               AMP_3 = 3,
+               AMP_6 = 6,
+               AMP_9 = 9 } tAmp;
 typedef enum { MODE_PLAYER,
                MODE_SERIAL } tMode;
 typedef enum { FMPCM_BOTH,
@@ -49,8 +53,9 @@ typedef enum {
   CFG_SCROLL,    // テキストスクロール回数
   CFG_HISTORY,   // 起動時復旧
   CFG_FADEOUT,   // フェードアウト時間
-  CFG_MODE,      // 動作モード
   CFG_FMPCM,     // FM PCM 再生モード
+  CFG_AMPLIFY,   // 出力増幅
+  CFG_MODE,      // 動作モード
 } tConfig;
 
 // 設定用構造体
@@ -68,6 +73,7 @@ class NDConfig {
   tMode currentMode;
   std::vector<sConfig> items;
   void init();
+  void applyCfg();
   void saveCfg();
   void saveHistory();
   void loadCfg();

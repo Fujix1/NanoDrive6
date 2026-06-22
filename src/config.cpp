@@ -11,6 +11,20 @@
 
 Preferences preferences;
 
+static tNJU72341_GAIN amplifyToInputGain(int amplify) {
+  switch (amplify) {
+    case AMP_0:
+      return GAIN0;
+    case AMP_6:
+      return GAIN6;
+    case AMP_9:
+      return GAIN9;
+    case AMP_3:
+    default:
+      return GAIN3;
+  }
+}
+
 QueueHandle_t cfgSaveQueue;  // 設定保存用メッセージキュー
 
 // 設定保存メッセージ待ち受け
@@ -35,7 +49,7 @@ void NDConfig::init() {
       LOOP_1,
       "曲ループ",
       "Song Loop",
-      {"1回", "2回", "3回", "4回", "5回", "無制限"},
+      {"1回", "2回", "3回", "4回", "5回", "無限"},
       {"1", "2", "3", "4", "5", "Infinite"},
       {LOOP_1, LOOP_2, LOOP_3, LOOP_4, LOOP_5, LOOP_INIFITE},
   });
@@ -51,7 +65,7 @@ void NDConfig::init() {
                    3,  // 初期値
                    "文字スクロール",
                    "Text scroll",
-                   {"なし", "1回", "2回", "無制限"},
+                   {"なし", "1回", "2回", "無限"},
                    {"None", "1", "2", "Infinite"},
                    {SCROLL_0, SCROLL_1, SCROLL_2, SCROLL_INFINITE}});
   items.push_back({"resume",
@@ -68,9 +82,6 @@ void NDConfig::init() {
                    {"なし", "2秒", "5秒", "8秒", "10秒", "12秒", "15秒"},
                    {"None", "2 sec.", "5 sec.", "8 sec.", "10 sec.", "12 sec.", "15 sec."},
                    {FO_0, FO_2, FO_5, FO_8, FO_10, FO_12, FO_15}});
-
-  items.push_back(
-      {"mode", 0, "動作モード", "Mode", {"プレーヤー", "シリアル"}, {"Player", "Serial"}, {MODE_PLAYER, MODE_SERIAL}});
   items.push_back({"fmpcm",
                    0,  // 初期値
                    "FM/PCM",
@@ -78,7 +89,15 @@ void NDConfig::init() {
                    {"両方", "FMのみ", "PCMのみ"},
                    {"Both", "FM Only", "PCM Only"},
                    {FMPCM_BOTH, FMPCM_FM, FMPCM_PCM}});
-
+  items.push_back({"amplify",
+                   1,  // 初期値idx
+                   "出力増幅",
+                   "Output Gain",
+                   {"0dB", "3dB", "6dB", "9dB"},
+                   {"0dB", "3dB", "6dB", "9dB"},
+                   {AMP_0, AMP_3, AMP_6, AMP_9}});
+  items.push_back(
+      {"mode", 0, "動作モード", "Mode", {"プレーヤー", "シリアル"}, {"Player", "Serial"}, {MODE_PLAYER, MODE_SERIAL}});
   preferences.begin("NanoDrive");
 
   // キュー初期化
@@ -86,10 +105,17 @@ void NDConfig::init() {
   xTaskCreateUniversal(cfgSaveTask, "cfgSaveTask", 4096, NULL, 1, NULL, PRO_CPU_NUM);
 }
 
+void NDConfig::applyCfg() {
+  nju72341.setFadeoutDuration(get(CFG_FADEOUT));
+  const tNJU72341_GAIN inputGain = amplifyToInputGain(get(CFG_AMPLIFY));
+  nju72341.setInputGain(1, inputGain);
+  nju72341.setInputGain(2, inputGain);
+}
+
 void NDConfig::saveCfg() {
   uint32_t dummy = 0;
   xQueueSend(cfgSaveQueue, &dummy, 0);
-  nju72341.setFadeoutDuration(get(CFG_FADEOUT));
+  applyCfg();
   FM.requestApplyYM2612OutputMode();
   return;
 }

@@ -47,7 +47,8 @@ void NJU72341::init(u8_t SDA, u8_t SCL, u8_t MUTE, uint16_t fadeOutDuration, boo
   pinMode(MUTE, OUTPUT);
   mute();
 
-  setInputGain(GAIN9);
+  setInputGain(1, GAIN9);
+  setInputGain(2, GAIN9);
 
   // タイマー生成
   if (fadeOutDuration == FO_0) {
@@ -102,8 +103,13 @@ void NJU72341::resetFadeout() {
   _fadeOutStep = 0;
 }
 
-void NJU72341::setInputGain(tNJU72341_GAIN newInputGain) {
-  _inputGain = newInputGain;
+void NJU72341::setInputGain(u8_t ch, tNJU72341_GAIN newInputGain) {
+  if (ch < 1 || ch > 4) return;
+
+  const u8_t shift = (ch - 1) * 2;
+  _inputGain &= ~(0b11 << shift);                  // 指定chの2bitをクリア
+  _inputGain |= ((newInputGain & 0b11) << shift);  // 指定chに新値セット
+
   Wire.beginTransmission(_slaveAddress);
   Wire.write(0x00);
   Wire.write(_inputGain);

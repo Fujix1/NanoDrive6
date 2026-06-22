@@ -8,6 +8,8 @@
 
 typedef enum { btnNONE, btnRIGHT, btnUP, btnDOWN, btnLEFT, btnSELECT, btnFUNC } Button;
 
+enum class event { None, Right, Up, Down, Left, Option, Close };
+
 class Input {
  public:
   Input();

@@ -100,6 +100,7 @@ void setup() {
   // I2C機器初期化
   // NJU72341/NJU72342 初期化
   nju72341.init(I2C_SDA, I2C_SCL, NJU72341_MUTE_PIN, ndConfig.get(CFG_FADEOUT), false);
+  ndConfig.applyCfg();
 
   // SI5351 初期化
   SI5351.begin();
