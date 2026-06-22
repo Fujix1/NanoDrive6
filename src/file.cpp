@@ -354,7 +354,7 @@ FileFormat NDFile::readFile(String path) {
   }
 
   if (isGz) {  // VGZ のとき
-    Serial.printf("isGz\n");
+    // Serial.printf("isGz\n");
 
     // gzip footer(ISIZE) から解凍後サイズを先読みして上限チェック
     const u32_t gzFileSize = hFile.size();

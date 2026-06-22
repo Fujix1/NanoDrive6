@@ -21,7 +21,6 @@ static std::string wstringToUTF8(const std::wstring& src) {
 
 //---------------------------------------------------------------------
 static u32_t gd3p;
-void parseGD3(t_gd3* gd3, u32_t offset) {}
 
 //---------------------------------------------------------------------
 // VGM クラス
@@ -290,8 +289,10 @@ bool VGM::ready() {
               gd3.date, chip[0], chip[1], FORMAT_LABEL[(int)ND::fileFormat], 0, n,
               ndFile.files[ndFile.currentDir].size()});
 
-  Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
-  Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(), ESP.getFreePsram());
+  Serial.printf("%s\n", gd3.trackJp.c_str());
+
+  // Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
+  // Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(), ESP.getFreePsram());
 
   _vgmStart = micros64() + 20000;
   return true;
