@@ -1,189 +1,230 @@
 #include "input.h"
 
+#include <Adafruit_TCA8418.h>
 #include <Arduino.h>
 
 #include "disp.h"
 #include "file.h"
 #include "serialman.h"
 
-void inputTask(void *param) {
-  while (1) {
-    Button b = input.checkButton2();
-    if (b != btnNONE) input.inputBuffer = b;
-    vTaskDelay(INPUT_CAPTURE_INTERVAL);
+namespace {
+Adafruit_TCA8418 keypad;
+TaskHandle_t tcaTaskHandle = nullptr;
+TimerHandle_t keyRepeatTimer = nullptr;
+
+enum class KeyRepeatState : uint8_t { Idle, Waiting, Repeating };
+
+volatile KeyRepeatState keyRepeatState = KeyRepeatState::Idle;
+volatile Button activeButton = btnNONE;
+
+Button matrixKeyToButton(int key) {
+  switch (key) {
+    case 0:
+      return btnUP;
+    case 10:
+      return btnDOWN;
+    case 20:
+      return btnLEFT;
+    case 30:
+      return btnRIGHT;
+    case 40:
+      return btnSELECT;
+    case 50:
+      return btnFUNC;
+    default:
+      return btnNONE;
   }
 }
 
-void serialCheckerTask_(void *param) {
-  while (1) {
-    int s = Serial.available();
-    if (s > 0) {  // シリアルデータがある場合
-      byte data[s + 1];
-      // byte data = Serial.read();
-      Serial.readBytes(data, s);
-      lcd.setCursor(0, 32);
-      // lcd.printf("%02x", Serial.available());
-      lcd.printf("%02x %d   ", data[0], s);
+bool isRepeatable(Button button) {
+  return button != btnNONE && button != btnSELECT && button != btnFUNC;
+}
 
-      // Serial.printf("Serial data: %c\n", data);  // debug
-      /*
-      while (Serial.available()) Serial.read();
-      if (data == 'a') {
-        input.inputBuffer = btnRIGHT;
-      } else if (data == 'd') {
-        input.inputBuffer = btnLEFT;
-      } else if (data == 'w') {
-        input.inputBuffer = btnUP;
-      } else if (data == 's') {
-        input.inputBuffer = btnDOWN;
-      }*/
+void onKeyDown(Button button) {
+  if (button == btnNONE) return;
+  if (activeButton == button && keyRepeatState != KeyRepeatState::Idle) return;
+
+  activeButton = button;
+  input.inputBuffer = button;
+
+  if (!isRepeatable(button) || keyRepeatTimer == nullptr) return;
+
+  keyRepeatState = KeyRepeatState::Waiting;
+  xTimerStop(keyRepeatTimer, 0);
+  xTimerChangePeriod(keyRepeatTimer, pdMS_TO_TICKS(INPUT_REPEAT_DELAY), 0);
+  xTimerStart(keyRepeatTimer, 0);
+}
+
+void onKeyUp(Button button) {
+  if (activeButton != button) return;
+
+  if (keyRepeatTimer != nullptr) xTimerStop(keyRepeatTimer, 0);
+  keyRepeatState = KeyRepeatState::Idle;
+  activeButton = btnNONE;
+}
+
+void keyRepeatTimerHandler(TimerHandle_t) {
+  Button button = activeButton;
+  if (!isRepeatable(button)) return;
+
+  input.inputBuffer = button;
+  if (keyRepeatState == KeyRepeatState::Waiting) {
+    keyRepeatState = KeyRepeatState::Repeating;
+    xTimerChangePeriod(keyRepeatTimer, pdMS_TO_TICKS(INPUT_CAPTURE_INTERVAL), 0);
+  }
+}
+
+void IRAM_ATTR tca8418Irq() {
+  if (tcaTaskHandle == nullptr) return;
+
+  BaseType_t taskWoken = pdFALSE;
+  vTaskNotifyGiveFromISR(tcaTaskHandle, &taskWoken);
+  if (taskWoken == pdTRUE) portYIELD_FROM_ISR();
+}
+
+void tcaTask(void*) {
+  while (true) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    int keyEvent;
+    while ((keyEvent = keypad.getEvent()) != 0) {
+      if (!input.isEnabled()) continue;
+
+      const int key = (keyEvent & 0x7F) - 1;
+      if ((key % 10) != 0) continue;  // COL0のみを操作キーとして使う
+
+      const Button button = matrixKeyToButton(key);
+      if ((keyEvent & 0x80) != 0) {
+        onKeyDown(button);
+      } else {
+        onKeyUp(button);
+      }
     }
-    vTaskDelay(1);
+
+    keypad.writeRegister(TCA8418_REG_INT_STAT, 0x01);
   }
 }
+}  // namespace
 
-Input::Input() { pinMode(INPUT_PIN, ANALOG); }
+Input::Input() {}
 
-void Input::init() { xTaskCreateUniversal(inputTask, "inputTask", 8192, NULL, 1, NULL, PRO_CPU_NUM); }
+bool Input::init() {
+  pinMode(TCA8418_IRQ_PIN, INPUT);
+
+  if (!keypad.begin(TCA8418_DEFAULT_ADDR, &Wire)) {
+    Serial.println("Failed: TCA8418 init.");
+    return false;
+  }
+
+  keypad.matrix(1, 2);
+  keypad.writeRegister(0x1D, 0xFF);  // ROW0-7をマトリクス入力にする
+  keypad.writeRegister(0x1E, 0x03);  // COL0-1をマトリクス入力にする
+  keypad.writeRegister(0x1F, 0x00);
+  keypad.writeRegister(0x20, 0x00);  // GPIOイベントは使用しない
+  keypad.writeRegister(0x21, 0x00);
+  keypad.writeRegister(0x22, 0x00);
+
+  while (keypad.getEvent() != 0) {
+  }
+  keypad.flush();
+  keypad.writeRegister(TCA8418_REG_INT_STAT, 0x01);
+
+  uint8_t config = keypad.readRegister(TCA8418_REG_CFG);
+  config &= ~TCA8418_REG_CFG_GPI_IEN;
+  config |= TCA8418_REG_CFG_KE_IEN;
+  keypad.writeRegister(TCA8418_REG_CFG, config);
+
+  keyRepeatTimer = xTimerCreate("keyRepeat", pdMS_TO_TICKS(INPUT_REPEAT_DELAY), pdTRUE,
+                                nullptr, keyRepeatTimerHandler);
+  if (keyRepeatTimer == nullptr) {
+    Serial.println("Failed: key repeat timer init.");
+    return false;
+  }
+
+  BaseType_t taskCreated = xTaskCreatePinnedToCore(tcaTask, "tcaTask", 4096, nullptr, 1,
+                                                   &tcaTaskHandle, PRO_CPU_NUM);
+  if (taskCreated != pdPASS) {
+    Serial.println("Failed: TCA8418 task init.");
+    return false;
+  }
+
+  attachInterrupt(digitalPinToInterrupt(TCA8418_IRQ_PIN), tca8418Irq, FALLING);
+  Serial.println("TCA8418 init.");
+  return true;
+}
 
 void Input::inputHandler() {
-  if (!_enabled) return;
+  if (!_enabled || inputBuffer == btnNONE) return;
 
   if (cfgWindow.isVisible) {
     switch (inputBuffer) {
-      case btnNONE: {
-        break;
-      }
-      case btnUP: {
+      case btnUP:
         cfgWindow.up();
         break;
-      }
-      case btnDOWN: {
+      case btnDOWN:
         cfgWindow.down();
         break;
-      }
-      case btnLEFT: {
+      case btnLEFT:
         cfgWindow.left();
         break;
-      }
-      case btnRIGHT: {
+      case btnRIGHT:
         cfgWindow.right();
         break;
-      }
-      case btnSELECT: {
-        cfgWindow.close();  // 設定ウィンドウ閉じる
+      case btnSELECT:
+        cfgWindow.close();
         break;
-      }
+      default:
+        break;
     }
-
+  } else if (ndConfig.currentMode == MODE_PLAYER) {
+    switch (inputBuffer) {
+      case btnUP:
+        ndFile.dirPlay(1);
+        break;
+      case btnDOWN:
+        ndFile.dirPlay(-1);
+        break;
+      case btnRIGHT:
+        ndFile.filePlay(-1);
+        break;
+      case btnLEFT:
+        ndFile.filePlay(1);
+        break;
+      case btnSELECT:
+        cfgWindow.show();
+        break;
+      default:
+        break;
+    }
   } else {
-    if (ndConfig.currentMode == MODE_PLAYER) {
-      switch (inputBuffer) {
-        case btnNONE: {
-          break;
-        }
-        case btnUP: {
-          ndFile.dirPlay(1);
-          break;
-        }
-        case btnDOWN: {
-          ndFile.dirPlay(-1);
-          break;
-        }
-        case btnRIGHT: {
-          ndFile.filePlay(-1);
-          break;
-        }
-        case btnLEFT: {
-          ndFile.filePlay(1);
-          break;
-        }
-        case btnSELECT: {
-          cfgWindow.show();  // 設定ウィンドウ表示
-          break;
-        }
-      }
-    } else {
-      switch (inputBuffer) {
-        case btnNONE: {
-          break;
-        }
-        case btnUP: {
-          serialMan.changeYM2612Clock();
-          break;
-        }
-        case btnDOWN: {
-          serialMan.changeSN76489Clock();
-          break;
-        }
-        case btnRIGHT: {
-          break;
-        }
-        case btnLEFT: {
-          break;
-        }
-        case btnSELECT: {
-          cfgWindow.show();  // 設定ウィンドウ表示
-          break;
-        }
-      }
+    switch (inputBuffer) {
+      case btnUP:
+        serialMan.changeYM2612Clock();
+        break;
+      case btnDOWN:
+        serialMan.changeSN76489Clock();
+        break;
+      case btnSELECT:
+        cfgWindow.show();
+        break;
+      default:
+        break;
     }
   }
+
   inputBuffer = btnNONE;
 }
 
-void Input::setEnabled(bool state) { _enabled = state; }
-
-//----------------------------------------------------------------------
-// ボタンの状態取得
-Button Input::_readButton() {
-  u16_t in = analogRead(INPUT_PIN);
-  // Serial.printf("%d\n", in);
-  if (in > VAL_NONE - 100)
-    return btnNONE;
-  else if (in < VAL_0 + 100)
-    return btnSELECT;
-  else if (VAL_1 - 80 <= in && in < VAL_1 + 80)
-    return btnRIGHT;
-  else if (VAL_2 - 90 <= in && in < VAL_2 + 80)
-    return btnLEFT;
-  else if (VAL_3 - 120 <= in && in < VAL_3 + 120)
-    return btnDOWN;
-  else if (VAL_4 - 150 <= in && in < VAL_4 + 200)
-    return btnUP;
-
-  return btnNONE;
-}
-
-Button Input::checkButton2() {
-  uint32_t ms = millis();
-  Button btn = _readButton();  // ボタン取得
-
-  if (btn == btnNONE) {
-    _lastButton = btnNONE;
-    return btnNONE;
-  } else {
-    if (_lastButton == btn) {  // 前と同じボタンなら
-      if (_buttonRepeatStarted == 0) {
-        _buttonRepeatStarted = ms;  // リピート開始
-        return btn;
-      } else {
-        if (btn == btnSELECT || btn == btnFUNC ||
-            millis() - _buttonRepeatStarted < INPUT_REPEAT_DELAY) {  // リピート開始前
-          return btnNONE;
-        } else {
-          return btn;
-        }
-      }
-
-    } else {  // 前回と違うボタン
-      _lastButton = btn;
-      _btnFlag = false;
-      _buttonRepeatStarted = 0;
-
-      return btnNONE;
-    }
+void Input::setEnabled(bool state) {
+  _enabled = state;
+  if (!state) {
+    inputBuffer = btnNONE;
+    activeButton = btnNONE;
+    keyRepeatState = KeyRepeatState::Idle;
+    if (keyRepeatTimer != nullptr) xTimerStop(keyRepeatTimer, 0);
   }
 }
 
-Input input = Input();
+bool Input::isEnabled() const { return _enabled; }
+
+Input input;

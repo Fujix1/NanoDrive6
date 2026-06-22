@@ -1,15 +1,14 @@
 /**
- * Nano Drive 6
+ * Nano Drive 6.1
  * 2024 - 2026 (C) Fujix
  * e2j.net
- *
- * This software uses the following libraries:
- *
+
  *  Open Font Render
  *  URL: https://github.com/takkaO/OpenFontRender
  *  Author: takkaO
- *  License: FTL
- *  Portions of this software are copyright © The FreeTypeProject (www.freetype.org). All rights reserved.
+ *  License: FreeType License
+ *  Portions of this software are copyright © The FreeTypeProject (www.freetype.org).
+ *  All rights reserved.
  *
  *  LovyanGFX
  *  URL: https://github.com/lovyan03/LovyanGFX
@@ -21,13 +20,25 @@
  *  Author: Larry Bank
  *  License: Apache-2.0
  *
+ *  Adafruit TCA8418
+ *  URL: https://github.com/adafruit/Adafruit_TCA8418
+ *  Author: Adafruit
+ *  License: BSD-3-Clause
  *
- * This software references code from the "SDGK" project for the XGM format.
- * Original project URL: https://github.com/Stephane-D/SGDK
- * Author: Stephane Dallongeville
+ *  Adafruit BusIO
+ *  URL: https://github.com/adafruit/Adafruit_BusIO
+ *  Author: Adafruit
+ *  License: MIT
+
+ *  BIZ UDPGothic
+ *  URL:https://fonts.google.com/specimen/BIZ+UDPGothic/license
+ *  License: SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+ *  Copyright 2022 The BIZ UDGothic Project Authors
+ *  (https://github.com/googlefonts/morisawa-biz-ud-mincho) This Font Software is
+ *  licensed under the SIL Open Font License, Version 1.1 . This license is
+ *  copied below, and is also available with a FAQ at:
+ *  https://openfontlicense.org
  *
- * The referenced code is licensed under the MIT License.
- * Please ensure compliance with the original license terms.
  */
 
 #include "NJU72341.h"
@@ -42,6 +53,8 @@
 #include "vgm.h"
 
 void setup() {
+  disableCore0WDT();  // ウォッチドッグ0無効化
+
   // 最初にミュート
   pinMode(NJU72341_MUTE_PIN, OUTPUT);
   digitalWrite(NJU72341_MUTE_PIN, LOW);
@@ -55,7 +68,12 @@ void setup() {
   Serial.printf("Flash - %'d Bytes at %'d\n", ESP.getFlashChipSize(), ESP.getFlashChipSpeed());
   Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(), ESP.getFreePsram());
 
-  disableCore0WDT();  // ウォッチドッグ0無効化
+  delay(100);
+  Wire.begin(I2C_SDA, I2C_SCL, I2C_CLOCK);
+
+  if (!input.init()) {
+    Serial.println("Input IC TCA8418 failed.");
+  }
 
   // ディスプレイ初期化
   if (!initDisp()) {
@@ -63,9 +81,9 @@ void setup() {
   }
 
   lcd.setFont(&fonts::Font2);
-  lcd.println("NANO DRIVE 6");
+  lcd.println("NANO DRIVE 6.1");
   lcd.println("2024-2026 fujix@e2j.net");
-  lcd.printf("Version 2.3.0\n\n");
+  lcd.printf("Version 6.1 dev\n\n");
 
   // PSRAM 初期化確認
   if (psramInit()) {
@@ -99,6 +117,7 @@ void setup() {
   if (ndConfig.currentMode == MODE_PLAYER) {
     // SD読み込み
     if (ndFile.init() == true) {
+      Serial.printf("SD init.\n");
       ndFile.listDir("/");
     } else {
       exit;
@@ -135,7 +154,6 @@ void setup() {
   }
 
   // 入力有効化
-  input.init();
   input.setEnabled(true);
 
   cfgWindow.init();

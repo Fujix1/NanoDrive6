@@ -42,6 +42,7 @@
 // I2C
 #define I2C_SDA 16
 #define I2C_SCL 15
+#define I2C_CLOCK 400000
 
 // NJU72341
 #define NJU72341_MUTE_PIN 17
