@@ -168,6 +168,10 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
     _ym2612TlRegValid[chipno][bank][reg] = true;
   }
 
+  if ((uint8_t)(addr - 0xB4) <= 2 && ndConfig.get(CFG_YM2612_PAN) == TPAN_INVERT) {
+    data = (data & 0x3F) | ((data & 0x80) >> 1) | ((data & 0x40) << 1);
+  }
+
   data = _applyYM2612OutputMode(bank, addr, data, chipno);
 
   switch (chipno) {

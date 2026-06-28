@@ -97,6 +97,13 @@ void NDConfig::init() {
                    {"両方", "FMのみ", "PCMのみ"},
                    {"Both", "FM Only", "PCM Only"},
                    {FMPCM_BOTH, FMPCM_FM, FMPCM_PCM}});
+  items.push_back({"ym2612pan",
+                   0,  // 初期値idx
+                   "YM2612パン",
+                   "YM2612 Pan",
+                   {"ふつう", "反転"},
+                   {"Normal", "Invert"},
+                   {TPAN_NORMAL, TPAN_INVERT}});
   items.push_back({"amplify",
                    1,  // 初期値idx
                    "出力増幅",
