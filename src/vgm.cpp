@@ -73,8 +73,7 @@ bool VGM::ready() {
   }
 
   // ヘッダキャッシュ版
-  if (!ndFile.getHeaderCache(ndFile.dirs[ndFile.currentDir] + "/" +
-                             ndFile.files[ndFile.currentDir][ndFile.currentFile])) {
+  if (!ndFile.getHeaderCache(ndFile.getCurrentFilePath())) {
     Serial.println("ERROR: Failed to read file header.");
     ND::canPlay = false;
     return false;
@@ -262,8 +261,7 @@ bool VGM::ready() {
   //_parseGD3(gd3Offset);
 
   // GD3タグ専用キャッシュから取得
-  u16_t res = ndFile.getGD3Cache(
-      ndFile.dirs[ndFile.currentDir] + "/" + ndFile.files[ndFile.currentDir][ndFile.currentFile], gd3Offset);
+  u16_t res = ndFile.getGD3Cache(ndFile.getCurrentFilePath(), gd3Offset);
 
   if (res != 0) {
     _parseGD3Cache();
@@ -278,10 +276,10 @@ bool VGM::ready() {
   }
   while (ND::chipNames.size() < 2) ND::chipNames.push_back("");
 
-  u32_t n = 1 + ndFile.currentFile;  // フォルダ内曲番
+  u32_t n = 1 + ndFile.getCurrentFileIndex();  // フォルダ内曲番
   playerWindow.updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
               gd3.date, ND::chipNames[0], ND::chipNames[1], FORMAT_LABEL[(int)ND::fileFormat], 0, n,
-              ndFile.files[ndFile.currentDir].size()});
+              ndFile.getCurrentDirFileCount()});
 
   Serial.printf("%s\n", gd3.trackJp.c_str());
 
@@ -365,8 +363,8 @@ String VGM::_digGD3Cache() {
 }
 
 void VGM::_resetGD3() {
-  gd3.trackEn = ndFile.files[ndFile.currentDir][ndFile.currentFile];
-  gd3.trackJp = ndFile.files[ndFile.currentDir][ndFile.currentFile];
+  gd3.trackEn = ndFile.getCurrentFileName();
+  gd3.trackJp = ndFile.getCurrentFileName();
   gd3.gameEn = "(No GD3 info)";
   gd3.gameJp = "(GD3情報なし)";
   gd3.systemEn = "";
@@ -1191,9 +1189,9 @@ bool VGM::XGMReady() {
   } else {
     Serial.println("ERROR: XGM ファイル解析失敗");
     ND::fileFormat = FileFormat::Unknown;
-    u32_t n = 1 + ndFile.currentFile;
+    u32_t n = 1 + ndFile.getCurrentFileIndex();
     playerWindow.updateDisp({"Bad XGM file ident", "XGMファイル解析失敗", "", "", "--", "--", "--", "--", "--", "", "",
-                FORMAT_LABEL[(int)ND::fileFormat], 0, n, ndFile.files[(int)ndFile.currentDir].size()});
+                FORMAT_LABEL[(int)ND::fileFormat], 0, n, ndFile.getCurrentDirFileCount()});
     Serial.println("ERROR: Bad XGM file ident.");
 
     ND::canPlay = false;
@@ -1321,11 +1319,11 @@ bool VGM::XGMReady() {
   ND::chipNames.push_back(ND::formatChipName(ND::freq[0], CHIP0));
   ND::chipNames.push_back(ND::formatChipName(ND::freq[1], CHIP1));
 
-  u32_t n = 1 + ndFile.currentFile;  // フォルダ内曲番
+  u32_t n = 1 + ndFile.getCurrentFileIndex();  // フォルダ内曲番
 
   playerWindow.updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
               gd3.date, ND::chipNames[0], ND::chipNames[1], FORMAT_LABEL[(int)ND::fileFormat], 0, n,
-              ndFile.files[ndFile.currentDir].size()});
+              ndFile.getCurrentDirFileCount()});
 
   ND::canPlay = true;
   return ND::canPlay;
@@ -2068,10 +2066,7 @@ void VGM::endProcedure() {
       break;
     }
     case REPEAT_ALL: {
-      if (ndFile.getNumFilesinCurrentDir() - 1 == ndFile.currentFile)
-        ndFile.dirPlay(1);
-      else
-        ndFile.filePlay(1);
+      ndFile.filePlay(1);
       break;
     }
   }

@@ -139,7 +139,7 @@ void setup() {
 
     switch (ndConfig.get(CFG_HISTORY)) {
       case HISTORY_FOLDER:
-        ndFile.dirPlay(lastDirIndex);
+        ndFile.play(lastDirIndex, 0);
         break;
       case HISTORY_FILE:
         ndFile.play(lastDirIndex, lastTrackIndex);

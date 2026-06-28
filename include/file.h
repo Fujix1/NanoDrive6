@@ -4,6 +4,8 @@
 #include <FS.h>
 #include <SD.h>
 
+#include <vector>
+
 #include "NJU72341.h"
 #include "common.h"
 #include "disp.h"
@@ -15,6 +17,8 @@ int mod(int i, int j);
 
 #define CACHE_SIZE (128 * 1024)
 #define NUM_CACHE 2
+
+struct Node;
 
 // extern uint8_t cache[NUM_CACHE][CACHE_SIZE] __attribute__((aligned(4)));
 extern uint8_t* cache[NUM_CACHE];  // PSRAM用キャッシュ
@@ -28,6 +32,81 @@ bool initCache(String path);
 
 enum AccessMode { ACCESS_PSRAM, ACCESS_CACHE };  // アクセスモード PSRAM に全部入れる | 逐次
 
+//------------------------------------------------------
+// FileTree 保持
+enum NodeType : u8_t { NODE_TYPE_DIR, NODE_TYPE_FILE };
+
+// ファイルノード
+struct Node {
+  NodeType type;
+  char* name;            // ファイル名 PSRAM配置
+  char* pngName;         // ディレクトリ既定 or ファイル固有のpngファイル名 PSRAM配置
+  Node* parent;          // 親ディレクトリ
+  Node* firstChild;      // 最初の子ノード
+  Node* lastChild;       // 最後の子ノード
+  Node* prev;            // 前の兄弟
+  Node* next;            // 次の兄弟
+  int fileCount;         // ディレクトリ直下の有効ファイル数
+  int dirCount;          // ディレクトリ直下の有効ディレクトリ数
+  int subtreeFileCount;  // 自ノード配下の全有効ファイル数
+
+  Node()
+      : type(NODE_TYPE_FILE),
+        name(nullptr),
+        pngName(nullptr),
+        parent(nullptr),
+        firstChild(nullptr),
+        lastChild(nullptr),
+        prev(nullptr),
+        next(nullptr),
+        fileCount(0),
+        dirCount(0),
+        subtreeFileCount(0) {
+  }
+};
+
+class FileTree {
+ public:
+  FileTree();
+  ~FileTree();
+
+  bool begin(const char* rootPath);
+  String getFullPath(Node* node);
+  Node* findNodeByPath(const String& path);
+  Node* getNextDirNode(Node* node);
+  Node* getPrevDirNode(Node* node);
+  Node* getNextFileNode(Node* node, bool wrap);
+  Node* getPrevFileNode(Node* node, bool wrap);
+  int getFileIndexInParent(Node* node) const;
+  Node* getFileNodeByIndexInDir(Node* dir, int index) const;
+  int getDirIndex(Node* node) const;
+  Node* getDirNodeByIndex(int index) const;
+
+  Node* getRoot() const { return _rootNode; }
+  int getTotalFiles() const { return _totalFiles; }
+
+ private:
+  Node* _rootNode;
+  int _totalFiles;
+
+  bool _isPlayableDir(Node* node) const;
+  Node* _findNextDirSibling(Node* node) const;
+  Node* _findPrevDirSibling(Node* node) const;
+  Node* _findFirstRootDir() const;
+  Node* _findLastRootDir() const;
+  Node* _findNodeByPath(Node* node, const String& path);
+  Node* _findFirstPlayableDirFrom(Node* node) const;
+  Node* _findLastPlayableDirFrom(Node* node) const;
+  Node* _findFirstPlayableDirInSubtree(Node* node) const;
+  Node* _findLastPlayableDirInSubtree(Node* node) const;
+  bool _findDirIndex(Node* node, Node* target, int& index) const;
+  Node* _findDirNodeByIndex(Node* node, int& index) const;
+  Node* _buildTree(const char* path, Node* parent);
+  bool _isTargetFile(const char* filename);
+  char* _ps_strdup(const char* s);
+  void _deleteTree(Node* node);
+};
+
 class NDFile {
  public:
   bool init();
@@ -37,18 +116,25 @@ class NDFile {
   bool dirPlay(int count);
   bool play(uint16_t d, uint16_t f, int8_t att = -1);
   bool fileOpen(uint16_t d, uint16_t f, int8_t att = -1);
+  bool openFile(String path, int8_t att = -1);
   uint8_t getFolderAttenuation(String path);  // フォルダの音量減衰取得
+  Node* findFileNodeByHistory(const String& dir, const String& file);
 
   uint16_t currentDir;      // 現在のディレクトリ
   uint16_t currentFile;     // 現在のファイル
   uint16_t totalSongs = 0;  // 合計曲数
   uint16_t getNumFilesinCurrentDir();
+  uint16_t getCurrentFileIndex();
+  uint16_t getCurrentDirFileCount();
+  String getCurrentFileName();
+  String getCurrentDirPath();
+  String getCurrentFilePath();
+  String getCurrentDirPngName();
+  String getCurrentFilePngName();
+  Node* currentNode;
 
   uint8_t* data;                           // データ本体
   uint32_t pos;                            // データ位置
-  std::vector<String> dirs;                // ルートのディレクトリ一覧
-  std::vector<String> pngs;                // ディレクトリごとのpng
-  std::vector<std::vector<String>> files;  // 各ディレクトリ内のファイル一覧
 
   u8_t get_ui8();
   u16_t get_ui16();
@@ -75,8 +161,12 @@ class NDFile {
 
   u16_t getGD3Cache(String filePath, u32_t gd3Offset);  // GD3部分のキャッシュを取得する
  private:
+  bool _playNode(Node* node, int8_t att = -1);
+  Node* _getCurrentDirNode() const;
+  void _updateCurrentIndexes();
 };
 
 extern NDFile ndFile;
+extern FileTree fileTree;
 
 #endif

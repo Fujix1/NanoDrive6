@@ -297,12 +297,17 @@ void PlayerWindow::redraw() {
   // 2) snap/[songno].png
   // 3) ***.png
 
-  String fileName = ndFile.files[ndFile.currentDir][ndFile.currentFile];
+  String fileName = ndFile.getCurrentFileName();
   fileName = fileName.substring(0, fileName.length() - 4);
 
-  if (openPNG(ndFile.dirs[ndFile.currentDir] + "/snap", fileName + ".png", true, true) == false) {
-    if (openPNG(ndFile.dirs[ndFile.currentDir] + "/snap", String(dispData.no) + ".png", true, true) == false) {
-      openPNG(ndFile.dirs[ndFile.currentDir], ndFile.pngs[ndFile.currentDir], true, true);
+  String dirPath = ndFile.getCurrentDirPath();
+  String filePngName = ndFile.getCurrentFilePngName();
+  String dirPngName = ndFile.getCurrentDirPngName();
+  if (filePngName != "" && openPNG(dirPath + "/snap", filePngName, true, true) == false) {
+    openPNG(dirPath, dirPngName, true, true);
+  } else if (filePngName == "" && openPNG(dirPath + "/snap", fileName + ".png", true, true) == false) {
+    if (openPNG(dirPath + "/snap", String(dispData.no) + ".png", true, true) == false) {
+      openPNG(dirPath, dirPngName, true, true);
     }
   }
 

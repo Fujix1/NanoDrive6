@@ -1,17 +1,25 @@
 #include "file.h"
 
+#include <dirent.h>
 #include <PNGdec.h>  // VGZ展開でPNGdec同梱のzlib型を使用
 
 static SPIClass SPI_SD;
-std::vector<String> dirs;                // ルートのディレクトリ一覧
-std::vector<String> pngs;                // ディレクトリごとのpng
-std::vector<std::vector<String>> files;  // 各ディレクトリ内のファイル一覧
 static File hFile;
 static SemaphoreHandle_t spFileOpen;  // ファイル開く処理用セマフォ
+static u16_t scanProgressX = 0;
+static u16_t scanProgressY = 0;
+
+#define ND_SD_MOUNTPOINT "/sd"
+#define ND_FILETREE_SCAN_PROGRESS_INTERVAL 20
 
 void showError(String message) {
   lcd.setCursor(0, 75);
   lcd.print(message.c_str());
+}
+
+static void updateScanProgress(int n) {
+  lcd.setCursor(scanProgressX, scanProgressY);
+  lcd.printf("%d\n", n);
 }
 
 //-------------------------------------------------------------------------
@@ -133,6 +141,7 @@ bool initCache(String path) {
 bool NDFile::init() {
   currentDir = 0;
   currentFile = 0;
+  currentNode = nullptr;
 
   // セマフォ作成
   spFileOpen = xSemaphoreCreateBinary();
@@ -198,87 +207,46 @@ bool NDFile::init() {
   return true;
 }
 
-uint16_t NDFile::getNumFilesinCurrentDir() { return files[currentDir].size(); }
+uint16_t NDFile::getNumFilesinCurrentDir() { return getCurrentDirFileCount(); }
+
+uint16_t NDFile::getCurrentFileIndex() {
+  int index = fileTree.getFileIndexInParent(currentNode);
+  return (index < 0) ? 0 : index;
+}
+
+uint16_t NDFile::getCurrentDirFileCount() {
+  Node* dirNode = _getCurrentDirNode();
+  return dirNode ? dirNode->fileCount : 0;
+}
+
+String NDFile::getCurrentFileName() {
+  return (currentNode && currentNode->type == NODE_TYPE_FILE && currentNode->name) ? String(currentNode->name) : "";
+}
+
+String NDFile::getCurrentDirPath() {
+  return fileTree.getFullPath(_getCurrentDirNode());
+}
+
+String NDFile::getCurrentFilePath() {
+  return fileTree.getFullPath(currentNode);
+}
+
+String NDFile::getCurrentDirPngName() {
+  Node* dirNode = _getCurrentDirNode();
+  return (dirNode && dirNode->pngName) ? String(dirNode->pngName) : "";
+}
+
+String NDFile::getCurrentFilePngName() {
+  return (currentNode && currentNode->pngName) ? String(currentNode->pngName) : "";
+}
 
 void NDFile::listDir(const char* dirname) {
-  File root = SD.open(dirname);
-  if (!root) {
-    lcd.println("Error: SD card open failed.");
-    return;
-  }
-
-  String dirName;
-  String filename;
-  bool isDir;
-
   lcd.println("\nReading files...");
-
-  // ディレクトリ取得
-  dirName = root.getNextFileName(&isDir);
-  while (dirName != "") {
-    if (isDir) {
-      if (dirName != "/System Volume Information") {
-        // ディレクトリ内の有効ファイルチェック
-        File dir = SD.open(dirName);
-        int validFileCount = 0;
-        while (1) {
-          filename = dir.getNextFileName(&isDir);
-          if (filename == "") break;
-          if (isDir) break;
-          String ext = filename.substring(filename.length() - 4);
-          if (ext.equalsIgnoreCase(".vgm")) {
-            validFileCount++;
-          } else if (ext.equalsIgnoreCase(".vgz")) {
-            validFileCount++;
-          } else if (ext.equalsIgnoreCase(".xgm")) {
-            validFileCount++;
-          }
-        }
-        dir.close();
-
-        if (validFileCount > 0) {
-          dirs.push_back(dirName);
-          pngs.push_back("");
-        }
-      }
-    }
-    dirName = root.getNextFileName(&isDir);
-  }
-  root.close();
-
-  // 各ディレクトリ内のファイル名取得
-  files.resize(dirs.size());
-
-  u16_t x = lcd.getCursorX(), y = lcd.getCursorY();
-  for (int i = 0; i < dirs.size(); i++) {
-    File dir = SD.open(dirs[i]);
-    lcd.setCursor(x, y);
-    lcd.printf("%s                                                                                         ",
-               dirs[i].c_str());
-
-    while (1) {
-      filename = dir.getNextFileName(&isDir);
-      if (filename == "") break;
-      if (!isDir) {
-        String ext = filename.substring(filename.length() - 4);
-        if (ext.equalsIgnoreCase(".vgm")) {
-          totalSongs++;
-          files[i].push_back(filename.substring(dirs[i].length() + 1));
-        } else if (ext.equalsIgnoreCase(".vgz")) {
-          totalSongs++;
-          files[i].push_back(filename.substring(dirs[i].length() + 1));
-        } else if (ext.equalsIgnoreCase(".xgm")) {
-          totalSongs++;
-          files[i].push_back(filename.substring(dirs[i].length() + 1));
-        } else if (ext == ".png") {
-          pngs[i] = filename.substring(dirs[i].length() + 1);
-        }
-      }
-    }
-    dir.close();
-  }
-
-  lcd.setCursor(0, y);
+  fileTree.begin(dirname);
+  totalSongs = fileTree.getTotalFiles();
+  Node* firstDir = fileTree.getNextDirNode(fileTree.getRoot());
+  currentNode = fileTree.getNextFileNode(firstDir, false);
+  _updateCurrentIndexes();
   return;
 }
 
@@ -554,10 +522,20 @@ FileFormat NDFile::readFile(String path) {
 // ディレクトリ内の count 個あとの曲再生。マイナスは前の曲
 // 戻り値: 成功/不成功
 bool NDFile::filePlay(int count) {
-  // 履歴保存やファイル処理より先に現在の音を止める。
-  nju72341.mute();
-  currentFile = mod(currentFile + count, files[currentDir].size());
-  return fileOpen(currentDir, currentFile);
+  Node* targetFile = nullptr;
+
+  if (count < 0) {
+    targetFile = fileTree.getPrevFileNode(currentNode, true);
+  } else if (count > 0) {
+    targetFile = fileTree.getNextFileNode(currentNode, true);
+  } else {
+    targetFile = currentNode;
+  }
+
+  if (!targetFile) {
+    return false;
+  }
+  return _playNode(targetFile);
 }
 
 //----------------------------------------------------------------------
@@ -565,20 +543,39 @@ bool NDFile::filePlay(int count) {
 // マイナスは前のディレクトリ
 // 戻り値: 成功/不成功
 bool NDFile::dirPlay(int count) {
-  // 減衰設定の検索はSDアクセスを伴うため、その前にミュートする。
-  nju72341.mute();
-  currentFile = 0;
-  currentDir = mod(currentDir + count, dirs.size());
-  return fileOpen(currentDir, currentFile, ndFile.getFolderAttenuation(dirs[currentDir]));
+  Node* targetDir = nullptr;
+
+  if (!currentNode) {
+    if (count >= 0) {
+      targetDir = fileTree.getDirNodeByIndex(count);
+    } else {
+      targetDir = fileTree.getPrevDirNode(fileTree.getRoot());
+    }
+  } else if (count < 0) {
+    targetDir = fileTree.getPrevDirNode(currentNode);
+  } else if (count > 0) {
+    targetDir = fileTree.getNextDirNode(currentNode);
+  } else {
+    targetDir = _getCurrentDirNode();
+  }
+
+  Node* targetFile = fileTree.getNextFileNode(targetDir, false);
+  if (!targetFile) {
+    return false;
+  }
+  return _playNode(targetFile);
 }
 
 //----------------------------------------------------------------------
 // 直接ファイル再生
 // 戻り値: 成功/不成功
 bool NDFile::play(uint16_t d, uint16_t f, int8_t att) {
-  currentFile = f;
-  currentDir = d;
-  return fileOpen(currentDir, currentFile, ndFile.getFolderAttenuation(dirs[currentDir]));
+  Node* targetDir = fileTree.getDirNodeByIndex(d);
+  Node* targetFile = fileTree.getFileNodeByIndexInDir(targetDir, f);
+  if (!targetFile) {
+    return false;
+  }
+  return _playNode(targetFile, att);
 }
 
 //----------------------------------------------------------------------
@@ -587,6 +584,18 @@ bool NDFile::play(uint16_t d, uint16_t f, int8_t att) {
 // att: 音量減衰率 0 - 96 dB, -1 = 変更しない
 
 bool NDFile::fileOpen(uint16_t d, uint16_t f, int8_t att) {
+  return play(d, f, att);
+}
+
+bool NDFile::_playNode(Node* node, int8_t att) {
+  if (!node || node->type != NODE_TYPE_FILE) return false;
+  currentNode = node;
+  _updateCurrentIndexes();
+  String path = fileTree.getFullPath(currentNode);
+  return openFile(path, att);
+}
+
+bool NDFile::openFile(String path, int8_t att) {
   if (xSemaphoreTake(spFileOpen, 0) != pdTRUE) {
     Serial.printf("Semapho is already taken.\n");
     return false;
@@ -598,9 +607,13 @@ bool NDFile::fileOpen(uint16_t d, uint16_t f, int8_t att) {
   FM.reset();
   ND::resetPlaybackState();
 
-  String st = dirs[d] + "/" + files[d][f];
+  if (att < 0) {
+    int lastSlash = path.lastIndexOf('/');
+    String dirPath = (lastSlash > 0) ? path.substring(0, lastSlash) : "/";
+    att = getFolderAttenuation(dirPath);
+  }
 
-  ND::fileFormat = readFile(st);
+  ND::fileFormat = readFile(path);
 
   switch (ND::fileFormat) {
     case FileFormat::VGM: {
@@ -631,6 +644,31 @@ bool NDFile::fileOpen(uint16_t d, uint16_t f, int8_t att) {
   return ND::canPlay;
 }
 
+Node* NDFile::_getCurrentDirNode() const {
+  if (!currentNode) return nullptr;
+  if (currentNode->type == NODE_TYPE_DIR) return currentNode;
+  return currentNode->parent;
+}
+
+void NDFile::_updateCurrentIndexes() {
+  Node* dirNode = _getCurrentDirNode();
+  int dirIndex = fileTree.getDirIndex(dirNode);
+  int fileIndex = fileTree.getFileIndexInParent(currentNode);
+  currentDir = (dirIndex < 0) ? 0 : dirIndex;
+  currentFile = (fileIndex < 0) ? 0 : fileIndex;
+}
+
+Node* NDFile::findFileNodeByHistory(const String& dir, const String& file) {
+  if (dir == "" || file == "") return nullptr;
+  String path = dir;
+  if (!path.endsWith("/")) {
+    path += "/";
+  }
+  path += file;
+  Node* node = fileTree.findNodeByPath(path);
+  return (node && node->type == NODE_TYPE_FILE) ? node : nullptr;
+}
+
 //----------------------------------------------------------------------
 // フォルダの減衰量取得
 // 戻り値: 0 - 96 dB
@@ -645,12 +683,13 @@ uint8_t NDFile::getFolderAttenuation(String path) {
 
   while (1) {
     String filePath = dir.getNextFileName(&isDir);
-    if (filePath == "") return 0;
+    if (filePath == "") break;
 
     if (!isDir) {
       String fileName = filePath.substring(filePath.lastIndexOf("/") + 1);
       if (fileName.substring(0, 3) == "att") {
         int att = fileName.substring(3).toInt();
+        dir.close();
         if (att > 0 && att <= 24) {
           return att;
         } else {
@@ -804,5 +843,672 @@ u32_t NDFile::get_ui32_at_header(uint32_t p) {
 }
 
 NDFile ndFile = NDFile();
+
+//------------------------------------------------------
+// FileTree 保持
+
+FileTree::FileTree() : _rootNode(nullptr), _totalFiles(0) {
+}
+
+FileTree::~FileTree() {
+  if (_rootNode) _deleteTree(_rootNode);
+}
+
+char* FileTree::_ps_strdup(const char* s) {
+  if (s == nullptr) return nullptr;
+  size_t len = strlen(s) + 1;
+  char* d = (char*)ps_malloc(len);
+  if (d) memcpy(d, s, len);
+  return d;
+}
+
+bool FileTree::_isTargetFile(const char* filename) {
+  const char* ext = strrchr(filename, '.');
+  if (!ext) return false;
+  if (strcasecmp(ext, ".vgm") == 0) return true;
+  if (strcasecmp(ext, ".vgz") == 0) return true;
+  if (strcasecmp(ext, ".xgm") == 0) return true;
+  return false;
+}
+
+bool FileTree::begin(const char* rootPath) {
+  if (_rootNode) {
+    _deleteTree(_rootNode);
+    _rootNode = nullptr;
+  }
+
+  _totalFiles = 0;
+  lcd.print("Scanned files: ");
+  scanProgressX = lcd.getCursorX();
+  scanProgressY = lcd.getCursorY();
+  updateScanProgress(_totalFiles);
+
+  _rootNode = (Node*)ps_malloc(sizeof(Node));
+  *_rootNode = Node();
+  _rootNode->type = NODE_TYPE_DIR;
+  _rootNode->name = _ps_strdup("");
+  _rootNode->parent = nullptr;
+
+  String scanRootPath = String(ND_SD_MOUNTPOINT);
+  if (rootPath && strcmp(rootPath, "/") != 0) {
+    if (rootPath[0] != '/') {
+      scanRootPath += "/";
+    }
+    scanRootPath += rootPath;
+  }
+
+  Node* children = _buildTree(scanRootPath.c_str(), _rootNode);
+  _rootNode->firstChild = children;
+  updateScanProgress(_totalFiles);
+
+  return true;
+}
+
+bool FileTree::_isPlayableDir(Node* node) const {
+  return node && node->type == NODE_TYPE_DIR && node->fileCount > 0;
+}
+
+Node* FileTree::_findNextDirSibling(Node* node) const {
+  if (!node) return nullptr;
+
+  Node* sibling = node->next;
+  while (sibling) {
+    if (sibling->type == NODE_TYPE_DIR) {
+      return sibling;
+    }
+    sibling = sibling->next;
+  }
+  return nullptr;
+}
+
+Node* FileTree::_findPrevDirSibling(Node* node) const {
+  if (!node) return nullptr;
+
+  Node* sibling = node->prev;
+  while (sibling) {
+    if (sibling->type == NODE_TYPE_DIR) {
+      return sibling;
+    }
+    sibling = sibling->prev;
+  }
+  return nullptr;
+}
+
+Node* FileTree::_findFirstRootDir() const {
+  if (!_rootNode) return nullptr;
+  Node* node = _rootNode->firstChild;
+  while (node) {
+    if (node->type == NODE_TYPE_DIR) {
+      return node;
+    }
+    node = node->next;
+  }
+  return nullptr;
+}
+
+Node* FileTree::_findLastRootDir() const {
+  if (!_rootNode) return nullptr;
+  Node* node = _rootNode->lastChild;
+  while (node) {
+    if (node->type == NODE_TYPE_DIR) {
+      return node;
+    }
+    node = node->prev;
+  }
+  return nullptr;
+}
+
+Node* FileTree::findNodeByPath(const String& path) {
+  if (!_rootNode || path == "") return nullptr;
+  if (path == "/") return _rootNode;
+  return _findNodeByPath(_rootNode->firstChild, path);
+}
+
+Node* FileTree::_findNodeByPath(Node* node, const String& path) {
+  Node* current = node;
+  while (current) {
+    if (getFullPath(current) == path) {
+      return current;
+    }
+    if (current->firstChild) {
+      Node* child = _findNodeByPath(current->firstChild, path);
+      if (child) {
+        return child;
+      }
+    }
+    current = current->next;
+  }
+  return nullptr;
+}
+
+Node* FileTree::_findFirstPlayableDirFrom(Node* node) const {
+  if (!node || node->type != NODE_TYPE_DIR) return nullptr;
+  if (_isPlayableDir(node)) {
+    return node;
+  }
+  return _findFirstPlayableDirInSubtree(node->firstChild);
+}
+
+Node* FileTree::_findLastPlayableDirFrom(Node* node) const {
+  if (!node || node->type != NODE_TYPE_DIR) return nullptr;
+  Node* nested = _findLastPlayableDirInSubtree(node->lastChild);
+  if (nested) {
+    return nested;
+  }
+  if (_isPlayableDir(node)) {
+    return node;
+  }
+  return nullptr;
+}
+
+Node* FileTree::_findFirstPlayableDirInSubtree(Node* node) const {
+  Node* child = node;
+  while (child) {
+    if (child->type == NODE_TYPE_DIR) {
+      if (_isPlayableDir(child)) {
+        return child;
+      }
+      Node* nested = _findFirstPlayableDirInSubtree(child->firstChild);
+      if (nested) {
+        return nested;
+      }
+    }
+    child = child->next;
+  }
+  return nullptr;
+}
+
+Node* FileTree::_findLastPlayableDirInSubtree(Node* node) const {
+  Node* child = node;
+  while (child) {
+    if (child->type == NODE_TYPE_DIR) {
+      Node* nested = _findLastPlayableDirInSubtree(child->lastChild);
+      if (nested) {
+        return nested;
+      }
+      if (_isPlayableDir(child)) {
+        return child;
+      }
+    }
+    child = child->prev;
+  }
+  return nullptr;
+}
+
+Node* FileTree::getNextDirNode(Node* node) {
+  if (!_rootNode) return nullptr;
+
+  if (!node || node == _rootNode) {
+    return _findFirstPlayableDirFrom(_rootNode);
+  }
+
+  if (node->type == NODE_TYPE_FILE) {
+    node = node->parent;
+  }
+
+  if (node && node->type == NODE_TYPE_DIR) {
+    Node* childDir = _findFirstPlayableDirInSubtree(node->firstChild);
+    if (childDir) {
+      return childDir;
+    }
+  }
+
+  Node* cursor = node;
+  while (cursor) {
+    Node* candidate = _findNextDirSibling(cursor);
+    if (candidate) {
+      return _findFirstPlayableDirFrom(candidate);
+    }
+
+    Node* parent = cursor->parent;
+    if (!parent) {
+      break;
+    }
+    if (parent == _rootNode) {
+      return _findFirstPlayableDirFrom(_rootNode);
+    }
+    cursor = parent;
+  }
+
+  return nullptr;
+}
+
+Node* FileTree::getPrevDirNode(Node* node) {
+  if (!_rootNode) return nullptr;
+
+  if (node && node->type == NODE_TYPE_FILE) {
+    node = node->parent;
+  }
+
+  if (!node || node == _rootNode) {
+    return _findLastPlayableDirFrom(_findLastRootDir());
+  }
+
+  Node* cursor = node;
+  while (cursor) {
+    Node* candidate = _findPrevDirSibling(cursor);
+    if (candidate) {
+      return _findLastPlayableDirFrom(candidate);
+    }
+
+    Node* parent = cursor->parent;
+    if (!parent) {
+      break;
+    }
+    if (_isPlayableDir(parent)) {
+      return parent;
+    }
+    if (parent == _rootNode) {
+      return _findLastPlayableDirFrom(_findLastRootDir());
+    }
+    cursor = parent;
+  }
+
+  return nullptr;
+}
+
+int FileTree::getFileIndexInParent(Node* node) const {
+  if (!node || node->type != NODE_TYPE_FILE || !node->parent) {
+    return -1;
+  }
+
+  int index = 0;
+  Node* sibling = node->parent->firstChild;
+  while (sibling) {
+    if (sibling->type == NODE_TYPE_FILE) {
+      if (sibling == node) {
+        return index;
+      }
+      index++;
+    }
+    sibling = sibling->next;
+  }
+
+  return -1;
+}
+
+Node* FileTree::getFileNodeByIndexInDir(Node* dir, int index) const {
+  if (!dir || dir->type != NODE_TYPE_DIR || index < 0) {
+    return nullptr;
+  }
+
+  int currentIndex = 0;
+  Node* child = dir->firstChild;
+  while (child) {
+    if (child->type == NODE_TYPE_FILE) {
+      if (currentIndex == index) {
+        return child;
+      }
+      currentIndex++;
+    }
+    child = child->next;
+  }
+  return nullptr;
+}
+
+Node* FileTree::getNextFileNode(Node* node, bool wrap) {
+  if (!node) return nullptr;
+
+  if (node->type == NODE_TYPE_DIR) {
+    Node* child = node->firstChild;
+    while (child) {
+      if (child->type == NODE_TYPE_FILE) {
+        return child;
+      }
+      child = child->next;
+    }
+    return nullptr;
+  }
+
+  Node* sibling = node->next;
+  while (sibling) {
+    if (sibling->type == NODE_TYPE_FILE) {
+      return sibling;
+    }
+    sibling = sibling->next;
+  }
+
+  if (!wrap) return nullptr;
+
+  Node* parent = node->parent;
+  if (!parent) return nullptr;
+
+  sibling = parent->firstChild;
+  while (sibling && sibling != node) {
+    if (sibling->type == NODE_TYPE_FILE) {
+      return sibling;
+    }
+    sibling = sibling->next;
+  }
+
+  return (node->type == NODE_TYPE_FILE) ? node : nullptr;
+}
+
+Node* FileTree::getPrevFileNode(Node* node, bool wrap) {
+  if (!node) return nullptr;
+
+  if (node->type == NODE_TYPE_DIR) {
+    Node* child = node->lastChild;
+    while (child) {
+      if (child->type == NODE_TYPE_FILE) {
+        return child;
+      }
+      child = child->prev;
+    }
+    return nullptr;
+  }
+
+  Node* sibling = node->prev;
+  while (sibling) {
+    if (sibling->type == NODE_TYPE_FILE) {
+      return sibling;
+    }
+    sibling = sibling->prev;
+  }
+
+  if (!wrap) return nullptr;
+
+  Node* parent = node->parent;
+  if (!parent) return nullptr;
+
+  sibling = parent->lastChild;
+  while (sibling && sibling != node) {
+    if (sibling->type == NODE_TYPE_FILE) {
+      return sibling;
+    }
+    sibling = sibling->prev;
+  }
+
+  return (node->type == NODE_TYPE_FILE) ? node : nullptr;
+}
+
+bool FileTree::_findDirIndex(Node* node, Node* target, int& index) const {
+  Node* current = node;
+  while (current) {
+    if (current->type == NODE_TYPE_DIR) {
+      if (_isPlayableDir(current)) {
+        if (current == target) {
+          return true;
+        }
+        index++;
+      }
+      if (current->subtreeFileCount > 0 && _findDirIndex(current->firstChild, target, index)) {
+        return true;
+      }
+    }
+    current = current->next;
+  }
+  return false;
+}
+
+int FileTree::getDirIndex(Node* node) const {
+  if (!node || node->type != NODE_TYPE_DIR || !_rootNode) {
+    return -1;
+  }
+  int index = 0;
+  if (_isPlayableDir(_rootNode)) {
+    if (node == _rootNode) return 0;
+    index++;
+  }
+  return _findDirIndex(_rootNode->firstChild, node, index) ? index : -1;
+}
+
+Node* FileTree::_findDirNodeByIndex(Node* node, int& index) const {
+  Node* current = node;
+  while (current) {
+    if (current->type == NODE_TYPE_DIR) {
+      if (_isPlayableDir(current)) {
+        if (index == 0) {
+          return current;
+        }
+        index--;
+      }
+      if (current->subtreeFileCount > 0) {
+        Node* nested = _findDirNodeByIndex(current->firstChild, index);
+        if (nested) {
+          return nested;
+        }
+      }
+    }
+    current = current->next;
+  }
+  return nullptr;
+}
+
+Node* FileTree::getDirNodeByIndex(int index) const {
+  if (!_rootNode || index < 0) return nullptr;
+  if (_isPlayableDir(_rootNode)) {
+    if (index == 0) return _rootNode;
+    index--;
+  }
+  return _findDirNodeByIndex(_rootNode->firstChild, index);
+}
+
+Node* FileTree::_buildTree(const char* path, Node* parent) {
+  DIR* dir = opendir(path);
+  if (!dir) {
+    return nullptr;
+  }
+  rewinddir(dir);
+
+  Node* fileHead = nullptr;
+  Node* fileTail = nullptr;
+  Node* dirHead = nullptr;
+  Node* dirTail = nullptr;
+
+  struct PendingDirEntry {
+    String fullPath;
+    String baseName;
+  };
+
+  std::vector<String> targetFiles;
+  std::vector<PendingDirEntry> childDirs;
+  String snapDirPath;
+
+  auto appendNode = [](Node*& head, Node*& tail, Node* node) {
+    if (!head) {
+      head = node;
+    }
+    if (tail) {
+      tail->next = node;
+      node->prev = tail;
+    }
+    tail = node;
+  };
+
+  auto getBaseNameWithoutExt = [](const String& name) {
+    int dotPos = name.lastIndexOf('.');
+    return (dotPos == -1) ? name : name.substring(0, dotPos);
+  };
+
+  auto isNumericName = [](const String& name) {
+    if (name.length() == 0) return false;
+    for (size_t i = 0; i < name.length(); i++) {
+      char c = name.charAt(i);
+      if (c < '0' || c > '9') return false;
+    }
+    return true;
+  };
+
+  while (true) {
+    struct dirent* entry = readdir(dir);
+    if (!entry) break;
+
+    String baseName = String(entry->d_name);
+    if (baseName.startsWith(".") || baseName.equalsIgnoreCase("System Volume Information") ||
+        baseName.equalsIgnoreCase("__MACOSX")) {
+      continue;
+    }
+
+    if (entry->d_type == DT_DIR) {
+      if (baseName.equalsIgnoreCase("snap")) {
+        snapDirPath = String(path);
+        if (!snapDirPath.endsWith("/")) {
+          snapDirPath += "/";
+        }
+        snapDirPath += baseName;
+      } else {
+        String fullPath = String(path);
+        if (!fullPath.endsWith("/")) {
+          fullPath += "/";
+        }
+        fullPath += baseName;
+        childDirs.push_back({fullPath, baseName});
+      }
+    } else {
+      const char* ext = strrchr(baseName.c_str(), '.');
+      if (ext && strcasecmp(ext, ".png") == 0) {
+        if (parent->pngName) free(parent->pngName);
+        parent->pngName = _ps_strdup(baseName.c_str());
+      }
+
+      if (_isTargetFile(baseName.c_str())) {
+        targetFiles.push_back(baseName);
+      }
+    }
+  }
+  closedir(dir);
+
+  std::vector<Node*> fileNodes;
+  for (const String& fileName : targetFiles) {
+    Node* fileNode = (Node*)ps_malloc(sizeof(Node));
+    *fileNode = Node();
+    fileNode->type = NODE_TYPE_FILE;
+    fileNode->name = _ps_strdup(fileName.c_str());
+    fileNode->parent = parent;
+    fileNode->subtreeFileCount = 1;
+    fileNodes.push_back(fileNode);
+    appendNode(fileHead, fileTail, fileNode);
+    parent->fileCount++;
+    _totalFiles++;
+    if ((_totalFiles % ND_FILETREE_SCAN_PROGRESS_INTERVAL) == 0) {
+      updateScanProgress(_totalFiles);
+    }
+  }
+
+  if (snapDirPath.length() > 0 && !fileNodes.empty()) {
+    struct PendingSnapMatch {
+      String stem;
+      String fileName;
+      int index;
+      bool isIndex;
+    };
+
+    std::vector<PendingSnapMatch> snapMatches;
+    DIR* snapDir = opendir(snapDirPath.c_str());
+    if (snapDir) {
+      while (true) {
+        struct dirent* snapEntry = readdir(snapDir);
+        if (!snapEntry) break;
+        if (snapEntry->d_type == DT_DIR) continue;
+
+        String snapBaseName = String(snapEntry->d_name);
+        const char* snapExt = strrchr(snapBaseName.c_str(), '.');
+        if (!snapExt || strcasecmp(snapExt, ".png") != 0) {
+          continue;
+        }
+
+        String snapStem = getBaseNameWithoutExt(snapBaseName);
+        PendingSnapMatch match = {snapStem, snapBaseName, 0, false};
+        if (isNumericName(snapStem)) {
+          match.index = snapStem.toInt();
+          match.isIndex = true;
+        }
+        snapMatches.push_back(match);
+      }
+      closedir(snapDir);
+    }
+
+    for (Node* fileNode : fileNodes) {
+      String fileStem = getBaseNameWithoutExt(String(fileNode->name));
+      for (const PendingSnapMatch& match : snapMatches) {
+        if (!match.isIndex && strcasecmp(match.stem.c_str(), fileStem.c_str()) == 0) {
+          if (fileNode->pngName) free(fileNode->pngName);
+          fileNode->pngName = _ps_strdup(match.fileName.c_str());
+          break;
+        }
+      }
+    }
+
+    for (const PendingSnapMatch& match : snapMatches) {
+      if (!match.isIndex || match.index <= 0 || match.index > (int)fileNodes.size()) {
+        continue;
+      }
+      Node* fileNode = fileNodes[match.index - 1];
+      if (fileNode->pngName == nullptr) {
+        fileNode->pngName = _ps_strdup(match.fileName.c_str());
+      }
+    }
+  }
+
+  for (const PendingDirEntry& childDir : childDirs) {
+    Node* dirNode = (Node*)ps_malloc(sizeof(Node));
+    *dirNode = Node();
+    dirNode->type = NODE_TYPE_DIR;
+    dirNode->name = _ps_strdup(childDir.baseName.c_str());
+    dirNode->parent = parent;
+
+    Node* subChild = _buildTree(childDir.fullPath.c_str(), dirNode);
+    if (subChild == nullptr) {
+      free(dirNode->name);
+      if (dirNode->pngName) free(dirNode->pngName);
+      free(dirNode);
+      continue;
+    }
+
+    dirNode->firstChild = subChild;
+    appendNode(dirHead, dirTail, dirNode);
+    parent->dirCount++;
+  }
+
+  parent->subtreeFileCount = parent->fileCount;
+  for (Node* child = dirHead; child != nullptr; child = child->next) {
+    parent->subtreeFileCount += child->subtreeFileCount;
+  }
+
+  Node* firstChild = fileHead ? fileHead : dirHead;
+  Node* lastChild = dirTail ? dirTail : fileTail;
+
+  if (fileTail && dirHead) {
+    fileTail->next = dirHead;
+    dirHead->prev = fileTail;
+  }
+
+  parent->firstChild = firstChild;
+  parent->lastChild = lastChild;
+
+  return firstChild;
+}
+
+String FileTree::getFullPath(Node* node) {
+  if (!node) return "";
+
+  String path = "";
+  Node* current = node;
+
+  while (current && current->parent) {
+    String name = String(current->name);
+    if (path == "")
+      path = name;
+    else
+      path = name + "/" + path;
+    current = current->parent;
+  }
+
+  return "/" + path;
+}
+
+void FileTree::_deleteTree(Node* node) {
+  while (node) {
+    Node* nextSibling = node->next;
+    if (node->firstChild) _deleteTree(node->firstChild);
+    if (node->name) free(node->name);
+    if (node->pngName) free(node->pngName);
+    free(node);
+    node = nextSibling;
+  }
+}
+
+FileTree fileTree = FileTree();
 
 int mod(int i, int j) { return (i % j) < 0 ? (i % j) + 0 + (j < 0 ? -j : j) : (i % j + 0); }

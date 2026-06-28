@@ -123,9 +123,9 @@ void NDConfig::saveCfg() {
 // ヒストリ保存
 void NDConfig::saveHistory() {
   // メインスレッドで保存
-  if (ndFile.dirs.size() > 0) {
-    preferences.putString("dir", ndFile.dirs[ndFile.currentDir]);
-    preferences.putString("file", ndFile.files[ndFile.currentDir][ndFile.currentFile]);
+  if (ndFile.currentNode) {
+    preferences.putString("dir", ndFile.getCurrentDirPath());
+    preferences.putString("file", ndFile.getCurrentFileName());
   }
 }
 
@@ -156,23 +156,14 @@ u32_t NDConfig::loadHistory() {
   String dir = preferences.getString("dir");
   String file = preferences.getString("file");
 
-  u16_t fld = 0, trk = 0;
-
-  for (int i = 0; i < ndFile.dirs.size(); i++) {
-    if (ndFile.dirs[i] == dir) {
-      fld = i;
-      break;
-    }
+  Node* node = ndFile.findFileNodeByHistory(dir, file);
+  if (node) {
+    u16_t fld = fileTree.getDirIndex(node->parent);
+    u16_t trk = fileTree.getFileIndexInParent(node);
+    return (trk << 16) + fld;
   }
 
-  for (int i = 0; i < ndFile.files[fld].size(); i++) {
-    if (ndFile.files[fld][i] == file) {
-      trk = i;
-      break;
-    }
-  }
-
-  return (trk << 16) + fld;
+  return 0;
 }
 
 void NDConfig::remove() { preferences.clear(); }
