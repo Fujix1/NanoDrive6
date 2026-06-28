@@ -522,6 +522,15 @@ FileFormat NDFile::readFile(String path) {
 // ディレクトリ内の count 個あとの曲再生。マイナスは前の曲
 // 戻り値: 成功/不成功
 bool NDFile::filePlay(int count) {
+  switch (ndConfig.get(CFG_SHUFFLE)) {
+    case TRANDOM_FOLDER:
+      return _playRandomFile(count);
+    case TRANDOM_ALL:
+      return _playRandomAll(count);
+    default:
+      break;
+  }
+
   Node* targetFile = nullptr;
 
   if (count < 0) {
@@ -538,11 +547,67 @@ bool NDFile::filePlay(int count) {
   return _playNode(targetFile);
 }
 
+bool NDFile::_playRandomFile(int count) {
+  Node* dirNode = _getCurrentDirNode();
+  if (!dirNode || dirNode->type != NODE_TYPE_DIR || dirNode->fileCount <= 0) {
+    _resetRandomState(_folderFileRandomState);
+    return false;
+  }
+
+  if (count == 0) {
+    return _playNode(currentNode);
+  }
+
+  int currentIndex = fileTree.getFileIndexInParent(currentNode);
+  if (!_prepareRandomState(_folderFileRandomState, RANDOM_STATE_FOLDER_FILE, dirNode,
+                           dirNode->fileCount, currentIndex)) {
+    return false;
+  }
+
+  Node* target = _advanceRandomState(_folderFileRandomState, count);
+  if (!target) {
+    return false;
+  }
+  return _playNode(target);
+}
+
+bool NDFile::_playRandomAll(int count) {
+  if (!currentNode || currentNode->type != NODE_TYPE_FILE) {
+    _resetRandomState(_allFileRandomState);
+    return false;
+  }
+
+  if (count == 0) {
+    return _playNode(currentNode);
+  }
+
+  int currentIndex = fileTree.getGlobalFileIndex(currentNode);
+  if (!_prepareRandomState(_allFileRandomState, RANDOM_STATE_ALL_FILE, fileTree.getRoot(),
+                           fileTree.getTotalFiles(), currentIndex)) {
+    return false;
+  }
+
+  Node* target = _advanceRandomState(_allFileRandomState, count);
+  if (!target) {
+    return false;
+  }
+  return _playNode(target);
+}
+
 //----------------------------------------------------------------------
 // count 個あとのディレクトリを開いて最初のファイルを再生。
 // マイナスは前のディレクトリ
 // 戻り値: 成功/不成功
 bool NDFile::dirPlay(int count) {
+  switch (ndConfig.get(CFG_SHUFFLE)) {
+    case TRANDOM_FOLDER:
+      break;
+    case TRANDOM_ALL:
+      return _playRandomAll(count);
+    default:
+      break;
+  }
+
   Node* targetDir = nullptr;
 
   if (!currentNode) {
@@ -559,7 +624,16 @@ bool NDFile::dirPlay(int count) {
     targetDir = _getCurrentDirNode();
   }
 
-  Node* targetFile = fileTree.getNextFileNode(targetDir, false);
+  Node* targetFile = nullptr;
+  if (ndConfig.get(CFG_SHUFFLE) == TRANDOM_FOLDER && count != 0 && targetDir &&
+      targetDir->fileCount > 0) {
+    // フォルダ移動時は、移動先フォルダの直下ファイルからシャッフルに開始する
+    int randomIndex = (int)(_nextRandomValue() % (u32_t)targetDir->fileCount);
+    targetFile = fileTree.getFileNodeByIndexInDir(targetDir, randomIndex);
+  } else {
+    targetFile = fileTree.getNextFileNode(targetDir, false);
+  }
+
   if (!targetFile) {
     return false;
   }
@@ -667,6 +741,131 @@ Node* NDFile::findFileNodeByHistory(const String& dir, const String& file) {
   path += file;
   Node* node = fileTree.findNodeByPath(path);
   return (node && node->type == NODE_TYPE_FILE) ? node : nullptr;
+}
+
+void NDFile::resetRandomSession() {
+  // 設定変更などでシャッフル順のセッションを明示的に破棄する
+  _resetRandomState(_folderFileRandomState);
+  _resetRandomState(_allFileRandomState);
+}
+
+void NDFile::_resetRandomState(RandomSequenceState& state) {
+  state = RandomSequenceState();
+}
+
+u32_t NDFile::_nextRandomValue() const {
+  return esp_random() ^ ((u32_t)micros() << 1);
+}
+
+int NDFile::_normalizeModulo(int value, int mod) const {
+  if (mod <= 0) return 0;
+  int result = value % mod;
+  if (result < 0) {
+    result += mod;
+  }
+  return result;
+}
+
+u32_t NDFile::_permuteDomainValue(u32_t value, int bits, u32_t salt) const {
+  if (bits <= 0) {
+    return 0;
+  }
+
+  int halfBits = bits / 2;
+  u32_t halfMask = (1u << halfBits) - 1u;
+  u32_t left = (value >> halfBits) & halfMask;
+  u32_t right = value & halfMask;
+
+  for (u32_t round = 0; round < 4; round++) {
+    u32_t mix = right;
+    mix ^= salt + 0x9e3779b9u * (round + 1u);
+    mix *= 0x45d9f3bu;
+    mix ^= mix >> 16;
+    u32_t next = (left ^ mix) & halfMask;
+    left = right;
+    right = next;
+  }
+
+  return ((left & halfMask) << halfBits) | (right & halfMask);
+}
+
+int NDFile::_getPermutationValue(int index, int total, u32_t salt) const {
+  if (total <= 1) {
+    return 0;
+  }
+
+  int bits = 0;
+  u32_t domain = 1;
+  while ((int)domain < total) {
+    domain <<= 1;
+    bits++;
+  }
+  if ((bits & 1) != 0) {
+    domain <<= 1;
+    bits++;
+  }
+
+  // offset を疑似順列に写して、一定刻みではない前後移動を作る
+  u32_t value = (u32_t)index;
+  while (true) {
+    value = _permuteDomainValue(value, bits, salt) & (domain - 1u);
+    if ((int)value < total) {
+      return (int)value;
+    }
+  }
+}
+
+bool NDFile::_prepareRandomState(RandomSequenceState& state, RandomStateKind kind, Node* scopeNode,
+                                 int total, int currentIndex) {
+  if (!currentNode || currentNode->type != NODE_TYPE_FILE) return false;
+  if (total <= 0 || currentIndex < 0 || currentIndex >= total) return false;
+
+  if (state.kind == kind && state.scopeNode == scopeNode && state.currentFile == currentNode &&
+      state.total == total) {
+    return true;
+  }
+
+  state.kind = kind;
+  state.scopeNode = scopeNode;
+  state.currentFile = currentNode;
+  state.total = total;
+  state.offset = 0;
+  state.anchorIndex = currentIndex;
+  state.salt = _nextRandomValue();
+  // 現在曲を起点に prev/next できるよう、基準位置の写像値を保持する
+  state.anchorPermutation = _getPermutationValue(0, total, state.salt);
+  return true;
+}
+
+Node* NDFile::_getNodeFromRandomState(const RandomSequenceState& state, int logicalIndex) const {
+  switch (state.kind) {
+    case RANDOM_STATE_FOLDER_FILE:
+      return fileTree.getFileNodeByIndexInDir(state.scopeNode, logicalIndex);
+    case RANDOM_STATE_ALL_FILE:
+      return fileTree.getFileNodeByGlobalIndex(logicalIndex);
+    default:
+      break;
+  }
+  return nullptr;
+}
+
+Node* NDFile::_advanceRandomState(RandomSequenceState& state, int count) {
+  if (state.kind == RANDOM_STATE_NONE || state.total <= 0) return nullptr;
+
+  if (count == 0) {
+    return currentNode;
+  }
+
+  state.offset = _normalizeModulo(state.offset + count, state.total);
+  int permuted = _getPermutationValue(state.offset, state.total, state.salt);
+  int logicalIndex =
+      _normalizeModulo(state.anchorIndex + permuted - state.anchorPermutation, state.total);
+
+  Node* target = _getNodeFromRandomState(state, logicalIndex);
+  if (target && target->type == NODE_TYPE_FILE) {
+    state.currentFile = target;
+  }
+  return target;
 }
 
 //----------------------------------------------------------------------
@@ -1144,6 +1343,60 @@ Node* FileTree::getFileNodeByIndexInDir(Node* dir, int index) const {
     child = child->next;
   }
   return nullptr;
+}
+
+bool FileTree::_findGlobalFileIndex(Node* node, Node* target, int& index) const {
+  Node* current = node;
+  while (current) {
+    if (current->type == NODE_TYPE_FILE) {
+      if (current == target) {
+        return true;
+      }
+      index++;
+    } else if (current->subtreeFileCount > 0) {
+      if (_findGlobalFileIndex(current->firstChild, target, index)) {
+        return true;
+      }
+    }
+    current = current->next;
+  }
+  return false;
+}
+
+int FileTree::getGlobalFileIndex(Node* node) const {
+  if (!node || node->type != NODE_TYPE_FILE || !_rootNode) {
+    return -1;
+  }
+
+  int index = 0;
+  return _findGlobalFileIndex(_rootNode->firstChild, node, index) ? index : -1;
+}
+
+Node* FileTree::_findFileNodeByGlobalIndex(Node* node, int& index) const {
+  Node* current = node;
+  while (current) {
+    if (current->type == NODE_TYPE_FILE) {
+      if (index == 0) {
+        return current;
+      }
+      index--;
+    } else if (current->subtreeFileCount > 0) {
+      if (index < current->subtreeFileCount) {
+        return _findFileNodeByGlobalIndex(current->firstChild, index);
+      }
+      index -= current->subtreeFileCount;
+    }
+    current = current->next;
+  }
+  return nullptr;
+}
+
+Node* FileTree::getFileNodeByGlobalIndex(int index) const {
+  if (!_rootNode || index < 0 || index >= _totalFiles) {
+    return nullptr;
+  }
+
+  return _findFileNodeByGlobalIndex(_rootNode->firstChild, index);
 }
 
 Node* FileTree::getNextFileNode(Node* node, bool wrap) {

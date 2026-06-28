@@ -79,6 +79,8 @@ class FileTree {
   Node* getPrevFileNode(Node* node, bool wrap);
   int getFileIndexInParent(Node* node) const;
   Node* getFileNodeByIndexInDir(Node* dir, int index) const;
+  int getGlobalFileIndex(Node* node) const;
+  Node* getFileNodeByGlobalIndex(int index) const;
   int getDirIndex(Node* node) const;
   Node* getDirNodeByIndex(int index) const;
 
@@ -99,6 +101,8 @@ class FileTree {
   Node* _findLastPlayableDirFrom(Node* node) const;
   Node* _findFirstPlayableDirInSubtree(Node* node) const;
   Node* _findLastPlayableDirInSubtree(Node* node) const;
+  bool _findGlobalFileIndex(Node* node, Node* target, int& index) const;
+  Node* _findFileNodeByGlobalIndex(Node* node, int& index) const;
   bool _findDirIndex(Node* node, Node* target, int& index) const;
   Node* _findDirNodeByIndex(Node* node, int& index) const;
   Node* _buildTree(const char* path, Node* parent);
@@ -160,10 +164,54 @@ class NDFile {
   boolean getHeaderCache(String filePath);  // ヘッダキャッシュ取得
 
   u16_t getGD3Cache(String filePath, u32_t gd3Offset);  // GD3部分のキャッシュを取得する
+  void resetRandomSession();
+
  private:
+  enum RandomStateKind : u8_t {
+    RANDOM_STATE_NONE,
+    RANDOM_STATE_FOLDER_FILE,
+    RANDOM_STATE_ALL_FILE,
+  };
+
+  struct RandomSequenceState {
+    RandomStateKind kind;
+    Node* scopeNode;
+    Node* currentFile;
+    int total;
+    int offset;
+    int anchorIndex;
+    int anchorPermutation;
+    u32_t salt;
+
+    RandomSequenceState()
+        : kind(RANDOM_STATE_NONE),
+          scopeNode(nullptr),
+          currentFile(nullptr),
+          total(0),
+          offset(0),
+          anchorIndex(0),
+          anchorPermutation(0),
+          salt(0) {
+    }
+  };
+
+  RandomSequenceState _folderFileRandomState;
+  RandomSequenceState _allFileRandomState;
+
   bool _playNode(Node* node, int8_t att = -1);
+  bool _playRandomFile(int count);
+  bool _playRandomAll(int count);
   Node* _getCurrentDirNode() const;
   void _updateCurrentIndexes();
+  bool _prepareRandomState(RandomSequenceState& state, RandomStateKind kind, Node* scopeNode,
+                           int total, int currentIndex);
+  Node* _advanceRandomState(RandomSequenceState& state, int count);
+  Node* _getNodeFromRandomState(const RandomSequenceState& state, int logicalIndex) const;
+  int _normalizeModulo(int value, int mod) const;
+  int _getPermutationValue(int index, int total, u32_t salt) const;
+  u32_t _permuteDomainValue(u32_t value, int bits, u32_t salt) const;
+  u32_t _nextRandomValue() const;
+  void _resetRandomState(RandomSequenceState& state);
 };
 
 extern NDFile ndFile;

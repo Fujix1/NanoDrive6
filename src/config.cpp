@@ -44,9 +44,17 @@ void cfgSaveTask(void* pvParameters) {
 void NDConfig::init() {
   items.push_back(
       {"lang", LANG_JA, "言語", "Language", {"日本語", "英語"}, {"Japanese", "English"}, {LANG_JA, LANG_EN}});
+
+  items.push_back({"shuffle",
+                   0,  // 初期値idx
+                   "シャッフル",
+                   "Shuffle",
+                   {"なし", "フォルダ", "全曲"},
+                   {"No", "Folder", "All"},
+                   {TRANDOM_NO, TRANDOM_FOLDER, TRANDOM_ALL}});
   items.push_back({
       "loop",
-      LOOP_1,
+      LOOP_1,  // 初期値
       "曲ループ",
       "Song Loop",
       {"1回", "2回", "3回", "4回", "5回", "無限"},

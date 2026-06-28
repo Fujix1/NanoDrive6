@@ -35,6 +35,9 @@
 
 #define CFG_ITEM_HEIGHT 32
 
+// font icon
+// 丂 - random
+
 class LGFX : public lgfx::LGFX_Device {
  private:
   lgfx::Panel_ST7789 _panel_instance;

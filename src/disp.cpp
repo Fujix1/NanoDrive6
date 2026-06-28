@@ -171,19 +171,29 @@ void Label::setEnabled(bool state) { _enabled = state; }
 //---------------------------------------------------------------------------
 // Draw header info
 static LGFX_Sprite sprHeader(&lcd);
+static constexpr int HEADER_TIME_W = 40;
+static constexpr int HEADER_TIME_H = 14;
+static constexpr int HEADER_TIME_X = LCD_W / 2 - HEADER_TIME_W / 2;
+static constexpr int HEADER_TIME_Y = 4;
+
+static void drawHeaderTime(LGFX_Sprite& target, uint64_t sec, int x, int y) {
+  target.fillRect(x, y, HEADER_TIME_W, HEADER_TIME_H, C_HEADER);
+  render.setDrawer(target);
+  render.setAlignment(Align::TopCenter);
+  render.loadFont(nimbusBold, sizeof(nimbusBold));
+  render.setFontSize(14);
+  render.setFontColor(TFT_WHITE);
+  render.setCursor(x + HEADER_TIME_W / 2, y);
+  render.printf("%2d:%02d", (uint8_t)(sec / 60), (uint8_t)(sec % 60));
+  render.unloadFont();
+}
+
 void PlayerWindow::updateHeader(uint64_t sec) {
   if (xSemaphoreTake(spFrameBuffer, portMAX_DELAY) == pdTRUE) {
-    sprHeader.createSprite(70, 14);
+    sprHeader.createSprite(HEADER_TIME_W, HEADER_TIME_H);
     sprHeader.fillSprite(C_HEADER);
-    render.setDrawer(sprHeader);
-    render.setAlignment(Align::TopCenter);
-    render.loadFont(nimbusBold, sizeof(nimbusBold));
-    render.setFontSize(14);
-    render.setFontColor(TFT_WHITE);
-    render.setCursor(35, 0);
-    render.printf("%d:%02d", (uint8_t)(sec / 60), (uint8_t)(sec % 60));
-    render.unloadFont();
-    sprHeader.pushSprite(50, 4);
+    drawHeaderTime(sprHeader, sec, 0, 0);
+    sprHeader.pushSprite(HEADER_TIME_X, HEADER_TIME_Y);
     sprHeader.deleteSprite();
     xSemaphoreGive(spFrameBuffer);
   }
@@ -238,6 +248,15 @@ void PlayerWindow::redraw() {
   render.setFontColor(C_GRAY, C_BASEBG);
   render.setCursor(27, 256);
   render.printf(dispData.date.c_str());
+
+  // シャッフルアイコン
+  if (ndConfig.get(CFG_SHUFFLE) != TRANDOM_NO) {
+    render.setCursor(3, 2);
+    render.setFontSize(16);
+    render.setFontColor(C_LIGHTGRAY, C_HEADER);
+    render.printf("丂");
+  }
+
   render.unloadFont();
 
   render.loadFont(nimbusBold, sizeof(nimbusBold));
@@ -262,12 +281,6 @@ void PlayerWindow::redraw() {
     render.printf("%02d/%02d", dispData.no, dispData.maxFiles);
   }
 
-  render.setAlignment(Align::TopCenter);
-  render.setFontSize(14);
-  render.setFontColor(C_LIGHTGRAY, C_HEADER);
-  render.setCursor(LCD_W / 2, 4);
-  render.printf("%d:%02d", (uint8_t)(dispData.time / 60), (uint8_t)(dispData.time % 60));
-
   render.setFontSize(13);
   if (ndFile.accessMode == ACCESS_CACHE) {
     render.setFontColor(C_ACCENT_LIGHT, C_HEADER);
@@ -275,10 +288,17 @@ void PlayerWindow::redraw() {
     render.setFontColor(C_ORANGE, C_HEADER);
   }
 
-  render.setCursor(4, 4);
+  // シャッフルアイコン分ずらす
+  if (ndConfig.get(CFG_SHUFFLE) != TRANDOM_NO) {
+    render.setCursor(22, 4);
+  } else {
+    render.setCursor(4, 4);
+  }
   render.setAlignment(Align::TopLeft);
   render.printf(dispData.type.c_str());
   render.unloadFont();
+
+  drawHeaderTime(frameBuffer, dispData.time, HEADER_TIME_X, HEADER_TIME_Y);
 
   if (ndConfig.get(CFG_LANG) == LANG_JA) {
     lblTitle.setCaption(dispData.trackJp);
@@ -694,8 +714,15 @@ void CFGWindow::eventHandler(event ev) {
       break;
     case event::Left:
       if (ndConfig.items[currentItemIndex].index > 0) {
+        int prevRandom = ndConfig.get(CFG_SHUFFLE);
         ndConfig.items[currentItemIndex].index--;
         ndConfig.saveCfg();
+
+        // シャッフル設定の切り替え時は、シャッフルステートをリセット
+        if (currentItemIndex == CFG_SHUFFLE && prevRandom != ndConfig.get(CFG_SHUFFLE)) {
+          ndFile.resetRandomSession();
+        }
+
         // 言語はすぐ再描画
         if (currentItemIndex == CFG_LANG) {
           drawPanelView();
@@ -707,8 +734,15 @@ void CFGWindow::eventHandler(event ev) {
     case event::Right:
       if (ndConfig.items[currentItemIndex].index + 1 <
           ndConfig.items[currentItemIndex].optionValues.size()) {
+        int prevRandom = ndConfig.get(CFG_SHUFFLE);
         ndConfig.items[currentItemIndex].index++;
         ndConfig.saveCfg();
+
+        // シャッフル設定の切り替え時は、シャッフルステートをリセット
+        if (currentItemIndex == CFG_SHUFFLE && prevRandom != ndConfig.get(CFG_SHUFFLE)) {
+          ndFile.resetRandomSession();
+        }
+
         // 言語はすぐ再描画
         if (currentItemIndex == CFG_LANG) {
           drawPanelView();

@@ -40,6 +40,7 @@ typedef enum { AMP_0 = 0,
                AMP_3 = 3,
                AMP_6 = 6,
                AMP_9 = 9 } tAmp;
+typedef enum { TRANDOM_NO, TRANDOM_FOLDER, TRANDOM_ALL } tRandom;
 typedef enum { MODE_PLAYER,
                MODE_SERIAL } tMode;
 typedef enum { FMPCM_BOTH,
@@ -48,6 +49,7 @@ typedef enum { FMPCM_BOTH,
 
 typedef enum {
   CFG_LANG,      // 言語
+  CFG_SHUFFLE,   // シャッフル再生
   CFG_NUM_LOOP,  // ループ回数
   CFG_REPEAT,    // リピート単位
   CFG_SCROLL,    // テキストスクロール回数
