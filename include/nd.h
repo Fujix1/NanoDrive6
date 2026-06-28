@@ -49,8 +49,12 @@ enum class FileFormat {
 
 extern const std::array<String, 7> FORMAT_LABEL;
 
+// 本体バージョン
+typedef enum { nd_v60, nd_v61 } t_ndVersion;
+
 class ND {
  public:
+  static t_ndVersion version;     // 本体バージョン
   static FileFormat fileFormat;  //
   static bool canPlay;           // ファイル処理可能
 
@@ -66,6 +70,9 @@ class ND {
 
   // チップ名のフォーマット
   static String formatChipName(si5351Freq_t freq, t_chip chip);
+
+  // 本体バージョン表記
+  static const char* versionLabel();
 
   // 新しいファイルを開く前に再生状態を初期化
   static void resetPlaybackState();

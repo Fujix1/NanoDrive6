@@ -7,6 +7,7 @@ const std::array<String, 15> CHIP_LABEL = {"",       "SN76489", "SN76489", "YM24
 const std::array<String, 7> FORMAT_LABEL = {"--", "VGM", "VGZ", "MDX", "XGM1", "XGM2", "S98"};
 
 // ND ステートの初期化
+t_ndVersion ND::version = nd_v60;
 FileFormat ND::fileFormat = FileFormat::Unknown;
 bool ND::canPlay = false;
 
@@ -27,6 +28,16 @@ String ND::formatChipName(si5351Freq_t freq, t_chip chip) {
     return CHIP_LABEL[chip] + " @ " + buf + " MHz";
   }
   return CHIP_LABEL[chip];
+}
+
+const char* ND::versionLabel() {
+  switch (version) {
+    case nd_v61:
+      return "6.1";
+    case nd_v60:
+    default:
+      return "6";
+  }
 }
 
 void ND::resetPlaybackState() {

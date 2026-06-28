@@ -72,7 +72,10 @@ void setup() {
   delay(100);
   Wire.begin(I2C_SDA, I2C_SCL, I2C_CLOCK);
 
-  if (!input.init()) {
+  if (input.init()) {
+    ND::version = nd_v61;
+  } else {
+    ND::version = nd_v60;
     Serial.println("Input IC TCA8418 failed.");
   }
 
@@ -82,9 +85,9 @@ void setup() {
   }
 
   lcd.setFont(&fonts::Font2);
-  lcd.println("NANO DRIVE 6.1");
+  lcd.printf("NANO DRIVE %s\n", ND::versionLabel());
   lcd.println("2024-2026 fujix@e2j.net");
-  lcd.printf("Version 6.1 dev\n\n");
+  lcd.printf("Firmware ver 3 dev\n\n");
 
   // PSRAM 初期化確認
   if (psramInit()) {
