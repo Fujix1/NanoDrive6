@@ -687,6 +687,9 @@ bool NDFile::openFile(String path, int8_t att) {
     att = getFolderAttenuation(dirPath);
   }
 
+  nju72341.reset(att);
+  nju72341.unmute();
+
   ND::fileFormat = readFile(path);
 
   switch (ND::fileFormat) {
@@ -711,9 +714,7 @@ bool NDFile::openFile(String path, int8_t att) {
       break;
   }
 
-  nju72341.reset(att);
   xSemaphoreGive(spFileOpen);
-  nju72341.unmute();
 
   return ND::canPlay;
 }
