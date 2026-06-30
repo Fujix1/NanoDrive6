@@ -8,6 +8,7 @@
 
 #include "file.h"
 #include "fm.h"
+#include "nd.h"
 
 Preferences preferences;
 
@@ -97,8 +98,9 @@ void NDConfig::init() {
                    {"両方", "FMのみ", "PCMのみ"},
                    {"Both", "FM Only", "PCM Only"},
                    {FMPCM_BOTH, FMPCM_FM, FMPCM_PCM}});
+  const u8_t ym2612PanDefault = (ND::version == nd_v60) ? TPAN_INVERT : TPAN_NORMAL;
   items.push_back({"ym2612pan",
-                   0,  // 初期値idx
+                   ym2612PanDefault,  // 初期値idx
                    "YM2612パン",
                    "YM2612 Pan",
                    {"ふつう", "反転"},

@@ -3,6 +3,7 @@
 #include <driver/dedic_gpio.h>
 
 #include "../../include/config.h"
+#include "../../include/nd.h"
 
 dedic_gpio_bundle_handle_t dataBus = NULL;  // GPIOバンドル用ハンドラ
 
@@ -168,7 +169,11 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
     _ym2612TlRegValid[chipno][bank][reg] = true;
   }
 
-  if ((uint8_t)(addr - 0xB4) <= 2 && ndConfig.get(CFG_YM2612_PAN) == TPAN_INVERT) {
+  bool invertPan = ndConfig.get(CFG_YM2612_PAN) == TPAN_INVERT;
+  if (ND::version == nd_v60) {
+    invertPan = !invertPan;
+  }
+  if ((uint8_t)(addr - 0xB4) <= 2 && invertPan) {
     data = (data & 0x3F) | ((data & 0x80) >> 1) | ((data & 0x40) << 1);
   }
 

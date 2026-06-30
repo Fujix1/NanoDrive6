@@ -1,5 +1,5 @@
 /**
- * Nano Drive 6.1
+ * Nano Drive 6 / 6.1
  * 2024 - 2026 (C) Fujix
  * e2j.net
 
@@ -89,7 +89,7 @@ void setup() {
   lcd.setFont(&fonts::Font2);
   lcd.printf("NANO DRIVE %s\n", ND::versionLabel());
   lcd.println("2024-2026 fujix@e2j.net");
-  lcd.printf("Firmware ver 3 dev\n\n");
+  lcd.printf("Firmware ver 3.0 alpha\n\n");
 
   // PSRAM 初期化確認
   if (psramInit()) {

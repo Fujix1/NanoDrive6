@@ -1,6 +1,6 @@
-# NanoDrive 6 Development Repository
+# NanoDrive 6 / 6.1 Development Repository
 
-This is a repository for NanoDrive 6 VGM player with YM2612/YM3438 + SN76489 x 2, which plays back VGM, VGZ, XGM 1.1 and XGM 2 format files. It supports MegaDrive/Genesis, Sega System 1 and some SN76489 compatible systems.
+This is a repository for NanoDrive 6 and 6.1 VGM player with YM2612/YM3438 + SN76489 x 2, which plays back VGM, VGZ, XGM 1.1 and XGM 2 format files. It supports MegaDrive/Genesis, Sega System 1 and some SN76489 compatible systems.
 
 Also in version 2, I added a support for sound data transfer via USB serial connection and playback with "MAmidiMEmo" and "Real chip VGM/XGM/MGS player" created by [Itoken](https://github.com/110-kenichi/mame).
 
@@ -15,6 +15,11 @@ Nano Drive 6 は、YM2612/YM3438 + SN76489 x 2 を搭載した VGM プレーヤ�
 <figure><img src="https://github.com/user-attachments/assets/a15e7b2c-7026-4bf4-94d2-e90b153d7c28" width="800"></figure>
 <br>
 <br>
+
+## NanoDrive 6.1 について / Regarding NanoDrive 6.1
+
+NanoDrive 6.1 は現在開発中です。ノイズ低減、動作安定化などのハードウェア的更新を行っています。
+
 
 ## ファームウェアのアップデート方法 / How to update the firmware.
 

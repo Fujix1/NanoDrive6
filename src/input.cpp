@@ -10,6 +10,7 @@
 namespace {
 Adafruit_TCA8418 keypad;
 TaskHandle_t tcaTaskHandle = nullptr;
+TaskHandle_t adcTaskHandle = nullptr;
 TaskHandle_t eventTaskHandle = nullptr;
 TimerHandle_t keyRepeatTimer = nullptr;
 QueueHandle_t inputEventQueue = nullptr;
@@ -18,6 +19,18 @@ enum class KeyRepeatState : uint8_t { Idle, Waiting, Repeating };
 
 volatile KeyRepeatState keyRepeatState = KeyRepeatState::Idle;
 volatile Button activeButton = btnNONE;
+
+constexpr int ADC_INPUT_PIN = 1;
+constexpr int ADC_REPEAT_DELAY = 300;
+constexpr int VAL_0 = 0;        // 0 - 50
+constexpr int VAL_1 = 530;      // 530 前後    460 - 510
+constexpr int VAL_2 = 1301;     // 1301 前後  1240 - 1290
+constexpr int VAL_3 = 1980;     // 1980 前後  1900 - 1980
+constexpr int VAL_4 = 2900;     // 2905 前後  2860 - 2910
+constexpr int VAL_NONE = 4095;  // 4095
+
+Button adcLastButton = btnNONE;
+uint32_t adcButtonRepeatStarted = 0;
 
 Button matrixKeyToButton(int key) {
   switch (key) {
@@ -107,6 +120,60 @@ void tcaTask(void*) {
   }
 }
 
+Button readAdcButton() {
+  const u16_t in = analogRead(ADC_INPUT_PIN);
+  if (in > VAL_NONE - 100)
+    return btnNONE;
+  else if (in < VAL_0 + 100)
+    return btnSELECT;
+  else if (VAL_1 - 80 <= in && in < VAL_1 + 80)
+    return btnRIGHT;
+  else if (VAL_2 - 90 <= in && in < VAL_2 + 80)
+    return btnLEFT;
+  else if (VAL_3 - 120 <= in && in < VAL_3 + 120)
+    return btnDOWN;
+  else if (VAL_4 - 150 <= in && in < VAL_4 + 200)
+    return btnUP;
+
+  return btnNONE;
+}
+
+Button checkAdcButton() {
+  const uint32_t ms = millis();
+  const Button button = readAdcButton();
+
+  if (button == btnNONE) {
+    adcLastButton = btnNONE;
+    return btnNONE;
+  }
+
+  if (adcLastButton == button) {
+    if (adcButtonRepeatStarted == 0) {
+      adcButtonRepeatStarted = ms;
+      return button;
+    }
+
+    if (!isRepeatable(button) || millis() - adcButtonRepeatStarted < ADC_REPEAT_DELAY) {
+      return btnNONE;
+    }
+    return button;
+  }
+
+  adcLastButton = button;
+  adcButtonRepeatStarted = 0;
+  return btnNONE;
+}
+
+void adcTask(void*) {
+  while (true) {
+    if (input.isEnabled()) {
+      const Button button = checkAdcButton();
+      if (button != btnNONE) input.inputBuffer = button;
+    }
+    vTaskDelay(pdMS_TO_TICKS(INPUT_CAPTURE_INTERVAL));
+  }
+}
+
 // イベントループ
 void eventTask(void*) {
   event ev;
@@ -131,10 +198,38 @@ void sendEvent(event ev) {
 Input::Input() {}
 
 bool Input::init() {
+  keyRepeatTimer = xTimerCreate("keyRepeat", pdMS_TO_TICKS(INPUT_REPEAT_DELAY), pdTRUE,
+                                nullptr, keyRepeatTimerHandler);
+  if (keyRepeatTimer == nullptr) {
+    Serial.println("Failed: key repeat timer init.");
+    return false;
+  }
+
+  inputEventQueue = xQueueCreate(1, sizeof(event));
+  if (inputEventQueue == nullptr) {
+    Serial.println("Failed: input event queue init.");
+    return false;
+  }
+
+  BaseType_t eventTaskCreated = xTaskCreatePinnedToCore(
+      eventTask, "inputEvent", 8192, nullptr, 1, &eventTaskHandle, PRO_CPU_NUM);
+  if (eventTaskCreated != pdPASS) {
+    Serial.println("Failed: input event task init.");
+    return false;
+  }
+
   pinMode(TCA8418_IRQ_PIN, INPUT);
 
   if (!keypad.begin(TCA8418_DEFAULT_ADDR, &Wire)) {
     Serial.println("Failed: TCA8418 init.");
+    pinMode(ADC_INPUT_PIN, ANALOG);
+    BaseType_t adcTaskCreated = xTaskCreatePinnedToCore(adcTask, "adcInput", 4096, nullptr, 1,
+                                                       &adcTaskHandle, PRO_CPU_NUM);
+    if (adcTaskCreated != pdPASS) {
+      Serial.println("Failed: ADC input task init.");
+    } else {
+      Serial.println("ADC input init.");
+    }
     return false;
   }
 
@@ -155,28 +250,6 @@ bool Input::init() {
   config &= ~TCA8418_REG_CFG_GPI_IEN;
   config |= TCA8418_REG_CFG_KE_IEN;
   keypad.writeRegister(TCA8418_REG_CFG, config);
-
-  keyRepeatTimer = xTimerCreate("keyRepeat", pdMS_TO_TICKS(INPUT_REPEAT_DELAY), pdTRUE,
-                                nullptr, keyRepeatTimerHandler);
-  if (keyRepeatTimer == nullptr) {
-    Serial.println("Failed: key repeat timer init.");
-    return false;
-  }
-
-  // キュー作成
-  inputEventQueue = xQueueCreate(1, sizeof(event));
-  if (inputEventQueue == nullptr) {
-    Serial.println("Failed: input event queue init.");
-    return false;
-  }
-
-  // イベントループタスク
-  BaseType_t eventTaskCreated = xTaskCreatePinnedToCore(
-      eventTask, "inputEvent", 8192, nullptr, 1, &eventTaskHandle, PRO_CPU_NUM);
-  if (eventTaskCreated != pdPASS) {
-    Serial.println("Failed: input event task init.");
-    return false;
-  }
 
   BaseType_t taskCreated = xTaskCreatePinnedToCore(tcaTask, "tcaTask", 4096, nullptr, 1,
                                                    &tcaTaskHandle, PRO_CPU_NUM);
@@ -257,6 +330,8 @@ void Input::setEnabled(bool state) {
   if (!state) {
     inputBuffer = btnNONE;
     activeButton = btnNONE;
+    adcLastButton = btnNONE;
+    adcButtonRepeatStarted = 0;
     keyRepeatState = KeyRepeatState::Idle;
     if (keyRepeatTimer != nullptr) xTimerStop(keyRepeatTimer, 0);
   }
