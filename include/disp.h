@@ -27,7 +27,7 @@
 #define C_DARK 0x10c4
 #define C_LV_PEAK 0x52b5
 
-#define C_HEADER 0x4228           // 0x444444
+#define C_HEADER 0x4228  // 0x444444
 #define C_HEADERSUB 0x5aec
 #define C_BORDER 0xad55           // 0xadaaad
 #define C_FOOTER_ACTIVE 0x530c    // 0x506065
@@ -38,9 +38,16 @@
 // font icon
 // 丂 - random
 
+// Nano Drive 6.1 以降の LCD は Fujix1/LovyanGFX の ST7789 を使用
+// Nano Drive 6 はガンマ違いのため派生クラスでオーバーライド
+class Panel_ST7789_ND : public lgfx::Panel_ST7789 {
+ protected:
+  const uint8_t* getInitCommands(uint8_t listno) const override;
+};
+
 class LGFX : public lgfx::LGFX_Device {
  private:
-  lgfx::Panel_ST7789 _panel_instance;
+  Panel_ST7789_ND _panel_instance;
   lgfx::Bus_SPI _bus_instance;
 
  public:
@@ -49,7 +56,8 @@ class LGFX : public lgfx::LGFX_Device {
 
 extern LGFX lcd;
 
-enum class ViewMode { Player, Config };
+enum class ViewMode { Player,
+                      Config };
 
 class Disp {
  public:

@@ -74,9 +74,11 @@ void setup() {
 
   if (input.init()) {
     ND::version = nd_v61;
+    Serial.printf("Hardware version 6.1.\n", ESP.getFreeHeap());
   } else {
     ND::version = nd_v60;
     Serial.println("Input IC TCA8418 failed.");
+    Serial.printf("Hardware version 6.\n", ESP.getFreeHeap());
   }
 
   // ディスプレイ初期化
