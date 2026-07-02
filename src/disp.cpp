@@ -717,6 +717,10 @@ void CFGWindow::init() {
 void CFGWindow::initHeaders() {
   // スプライトが既に初期化されているかチェック
   if (_sprHeaderJP.width() > 0 && _sprHeaderEN.width() > 0) return;
+  if (spFrameBuffer == nullptr || xSemaphoreTake(spFrameBuffer, portMAX_DELAY) != pdTRUE) return;
+
+  OpenFontRender render;
+  render.setUseRenderTask(false);
 
   // 日本語ヘッダー作成
   _sprHeaderJP.setPsram(true);
@@ -745,6 +749,8 @@ void CFGWindow::initHeaders() {
   render.setCursor(6, 4);
   render.printf("Settings");
   render.unloadFont();
+
+  xSemaphoreGive(spFrameBuffer);
 }
 
 // 表示
