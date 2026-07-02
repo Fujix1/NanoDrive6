@@ -1,4 +1,5 @@
 #include "disp.h"
+#include "input.h"
 
 #include "pics.h"
 #include "png_renderer.h"
@@ -206,34 +207,47 @@ void Label::setEnabled(bool state) { _enabled = state; }
 //---------------------------------------------------------------------------
 // Draw header info
 static LGFX_Sprite sprHeader(&lcd);
-static constexpr int HEADER_TIME_W = 40;
+static constexpr int HEADER_TIME_W = 50;
 static constexpr int HEADER_TIME_H = 14;
 static constexpr int HEADER_TIME_X = LCD_W / 2 - HEADER_TIME_W / 2;
 static constexpr int HEADER_TIME_Y = 4;
 
-static void drawHeaderTime(LGFX_Sprite& target, uint64_t sec, int x, int y) {
+static void formatTimestamp(char* buffer, size_t size, int64_t sec) {
+  const bool negative = sec < 0;
+  uint64_t absSec = negative ? static_cast<uint64_t>(-sec) : static_cast<uint64_t>(sec);
+  snprintf(buffer, size, "%s%d:%02d", negative ? "-" : "", (int)(absSec / 60), (int)(absSec % 60));
+}
+
+static void drawHeaderTime(LGFX_Sprite& target, int64_t sec, int x, int y, bool visible = true) {
   target.fillRect(x, y, HEADER_TIME_W, HEADER_TIME_H, C_HEADER);
   render.setDrawer(target);
   render.setAlignment(Align::TopCenter);
   render.loadFont(nimbusBold, sizeof(nimbusBold));
   render.setFontSize(14);
   render.setFontColor(TFT_WHITE);
-  render.setCursor(x + HEADER_TIME_W / 2, y);
-  render.printf("%2d:%02d", (uint8_t)(sec / 60), (uint8_t)(sec % 60));
+  if (visible) {
+    char timestamp[24];
+    formatTimestamp(timestamp, sizeof(timestamp), sec);
+    render.setCursor(x + HEADER_TIME_W / 2, y);
+    render.printf("%s", timestamp);
+  }
   render.unloadFont();
 }
 
-void PlayerWindow::updateHeader(uint64_t sec) {
-  if (xSemaphoreTake(spFrameBuffer, portMAX_DELAY) == pdTRUE) {
+void PlayerWindow::updateHeader(int64_t sec, bool visible, uint32_t ticksToWait) {
+  if (xSemaphoreTake(spFrameBuffer, ticksToWait) == pdTRUE) {
     sprHeader.createSprite(HEADER_TIME_W, HEADER_TIME_H);
     sprHeader.fillSprite(C_HEADER);
-    drawHeaderTime(sprHeader, sec, 0, 0);
+    drawHeaderTime(sprHeader, sec, 0, 0, visible);
     sprHeader.pushSprite(HEADER_TIME_X, HEADER_TIME_Y);
     sprHeader.deleteSprite();
     xSemaphoreGive(spFrameBuffer);
   }
 }
 
+void PlayerWindow::updateHeaderBlocking(int64_t sec) {
+  updateHeader(sec, true, portMAX_DELAY);
+}
 //---------------------------------------------------------------------------
 // Timer Handler
 void dispTimerHandler(void* param) {
@@ -249,9 +263,19 @@ void dispTimerHandler(void* param) {
       lblSystem.update();
       xSemaphoreGive(spFrameBuffer);
     }
-    uint64_t sec = vgm.getCurrentTime();
+    int64_t sec = playerWindow.dispData.time;
+    if (ND::canPlay == false || ND::isPaused) {
+      if (ND::isPaused) {
+        // カウントダウン中だけは点滅させず、残り秒数を常時表示する。
+        const bool visible = isPlayHoldCountdownActive() || ((millis() / 500) & 1) == 0;
+        playerWindow.updateHeader(sec, visible, 0);
+      }
+      return;
+    }
+
+    sec = vgm.getCurrentTime();
     if (playerWindow.dispData.time != sec) {
-      playerWindow.updateHeader(sec);
+      playerWindow.updateHeader(sec, true, 0);
       playerWindow.dispData.time = sec;
     }
   }

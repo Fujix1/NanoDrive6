@@ -10,6 +10,7 @@ const std::array<String, 7> FORMAT_LABEL = {"--", "VGM", "VGZ", "MDX", "XGM1", "
 t_ndVersion ND::version = nd_v60;
 FileFormat ND::fileFormat = FileFormat::Unknown;
 bool ND::canPlay = false;
+bool ND::isPaused = false;
 
 std::array<si5351Freq_t, 3> ND::freq = {SI5351_UNDEFINED, SI5351_UNDEFINED, SI5351_UNDEFINED};
 
@@ -43,6 +44,7 @@ const char* ND::versionLabel() {
 void ND::resetPlaybackState() {
   fileFormat = FileFormat::Unknown;
   canPlay = false;
+  isPaused = false;
   freq.fill(SI5351_UNDEFINED);
   chipNames.clear();
 }

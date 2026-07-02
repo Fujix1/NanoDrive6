@@ -8,6 +8,7 @@
 
 #include "file.h"
 #include "fm.h"
+#include "input.h"
 #include "nd.h"
 
 Preferences preferences;
@@ -113,6 +114,13 @@ void NDConfig::init() {
                    {"0dB", "3dB", "6dB", "9dB"},
                    {"0dB", "3dB", "6dB", "9dB"},
                    {AMP_0, AMP_3, AMP_6, AMP_9}});
+  items.push_back({"pause",
+                   0,  // 初期値idx
+                   "再生ホールド",
+                   "Play Hold",
+                   {"オフ", "オン", "3秒前"},
+                   {"Off", "On", "3 sec."},
+                   {HOLD_NONE, HOLD_YES, HOLD_3SEC}});
   items.push_back(
       {"mode", 0, "動作モード", "Mode", {"プレーヤー", "シリアル"}, {"Player", "Serial"}, {MODE_PLAYER, MODE_SERIAL}});
   preferences.begin("NanoDrive");
@@ -127,6 +135,8 @@ void NDConfig::applyCfg() {
   const tNJU72341_GAIN inputGain = amplifyToInputGain(get(CFG_AMPLIFY));
   nju72341.setInputGain(1, inputGain);
   nju72341.setInputGain(2, inputGain);
+  // Play Hold設定だけは、現在ホールド中の再生にも即時反映する。
+  syncPlayHoldConfig();
 }
 
 void NDConfig::saveCfg() {

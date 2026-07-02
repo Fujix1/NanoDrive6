@@ -10,6 +10,10 @@ typedef enum { btnNONE, btnRIGHT, btnUP, btnDOWN, btnLEFT, btnSELECT, btnFUNC } 
 
 enum class event { None, Right, Up, Down, Left, Option, Close };
 
+void cancelPlayHoldCountdown();
+bool isPlayHoldCountdownActive();
+void syncPlayHoldConfig();
+
 class Input {
  public:
   Input();

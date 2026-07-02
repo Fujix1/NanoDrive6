@@ -174,7 +174,7 @@ void loop() {
   if (ndConfig.currentMode == MODE_PLAYER) {
     while (1) {
       FM.applyPendingYM2612OutputMode();
-      if (ND::canPlay) {
+      if (ND::canPlay && !ND::isPaused) {
         switch (ND::fileFormat) {
           case FileFormat::VGM:
           case FileFormat::VGZ:

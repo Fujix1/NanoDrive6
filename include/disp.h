@@ -69,7 +69,7 @@ extern Disp disp;
 typedef struct {
   String trackEn, trackJp, gameEn, gameJp, systemEn, systemJp, authorEn, authorJp, date;
   String chip0, chip1, type;
-  uint64_t time;
+  int64_t time;
   uint32_t no, maxFiles;
 } tDispData;
 
@@ -87,7 +87,8 @@ class PlayerWindow {
   void drawBG();
   void redraw();
   void updateDisp(tDispData data);
-  void updateHeader(uint64_t sec);
+  void updateHeader(int64_t sec, bool visible = true, uint32_t ticksToWait = portMAX_DELAY);
+  void updateHeaderBlocking(int64_t sec);
   void eventHandler(event ev);
   void show();
 };

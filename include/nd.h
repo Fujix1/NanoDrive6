@@ -57,6 +57,7 @@ class ND {
   static t_ndVersion version;     // 本体バージョン
   static FileFormat fileFormat;  //
   static bool canPlay;           // ファイル処理可能
+  static bool isPaused;          // 再生ホールド中
 
   // クロック出力 3ch
   static std::array<si5351Freq_t, 3> freq;

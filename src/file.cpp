@@ -1,4 +1,5 @@
 #include "file.h"
+#include "input.h"
 
 #include <dirent.h>
 #include <PNGdec.h>  // VGZ展開でPNGdec同梱のzlib型を使用
@@ -676,6 +677,8 @@ bool NDFile::openFile(String path, int8_t att) {
   }
 
   nju72341.mute();
+  // 新しい曲を開くときは、前曲の3秒カウントダウンを破棄する。
+  cancelPlayHoldCountdown();
   nju72341.resetFadeout();
   ndConfig.saveHistory();
   FM.reset();
@@ -688,7 +691,6 @@ bool NDFile::openFile(String path, int8_t att) {
   }
 
   nju72341.reset(att);
-  nju72341.unmute();
 
   ND::fileFormat = readFile(path);
 
@@ -714,7 +716,17 @@ bool NDFile::openFile(String path, int8_t att) {
       break;
   }
 
+  if (ND::canPlay && ndConfig.get(CFG_PAUSE) != HOLD_NONE) {
+    ND::isPaused = true;
+    // HOLD_3SECは開始前の待機表示だけ -0:03 にする。
+    playerWindow.dispData.time = ndConfig.get(CFG_PAUSE) == HOLD_3SEC ? -3 : 0;
+  }
+
   xSemaphoreGive(spFileOpen);
+
+  if (!ND::isPaused) {
+    nju72341.unmute();
+  }
 
   return ND::canPlay;
 }

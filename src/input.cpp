@@ -5,7 +5,9 @@
 
 #include "disp.h"
 #include "file.h"
+#include "nd.h"
 #include "serialman.h"
+#include "vgm.h"
 
 namespace {
 Adafruit_TCA8418 keypad;
@@ -14,6 +16,10 @@ TaskHandle_t adcTaskHandle = nullptr;
 TaskHandle_t eventTaskHandle = nullptr;
 TimerHandle_t keyRepeatTimer = nullptr;
 QueueHandle_t inputEventQueue = nullptr;
+bool holdCountdownActive = false;
+int8_t holdCountdownSec = 0;
+uint32_t holdCountdownNextTick = 0;
+int lastPauseConfig = -1;
 
 enum class KeyRepeatState : uint8_t { Idle, Waiting, Repeating };
 
@@ -195,6 +201,102 @@ void sendEvent(event ev) {
 }
 }  // namespace
 
+// ホールド表示時刻を、現在表示中のウィンドウへ即時反映する。
+static void drawHoldTimestamp(int64_t sec) {
+  playerWindow.dispData.time = sec;
+  if (disp.currentView == ViewMode::Player) {
+    if (sec == 0) {
+      // カウントダウン完了の 0:00 だけは、フレームバッファ競合で描画を捨てない。
+      playerWindow.updateHeaderBlocking(sec);
+    } else {
+      playerWindow.updateHeader(sec);
+    }
+  }
+}
+
+// 新しい再生リクエストや設定変更で、進行中の3秒カウントダウンだけを止める。
+void cancelPlayHoldCountdown() {
+  holdCountdownActive = false;
+}
+
+bool isPlayHoldCountdownActive() {
+  return holdCountdownActive;
+}
+
+// ホールドを解除し、0:00から実再生が始まるようにする。
+static void finishPlayHold() {
+  holdCountdownActive = false;
+  drawHoldTimestamp(0);
+  nju72341.unmute();
+  ND::isPaused = false;
+}
+
+// CFG_PAUSE変更を、再生中のホールド状態へ即時反映する。
+void syncPlayHoldConfig() {
+  const int pauseConfig = ndConfig.get(CFG_PAUSE);
+  if (pauseConfig == lastPauseConfig) return;
+
+  lastPauseConfig = pauseConfig;
+  if (!ND::isPaused) {
+    cancelPlayHoldCountdown();
+    return;
+  }
+
+  switch (pauseConfig) {
+    case HOLD_NONE:
+      finishPlayHold();
+      break;
+    case HOLD_3SEC:
+      cancelPlayHoldCountdown();
+      drawHoldTimestamp(-3);
+      break;
+    case HOLD_YES:
+    default:
+      cancelPlayHoldCountdown();
+      drawHoldTimestamp(0);
+      break;
+  }
+}
+
+// 3秒ホールドのカウントダウンを非ブロッキングで進める。
+static void updateHoldCountdown() {
+  if (!holdCountdownActive) return;
+
+  if (!ND::isPaused) {
+    cancelPlayHoldCountdown();
+    return;
+  }
+
+  if (static_cast<int32_t>(millis() - holdCountdownNextTick) < 0) return;
+
+  holdCountdownSec++;
+  holdCountdownNextTick += 1000;
+  if (holdCountdownSec < 0) {
+    drawHoldTimestamp(holdCountdownSec);
+    return;
+  }
+
+  finishPlayHold();
+}
+
+static bool releasePlayHold() {
+  if (!ND::isPaused) return false;
+
+  if (ndConfig.get(CFG_PAUSE) == HOLD_3SEC) {
+    if (!holdCountdownActive) {
+      // 入力処理を止めず、次回以降の inputHandler() で -2, -1, 0 へ進める。
+      holdCountdownActive = true;
+      holdCountdownSec = -3;
+      holdCountdownNextTick = millis() + 1000;
+      drawHoldTimestamp(holdCountdownSec);
+    }
+    return true;
+  }
+
+  finishPlayHold();
+  return true;
+}
+
 Input::Input() {}
 
 bool Input::init() {
@@ -264,7 +366,11 @@ bool Input::init() {
 }
 
 void Input::inputHandler() {
-  if (!_enabled || inputBuffer == btnNONE) return;
+  if (!_enabled) return;
+
+  updateHoldCountdown();
+
+  if (inputBuffer == btnNONE) return;
 
   if (disp.currentView == ViewMode::Config) {
     switch (inputBuffer) {
@@ -301,6 +407,9 @@ void Input::inputHandler() {
         ndFile.filePlay(1);
         break;
       case btnSELECT:
+        if (releasePlayHold()) {
+          break;
+        }
         sendEvent(event::Option);
         break;
       default:
