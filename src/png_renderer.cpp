@@ -34,7 +34,16 @@ struct PngDecodeTarget {
   int dstH = 0;
 };
 
+struct PngScaleAccumulator {
+  int dstY = -1;
+  uint32_t r[kPngWorkMaxWidth] = {};
+  uint32_t g[kPngWorkMaxWidth] = {};
+  uint32_t b[kPngWorkMaxWidth] = {};
+  uint32_t weight[kPngWorkMaxWidth] = {};
+};
+
 static PngDecodeTarget pngDecodeTarget;
+static PngScaleAccumulator pngScaleAccumulator;
 static LGFX_Sprite* sprPng = nullptr;
 static LGFX_Sprite* sprPngResized = nullptr;
 alignas(LGFX_Sprite) static uint8_t sprPngStorage[sizeof(LGFX_Sprite)];
@@ -48,6 +57,22 @@ static int clampInt(int value, int minValue, int maxValue) {
   if (value < minValue) return minValue;
   if (value > maxValue) return maxValue;
   return value;
+}
+
+static u16_t swap16(u16_t value) {
+  return (u16_t)((value << 8) | (value >> 8));
+}
+
+static void unpackPNGPixel(u16_t pixel, uint32_t* r, uint32_t* g, uint32_t* b) {
+  const u16_t native = swap16(pixel);
+  *r = (native >> 11) & 0x1f;
+  *g = (native >> 5) & 0x3f;
+  *b = native & 0x1f;
+}
+
+static u16_t packPNGPixel(uint32_t r, uint32_t g, uint32_t b) {
+  const u16_t native = (u16_t)(((r & 0x1f) << 11) | ((g & 0x3f) << 5) | (b & 0x1f));
+  return swap16(native);
 }
 
 static PngRenderLayout getPNGRenderLayout(int width, int height) {
@@ -76,16 +101,138 @@ static void getPNGDecodeSize(int srcW, int srcH, const PngRenderLayout& layout, 
   if (*dstH > srcH) *dstH = srcH;
 }
 
+static void resetPNGScaleAccumulator(int width) {
+  pngScaleAccumulator.dstY = -1;
+  for (int x = 0; x < width; x++) {
+    pngScaleAccumulator.r[x] = 0;
+    pngScaleAccumulator.g[x] = 0;
+    pngScaleAccumulator.b[x] = 0;
+    pngScaleAccumulator.weight[x] = 0;
+  }
+}
+
+static void clearPNGScaleAccumulatorLine(int width) {
+  for (int x = 0; x < width; x++) {
+    pngScaleAccumulator.r[x] = 0;
+    pngScaleAccumulator.g[x] = 0;
+    pngScaleAccumulator.b[x] = 0;
+    pngScaleAccumulator.weight[x] = 0;
+  }
+}
+
+static void filterPNGLineHorizontal(const u16_t* srcLine, int srcW, int dstW, u16_t* dstLine) {
+  for (int x = 0; x < dstW; x++) {
+    const int dstLeft = x * srcW;
+    const int dstRight = (x + 1) * srcW;
+    const int firstSrcX = dstLeft / dstW;
+    const int lastSrcX = (dstRight - 1) / dstW;
+    uint32_t sumR = 0;
+    uint32_t sumG = 0;
+    uint32_t sumB = 0;
+    uint32_t totalWeight = 0;
+
+    for (int srcX = firstSrcX; srcX <= lastSrcX; srcX++) {
+      const int srcLeft = srcX * dstW;
+      const int srcRight = (srcX + 1) * dstW;
+      int weight = dstRight < srcRight ? dstRight : srcRight;
+      weight -= dstLeft > srcLeft ? dstLeft : srcLeft;
+      if (weight <= 0) continue;
+
+      uint32_t r;
+      uint32_t g;
+      uint32_t b;
+      unpackPNGPixel(srcLine[srcX], &r, &g, &b);
+      sumR += r * weight;
+      sumG += g * weight;
+      sumB += b * weight;
+      totalWeight += weight;
+    }
+
+    if (totalWeight == 0) {
+      dstLine[x] = srcLine[firstSrcX];
+    } else {
+      dstLine[x] = packPNGPixel((sumR + totalWeight / 2) / totalWeight,
+                                (sumG + totalWeight / 2) / totalWeight,
+                                (sumB + totalWeight / 2) / totalWeight);
+    }
+  }
+}
+
+static void flushPNGScaleAccumulatorLine(int width) {
+  if (pngScaleAccumulator.dstY < 0) return;
+
+  u16_t scaledLineBuffer[kPngWorkMaxWidth];
+  for (int x = 0; x < width; x++) {
+    const uint32_t weight = pngScaleAccumulator.weight[x];
+    if (weight == 0) {
+      scaledLineBuffer[x] = 0;
+    } else {
+      scaledLineBuffer[x] =
+          packPNGPixel((pngScaleAccumulator.r[x] + weight / 2) / weight,
+                       (pngScaleAccumulator.g[x] + weight / 2) / weight,
+                       (pngScaleAccumulator.b[x] + weight / 2) / weight);
+    }
+  }
+  sprPng->pushImage(0, pngScaleAccumulator.dstY, width, 1, scaledLineBuffer);
+  clearPNGScaleAccumulatorLine(width);
+  pngScaleAccumulator.dstY = -1;
+}
+
+static void pushAreaScaledPNGLine(PNGDRAW* pDraw, const u16_t* lineBuffer) {
+  u16_t filteredLineBuffer[kPngWorkMaxWidth];
+  filterPNGLineHorizontal(lineBuffer, pDraw->iWidth, pngDecodeTarget.dstW, filteredLineBuffer);
+
+  const int srcTop = pDraw->y * pngDecodeTarget.dstH;
+  const int srcBottom = (pDraw->y + 1) * pngDecodeTarget.dstH;
+  int firstDstY = srcTop / pngDecodeTarget.srcH;
+  int lastDstY = (srcBottom - 1) / pngDecodeTarget.srcH;
+  if (firstDstY < 0) firstDstY = 0;
+  if (lastDstY >= pngDecodeTarget.dstH) lastDstY = pngDecodeTarget.dstH - 1;
+
+  for (int dstY = firstDstY; dstY <= lastDstY; dstY++) {
+    if (pngScaleAccumulator.dstY != dstY) {
+      flushPNGScaleAccumulatorLine(pngDecodeTarget.dstW);
+      pngScaleAccumulator.dstY = dstY;
+    }
+
+    const int dstTop = dstY * pngDecodeTarget.srcH;
+    const int dstBottom = (dstY + 1) * pngDecodeTarget.srcH;
+    int weight = srcBottom < dstBottom ? srcBottom : dstBottom;
+    weight -= srcTop > dstTop ? srcTop : dstTop;
+    if (weight <= 0) continue;
+
+    for (int x = 0; x < pngDecodeTarget.dstW; x++) {
+      uint32_t r;
+      uint32_t g;
+      uint32_t b;
+      unpackPNGPixel(filteredLineBuffer[x], &r, &g, &b);
+      pngScaleAccumulator.r[x] += r * weight;
+      pngScaleAccumulator.g[x] += g * weight;
+      pngScaleAccumulator.b[x] += b * weight;
+      pngScaleAccumulator.weight[x] += weight;
+    }
+
+    if (srcBottom >= dstBottom) {
+      flushPNGScaleAccumulatorLine(pngDecodeTarget.dstW);
+    }
+  }
+}
+
 static void beginScaledPNGDecode(int srcW, int srcH, int dstW, int dstH) {
   pngDecodeTarget.scaled = true;
   pngDecodeTarget.srcW = srcW;
   pngDecodeTarget.srcH = srcH;
   pngDecodeTarget.dstW = dstW;
   pngDecodeTarget.dstH = dstH;
+  resetPNGScaleAccumulator(dstW);
 }
 
 static void endScaledPNGDecode() {
+  if (pngDecodeTarget.scaled) {
+    flushPNGScaleAccumulatorLine(pngDecodeTarget.dstW);
+  }
   pngDecodeTarget = PngDecodeTarget();
+  resetPNGScaleAccumulator(kPngWorkMaxWidth);
 }
 
 static void setPNGError(String message) {
@@ -122,23 +269,7 @@ static void pngDraw(PNGDRAW* pDraw) {
     return;
   }
 
-  u16_t scaledLineBuffer[kPngWorkMaxWidth];
-  int dstTop = (pDraw->y * pngDecodeTarget.dstH) / pngDecodeTarget.srcH;
-  int dstBottom =
-      ((pDraw->y + 1) * pngDecodeTarget.dstH + pngDecodeTarget.srcH - 1) /
-      pngDecodeTarget.srcH;
-  if (dstTop < 0) dstTop = 0;
-  if (dstBottom > pngDecodeTarget.dstH) dstBottom = pngDecodeTarget.dstH;
-  if (dstTop >= dstBottom) return;
-
-  for (int x = 0; x < pngDecodeTarget.dstW; x++) {
-    int srcX = (x * pngDecodeTarget.srcW) / pngDecodeTarget.dstW;
-    if (srcX >= pDraw->iWidth) srcX = pDraw->iWidth - 1;
-    scaledLineBuffer[x] = lineBuffer[srcX];
-  }
-  for (int y = dstTop; y < dstBottom; y++) {
-    sprPng->pushImage(0, y, pngDecodeTarget.dstW, 1, scaledLineBuffer);
-  }
+  pushAreaScaledPNGLine(pDraw, lineBuffer);
 }
 
 bool initPNGRenderer() {
