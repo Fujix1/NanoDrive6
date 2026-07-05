@@ -1,5 +1,6 @@
 #include "file.h"
 #include "input.h"
+#include "keyinfo.h"
 
 #include <dirent.h>
 #include <PNGdec.h>  // VGZ展開でPNGdec同梱のzlib型を使用
@@ -682,6 +683,7 @@ bool NDFile::openFile(String path, int8_t att) {
   nju72341.resetFadeout();
   ndConfig.saveHistory();
   FM.reset();
+  KeyBoard.reset();
   ND::resetPlaybackState();
 
   if (att < 0) {

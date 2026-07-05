@@ -10,6 +10,7 @@
 #include "file.h"
 #include "fonts.h"
 #include "input.h"
+#include "keyinfo.h"
 #include "nd.h"
 
 #define C_BASEBG TFT_BLACK
@@ -25,7 +26,11 @@
 #define C_GRAY 0xad55
 #define C_MID 0x73ae
 #define C_DARK 0x10c4
-#define C_LV_PEAK 0x52b5
+
+#define C_LV_PEAK 0x52b5    // #5255ad
+#define C_MASKEDKEY 0x322f  // #324579
+#define C_MDX_ON 0x843f     // #8787ff
+#define C_MDX_OFF 0x212a    // #23234f
 
 #define C_HEADER 0x4228  // 0x444444
 #define C_HEADERSUB 0x5aec
@@ -57,11 +62,13 @@ class LGFX : public lgfx::LGFX_Device {
 extern LGFX lcd;
 
 enum class ViewMode { Player,
-                      Config };
+                      Config,
+                      Visual };
 
 class Disp {
  public:
   ViewMode currentView = ViewMode::Player;
+  ViewMode lastView = currentView;
 };
 
 extern Disp disp;
@@ -117,6 +124,34 @@ class Label {
   LGFX_Sprite _sprite;
   Align _textAlign;
   int _scrollCount;  // スクロール済み回数
+  bool _isScrolling = false;
+  float _scrollSpeed;
+  bool _enabled = false;
+};
+
+// 左に90度回転したラベル
+class RotatedLabel {
+ public:
+  RotatedLabel(const int16_t x,  // 座標
+               const int16_t y,
+               const int16_t h,  // 高さ
+               const uint16_t fontColor, const uint16_t bgColor, const uint16_t fontSize,
+               const float scrollSpeed, const Align textAlign);
+  void setCaption(String newCaption);
+  void update();
+  void setEnabled(bool state);
+
+ private:
+  float _n = 0;  // ラベルスクロール量
+  int32_t _lastDrawOffset = -1;
+  uint32_t _x = 0, _y = 0, _labelHeight = 0, _textWidth = 0, _devWidth = 0, _startTick = 0;
+  uint16_t _fontColor;
+  uint16_t _fontSize;
+  uint16_t _bgColor;
+  String _caption;
+  LGFX_Sprite _sprite;
+  Align _textAlign;
+  int _scrollCount = 0;  // スクロール済み回数
   bool _isScrolling = false;
   float _scrollSpeed;
   bool _enabled = false;
@@ -206,5 +241,33 @@ class CFGWindow {
 };
 
 extern CFGWindow cfgWindow;
+
+// ビジュアル画面クラス
+class VisualWindow {
+ public:
+  VisualWindow() : _sprTime(&lcd) {
+  }
+  void init();
+  void draw();
+  void update();
+  void updateLabels();
+  void drawTimestamp(int64_t sec);
+  void drawTimestamp(int64_t sec, bool visible);
+  void show();
+  void close();
+  void eventHandler(event ev);
+  bool visible = false;
+
+ private:
+  boolean drawKeyboard(LGFX_Sprite& sprite, t_device device, const NoteInfo* notes);
+  boolean drawPan(uint8_t trackNo, tPan pan);
+  boolean drawLevel(uint8_t trackNo, uint8_t level, uint8_t peakLevel);
+  LGFX_Sprite _sprTime;
+  int64_t _lastTimestampSec = INT64_MAX;
+  bool _lastTimestampVisible = false;
+  void drawTimestamp(int64_t sec, bool toFrameBuffer, bool visible);
+};
+
+extern VisualWindow visualWindow;
 
 #endif

@@ -876,7 +876,7 @@ void VGM::vgmProcessMain() {
       if (SN76489_Freq0is0X400) {
         FM.writeRaw(ndFile.get_ui8(), 2, ND::freq[ND::chipSlot[CHIP_SN76489_1]]);
       } else {
-        FM.write(ndFile.get_ui8(), 2, ND::freq[ND::chipSlot[CHIP_SN76489_0]]);
+        FM.write(ndFile.get_ui8(), 2, ND::freq[ND::chipSlot[CHIP_SN76489_1]]);
       }
       break;
 

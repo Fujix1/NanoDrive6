@@ -1,6 +1,6 @@
 #include "disp.h"
-#include "input.h"
 
+#include "input.h"
 #include "pics.h"
 #include "png_renderer.h"
 
@@ -11,22 +11,74 @@ const uint8_t* Panel_ST7789_ND::getInitCommands(uint8_t listno) const {
   // TCA8418が見つからない旧ND6だけ、LovyanGFX upstream相当の旧液晶向け初期値を使う。
   static constexpr uint8_t oldList0[] = {
       // LovyanGFX upstream ST7789 defaults for the older Nano Drive 6 LCD module.
-      CMD_GCTRL, 1, 0x35,
-      CMD_VCOMS, 1, 0x28,
-      CMD_LCMCTRL, 1, 0x0C,
-      CMD_VDVVRHEN, 2, 0x01, 0xFF,
-      CMD_VRHS, 1, 0x10,
-      CMD_VDVSET, 1, 0x20,
-      CMD_PWCTRL1, 2, 0xa4, 0xa1,
-      CMD_RAMCTRL, 2, 0x00, 0xC0,
-      CMD_PVGAMCTRL, 14, 0xd0, 0x00, 0x02, 0x07, 0x0a, 0x28, 0x32, 0x44,
-      0x42, 0x06, 0x0e, 0x12, 0x14, 0x17,
-      CMD_NVGAMCTRL, 14, 0xd0, 0x00, 0x02, 0x07, 0x0a, 0x28, 0x31, 0x54,
-      0x47, 0x0e, 0x1c, 0x17, 0x1b, 0x1e,
-      CMD_SLPOUT, 0 + CMD_INIT_DELAY, 130,
-      CMD_IDMOFF, 0,
-      CMD_DISPON, 0,
-      0xFF, 0xFF,
+      CMD_GCTRL,
+      1,
+      0x35,
+      CMD_VCOMS,
+      1,
+      0x28,
+      CMD_LCMCTRL,
+      1,
+      0x0C,
+      CMD_VDVVRHEN,
+      2,
+      0x01,
+      0xFF,
+      CMD_VRHS,
+      1,
+      0x10,
+      CMD_VDVSET,
+      1,
+      0x20,
+      CMD_PWCTRL1,
+      2,
+      0xa4,
+      0xa1,
+      CMD_RAMCTRL,
+      2,
+      0x00,
+      0xC0,
+      CMD_PVGAMCTRL,
+      14,
+      0xd0,
+      0x00,
+      0x02,
+      0x07,
+      0x0a,
+      0x28,
+      0x32,
+      0x44,
+      0x42,
+      0x06,
+      0x0e,
+      0x12,
+      0x14,
+      0x17,
+      CMD_NVGAMCTRL,
+      14,
+      0xd0,
+      0x00,
+      0x02,
+      0x07,
+      0x0a,
+      0x28,
+      0x31,
+      0x54,
+      0x47,
+      0x0e,
+      0x1c,
+      0x17,
+      0x1b,
+      0x1e,
+      CMD_SLPOUT,
+      0 + CMD_INIT_DELAY,
+      130,
+      CMD_IDMOFF,
+      0,
+      CMD_DISPON,
+      0,
+      0xFF,
+      0xFF,
   };
 
   if (ND::version == nd_v60) {
@@ -99,18 +151,288 @@ LGFX::LGFX(void) {
 LGFX lcd;
 Disp disp;
 PlayerWindow playerWindow;
+VisualWindow visualWindow;
 static LGFX_Sprite frameBuffer(&lcd);
+static LGFX_Sprite keyboardBuffer(&lcd);
+static LGFX_Sprite keyboardBufferSub(&lcd);
+static LGFX_Sprite panMarkerCenter(&lcd);
+static LGFX_Sprite panMarkerLeft(&lcd);
+static LGFX_Sprite panMarkerRight(&lcd);
+static LGFX_Sprite panMarkerMute(&lcd);
 
 static OpenFontRender render;
 static TimerHandle_t hDispTimer;
+static TaskHandle_t hDispUpdateTask;
 static int currentPage = 0;
+
+#ifndef ND_VISUAL_ROTATE_180
+#define ND_VISUAL_ROTATE_180 0
+#endif
+
+static constexpr bool kVisualRotate180 = ND_VISUAL_ROTATE_180 != 0;
+static constexpr uint8_t kLabelSpriteCount = 3;  // XGM2, XGM1, VGM
+static constexpr uint16_t kLabelSpriteWidth = labelsWidth;
+static constexpr uint16_t kLabelSpriteHeight = 41;
+static constexpr uint16_t kLabelVgmX = 155;
+static constexpr uint16_t kLabelVgmY = 223;
+static constexpr uint16_t kLabelXgm1X = 155;
+static constexpr uint16_t kLabelXgm1Y = 179;
+static constexpr uint16_t kLabelXgm2X = 155;
+static constexpr uint16_t kLabelXgm2Y = 135;
+static constexpr uint8_t kLevelSpriteCount = 16;  // level 0 .. 15
+static constexpr uint16_t kLevelSpriteWidth = levelsWidth;
+static constexpr uint16_t kLevelSpriteHeight = 17;
+static constexpr uint16_t kLevelWaterfallAccelQ8 = 16;         // 落下加速度
+static constexpr uint16_t kLevelWaterfallInitialSpeedQ8 = 32;  // 落下開始初速
+static constexpr uint8_t kPeakHoldDelayFrames = 10;            // ピークホールドフレーム数
+static constexpr uint8_t kPeakLineX0 = 29;
+static constexpr uint8_t kPeakLineYTop = 2;
+static constexpr uint8_t kPeakLineYBottom = 14;
+static constexpr int kLevelDrawX = 67;         // レベルメータX
+static constexpr int kLevelDrawBottomY = 262;  // レベルメータY下端
+static constexpr uint8_t kFmTrackCount = 6;
+static constexpr uint8_t kPanTrackCount = 7;    // Track 1-6: FM, Track 7: PCM
+static constexpr uint8_t kLevelTrackCount = 16;  // Track 1-6: FM, 7: PCM, 9-16: SN76489
+static uint16_t levelSprite[kLevelSpriteCount][kLevelSpriteWidth * kLevelSpriteHeight];
+static uint16_t levelWorkBuffer[kLevelSpriteWidth * kLevelSpriteHeight];
+static uint16_t labelSprite[kLabelSpriteCount][kLabelSpriteWidth * kLabelSpriteHeight];
+static uint16_t visualRowBuffer[LCD_W];
+static int8_t lastTrackPan[kPanTrackCount] = {-1, -1, -1, -1, -1, -1, -1};
+static int8_t lastTrackLevel[kLevelTrackCount];
+static int8_t lastTrackPeak[kLevelTrackCount];
+static int16_t lastTrackNote[kFmTrackCount] = {-1, -1, -1, -1, -1, -1};
+static uint8_t heldTrackNote[kFmTrackCount] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+static uint16_t trackLevelDisplayQ8[kLevelTrackCount] = {0};
+static uint16_t trackLevelFallSpeedQ8[kLevelTrackCount] = {0};
+static uint16_t trackPeakDisplayQ8[kLevelTrackCount] = {0};
+static uint16_t trackPeakFallSpeedQ8[kLevelTrackCount] = {0};
+static uint8_t trackPeakHoldFrames[kLevelTrackCount] = {0};
 
 static Label lblTitle = Label(0, 28, LCD_W, C_ACCENT_LIGHT, C_BASEBG, 20, SCROLL_SPEED_TITLE, Align::TopCenter);
 static Label lblGame = Label(0, 53, LCD_W, C_LIGHTGRAY, C_BASEBG, 15, SCROLL_SPEED_GAME, Align::TopCenter);
 static Label lblAuthor = Label(28, 233, LCD_W - 28, C_GRAY, C_BASEBG, 16, SCROLL_SPEED_AUTHOR, Align::TopLeft);
 static Label lblSystem = Label(28, 211, LCD_W - 28, C_GRAY, C_BASEBG, 16, SCROLL_SPEED_AUTHOR, Align::TopLeft);
+static RotatedLabel lblSongTitle =
+    RotatedLabel(133, 0, 268, TFT_WHITE, C_BASEBG, 17, SCROLL_SPEED_TITLE, Align::TopLeft);
 
 static SemaphoreHandle_t spFrameBuffer;  // 描画用セマフォ
+
+static int visualX(int x, int w) {
+  return kVisualRotate180 ? LCD_W - x - w : x;
+}
+
+static int visualY(int y, int h) {
+  return kVisualRotate180 ? LCD_H - y - h : y;
+}
+
+static void copyVisualImage(uint16_t* dst, const uint16_t* src, int w, int h) {
+  if (!kVisualRotate180) {
+    memcpy(dst, src, sizeof(uint16_t) * w * h);
+    return;
+  }
+
+  for (int y = 0; y < h; y++) {
+    for (int x = 0; x < w; x++) {
+      dst[y * w + x] = src[(h - 1 - y) * w + (w - 1 - x)];
+    }
+  }
+}
+
+static void pushVisualImage(LGFX_Sprite& target, int x, int y, int w, int h, const uint16_t* src) {
+  target.pushImage(visualX(x, w), visualY(y, h), w, h, src);
+}
+
+static void pushPreparedVisualImage(LGFX_Sprite& target, int x, int y, int w, int h,
+                                    const uint16_t* src) {
+  if (!kVisualRotate180) {
+    target.pushImage(x, y, w, h, src);
+    return;
+  }
+
+  for (int row = 0; row < h; row++) {
+    for (int col = 0; col < w; col++) {
+      visualRowBuffer[col] = src[(h - 1 - row) * w + (w - 1 - col)];
+    }
+    target.pushImage(x, y + row, w, 1, visualRowBuffer);
+  }
+}
+
+static void pushVisualSpriteToFrameBuffer(LGFX_Sprite& sprite, int x, int y) {
+  sprite.pushSprite(&frameBuffer, visualX(x, sprite.width()), visualY(y, sprite.height()));
+}
+
+static void pushVisualSpriteToLcd(LGFX_Sprite& sprite, int x, int y) {
+  sprite.pushSprite(visualX(x, sprite.width()), visualY(y, sprite.height()));
+}
+
+static void pushVisualBufferToLcd(int x, int y, int w, int h, const uint16_t* data) {
+  lcd.pushImage(visualX(x, w), visualY(y, h), w, h, data);
+}
+
+static void fillVisualRect(LGFX_Sprite& sprite, int x, int y, int w, int h) {
+  if (kVisualRotate180) {
+    sprite.fillRect(sprite.width() - x - w, sprite.height() - y - h, w, h);
+  } else {
+    sprite.fillRect(x, y, w, h);
+  }
+}
+
+static void cutPanMarkerSprite(LGFX_Sprite& sprite, int markerIndex) {
+  const int markerHeight = panmarkersHeight / 4;
+  sprite.setPsram(false);
+  sprite.createSprite(panmarkersWidth, markerHeight);
+
+  if (kVisualRotate180) {
+    for (int y = 0; y < markerHeight; y++) {
+      const int srcY = markerIndex * markerHeight + (markerHeight - 1 - y);
+      for (int x = 0; x < panmarkersWidth; x++) {
+        visualRowBuffer[x] = panmarkers[srcY * panmarkersWidth + (panmarkersWidth - 1 - x)];
+      }
+      sprite.pushImage(0, y, panmarkersWidth, 1, visualRowBuffer);
+    }
+  } else {
+    for (int y = 0; y < markerHeight; y++) {
+      const int srcY = markerIndex * markerHeight + y;
+      const uint16_t* src = &panmarkers[srcY * panmarkersWidth];
+      sprite.pushImage(0, y, panmarkersWidth, 1, src);
+    }
+  }
+}
+
+// レベルメータ画像切り出し
+static void cutLevelSprite(uint8_t levelIndex) {
+  if (levelIndex >= kLevelSpriteCount) {
+    return;
+  }
+
+  const uint16_t srcY = (uint16_t)(levelIndex * kLevelSpriteHeight);
+  uint16_t* dst = levelSprite[levelIndex];
+
+  if (kVisualRotate180) {
+    for (uint16_t y = 0; y < kLevelSpriteHeight; y++) {
+      for (uint16_t x = 0; x < kLevelSpriteWidth; x++) {
+        dst[y * kLevelSpriteWidth + x] =
+            levels[(srcY + (kLevelSpriteHeight - 1 - y)) * levelsWidth +
+                   (kLevelSpriteWidth - 1 - x)];
+      }
+    }
+  } else {
+    for (uint16_t y = 0; y < kLevelSpriteHeight; y++) {
+      const uint16_t* src = &levels[(srcY + y) * levelsWidth];
+      memcpy(&dst[y * kLevelSpriteWidth], src, sizeof(uint16_t) * kLevelSpriteWidth);
+    }
+  }
+}
+
+// ラベル画像切り出し
+static void cutLabelSprite(uint8_t labelIndex) {
+  if (labelIndex >= kLabelSpriteCount) {
+    return;
+  }
+
+  const uint16_t* src = &labels[labelIndex * kLabelSpriteWidth * kLabelSpriteHeight];
+  copyVisualImage(labelSprite[labelIndex], src, kLabelSpriteWidth, kLabelSpriteHeight);
+}
+
+// ラベルの描画
+static void drawLabelClip(LGFX_Sprite& target, uint8_t labelIndex, int x, int y) {
+  if (labelIndex >= kLabelSpriteCount) {
+    return;
+  }
+
+  target.pushImage(visualX(x, kLabelSpriteWidth), visualY(y, kLabelSpriteHeight), kLabelSpriteWidth,
+                   kLabelSpriteHeight, labelSprite[labelIndex]);
+}
+
+static uint8_t noteInfoToDisplayNoteNo(t_device device, const NoteInfo& ni) {
+  if (ni.octave < 0 || ni.octave > 8 || ni.note < 0 || ni.note > 11) {
+    return 0xff;
+  }
+
+  int noteNo = -1;
+  switch (device) {
+    case YM2612_KEY:
+      noteNo = ni.octave * 12 + ni.note - 3;
+      break;
+    case SN76489_0_KEY:
+    case SN76489_1_KEY:
+    case SN76489_MIX_KEY:
+      noteNo = ni.octave * 12 + ni.note;
+      break;
+    default:
+      return 0xff;
+  }
+
+  if (noteNo < 0 || noteNo > 96) {
+    return 0xff;
+  }
+  return (uint8_t)noteNo;
+}
+
+static uint8_t updateTrackLevelWaterfall(uint8_t trackNo, uint8_t targetLevel) {
+  if (trackNo >= kLevelTrackCount) {
+    return 0;
+  }
+  if (targetLevel >= kLevelSpriteCount) {
+    targetLevel = kLevelSpriteCount - 1;
+  }
+
+  const uint16_t targetQ8 = (uint16_t)(targetLevel << 8);
+  uint16_t& displayQ8 = trackLevelDisplayQ8[trackNo];
+  uint16_t& fallSpeedQ8 = trackLevelFallSpeedQ8[trackNo];
+
+  if (displayQ8 <= targetQ8) {
+    displayQ8 = targetQ8;
+    fallSpeedQ8 = 0;
+  } else {
+    if (fallSpeedQ8 == 0) {
+      fallSpeedQ8 = kLevelWaterfallInitialSpeedQ8;
+    }
+    fallSpeedQ8 = (uint16_t)(fallSpeedQ8 + kLevelWaterfallAccelQ8);
+    if (displayQ8 > fallSpeedQ8) {
+      displayQ8 = (uint16_t)(displayQ8 - fallSpeedQ8);
+    } else {
+      displayQ8 = 0;
+    }
+    if (displayQ8 < targetQ8) {
+      displayQ8 = targetQ8;
+      fallSpeedQ8 = 0;
+    }
+  }
+
+  return (uint8_t)(displayQ8 >> 8);
+}
+
+static uint8_t updateTrackPeakHold(uint8_t trackNo) {
+  if (trackNo >= kLevelTrackCount) {
+    return 0;
+  }
+
+  const uint16_t currentQ8 = trackLevelDisplayQ8[trackNo];
+  uint16_t& peakQ8 = trackPeakDisplayQ8[trackNo];
+  uint16_t& fallSpeedQ8 = trackPeakFallSpeedQ8[trackNo];
+  uint8_t& holdFrames = trackPeakHoldFrames[trackNo];
+
+  if (peakQ8 <= currentQ8) {
+    peakQ8 = currentQ8;
+    fallSpeedQ8 = 0;
+    holdFrames = kPeakHoldDelayFrames;
+  } else if (holdFrames > 0) {
+    holdFrames--;
+  } else {
+    if (fallSpeedQ8 == 0) {
+      fallSpeedQ8 = kLevelWaterfallInitialSpeedQ8;
+    }
+    fallSpeedQ8 = (uint16_t)(fallSpeedQ8 + kLevelWaterfallAccelQ8);
+    if (peakQ8 > fallSpeedQ8) {
+      peakQ8 = (uint16_t)(peakQ8 - fallSpeedQ8);
+    } else {
+      peakQ8 = 0;
+    }
+  }
+
+  return (uint8_t)(peakQ8 >> 8);
+}
 
 void redrawOnCore0Task(void* pvParameters) {
   playerWindow.redraw();
@@ -205,6 +527,142 @@ void Label::update() {
 void Label::setEnabled(bool state) { _enabled = state; }
 
 //---------------------------------------------------------------------------
+// Rotated scrolling label class
+RotatedLabel::RotatedLabel(const int16_t x, const int16_t y, const int16_t h,
+                           const uint16_t fontColor, const uint16_t bgColor,
+                           const uint16_t fontSize, const float scrollSpeed,
+                           const Align textAlign) {
+  _x = x;
+  _y = y;
+  _labelHeight = h;
+  _fontColor = fontColor;
+  _bgColor = bgColor;
+  _fontSize = fontSize;
+  _scrollSpeed = scrollSpeed;
+  _textAlign = textAlign;
+}
+
+void RotatedLabel::setCaption(String newCaption) {
+  if (_caption != newCaption) {
+    _caption = newCaption;
+
+    OpenFontRender ofr;
+    LGFX_Sprite source(&lcd);
+    String renderCaption = _caption;
+
+    ofr.setUseRenderTask(false);
+    ofr.loadFont(fontMain, sizeof(fontMain));
+    ofr.setFontSize(_fontSize);
+    _textWidth = ofr.getTextWidth(_caption.c_str());
+    _devWidth = ofr.getTextWidth(TITLE_DEVIDER) + ofr.getTextWidth("/");
+
+    _sprite.deleteSprite();
+    _sprite.setPsram(true);
+    source.setPsram(true);
+
+    if (_textWidth > _labelHeight) {
+      renderCaption += TITLE_DEVIDER;
+      _isScrolling = true;
+      source.createSprite(_textWidth + _devWidth, _fontSize);
+      _sprite.createSprite(_fontSize, _textWidth + _devWidth);
+    } else {
+      _isScrolling = false;
+      source.createSprite(_textWidth > 0 ? _textWidth : 1, _fontSize);
+      _sprite.createSprite(_fontSize, _labelHeight > 0 ? _labelHeight : 1);
+    }
+
+    source.fillSprite(_bgColor);
+    _sprite.fillSprite(_bgColor);
+
+    ofr.setDrawer(source);
+    ofr.setFontColor(_fontColor, _bgColor);
+    ofr.setAlignment(Align::TopLeft);
+    ofr.setCursor(0, 0);
+    ofr.printf(renderCaption.c_str());
+    ofr.unloadFont();
+
+    const int32_t rotatedHeight = source.width();
+    int32_t dstY = 0;
+    if (!_isScrolling && _labelHeight > (uint32_t)rotatedHeight) {
+      dstY = _labelHeight - rotatedHeight;
+    }
+
+    for (int32_t srcY = 0; srcY < source.height(); srcY++) {
+      for (int32_t srcX = 0; srcX < source.width(); srcX++) {
+        const int32_t dstX = srcY;
+        const int32_t dstYPos = dstY + source.width() - 1 - srcX;
+        if (dstX >= 0 && dstX < _sprite.width() && dstYPos >= 0 &&
+            dstYPos < _sprite.height()) {
+          const uint16_t color = source.readPixel(srcX, srcY);
+          if (kVisualRotate180) {
+            _sprite.drawPixel(_sprite.width() - 1 - dstX, _sprite.height() - 1 - dstYPos, color);
+          } else {
+            _sprite.drawPixel(dstX, dstYPos, color);
+          }
+        }
+      }
+    }
+
+    source.deleteSprite();
+  }
+
+  const int32_t initialY = kVisualRotate180
+                               ? visualY(_y, _labelHeight)
+                               : (int32_t)_y + (int32_t)_labelHeight - _sprite.height();
+  const int32_t drawX = visualX(_x, _sprite.width());
+  const int32_t clipY = visualY(_y, _labelHeight);
+  frameBuffer.setClipRect(drawX, clipY, _sprite.width(), _labelHeight);
+  _sprite.pushSprite(&frameBuffer, drawX, initialY);
+  frameBuffer.clearClipRect();
+  _n = 0;
+  _lastDrawOffset = -1;
+  _scrollCount = 0;
+  _startTick = millis();
+  _enabled = true;
+}
+
+void RotatedLabel::update() {
+  if (!_enabled || !_isScrolling) return;
+
+  const int32_t scrollLimit = ndConfig.get(CFG_SCROLL);
+  if (scrollLimit != SCROLL_INFINITE && _scrollCount >= scrollLimit) return;
+
+  uint32_t now = millis();
+  if (now - _startTick < SCROLL_DELAY) return;
+
+  const int32_t loopHeight = _sprite.height();
+  const int32_t drawOffset = (int32_t)_n;
+  const int32_t baseY = kVisualRotate180 ? visualY(_y, _labelHeight)
+                                         : (int32_t)_y + (int32_t)_labelHeight - _sprite.height();
+  const int32_t drawX = visualX(_x, _sprite.width());
+  const int32_t clipY = visualY(_y, _labelHeight);
+  if (drawOffset != _lastDrawOffset) {
+    lcd.setClipRect(drawX, clipY, _sprite.width(), _labelHeight);
+    const int32_t firstY = kVisualRotate180 ? baseY - drawOffset : baseY + drawOffset;
+    _sprite.pushSprite(&lcd, drawX, firstY);
+
+    if (drawOffset > loopHeight - (int32_t)_labelHeight) {
+      const int32_t secondY =
+          kVisualRotate180 ? firstY + loopHeight : baseY + drawOffset - loopHeight;
+      _sprite.pushSprite(&lcd, drawX, secondY);
+    }
+    lcd.clearClipRect();
+    _lastDrawOffset = drawOffset;
+  }
+
+  if (_n < loopHeight - _scrollSpeed) {
+    _n += _scrollSpeed;
+  } else {
+    _n = 0;
+    _lastDrawOffset = -1;
+    _startTick = now;
+    _scrollCount++;
+  }
+}
+
+void RotatedLabel::setEnabled(bool state) { _enabled = state; }
+
+//---------------------------------------------------------------------------
 // Draw header info
 static LGFX_Sprite sprHeader(&lcd);
 static constexpr int HEADER_TIME_W = 50;
@@ -249,35 +707,102 @@ void PlayerWindow::updateHeaderBlocking(int64_t sec) {
   updateHeader(sec, true, portMAX_DELAY);
 }
 //---------------------------------------------------------------------------
-// Timer Handler
-void dispTimerHandler(void* param) {
-  if (disp.currentView != ViewMode::Player) {
-    return;
+static bool tryLockDrawing() {
+  return xSemaphoreTake(spFrameBuffer, 0) == pdTRUE;
+}
+
+static void lockDrawing() {
+  xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
+}
+
+static void unlockDrawing() {
+  xSemaphoreGive(spFrameBuffer);
+}
+
+static void setSerialModeLabels() {
+  if (ndConfig.get(CFG_LANG) == LANG_JA) {
+    lblTitle.setCaption("シリアルモード");
+    lblGame.setCaption("ベータ版");
+    lblAuthor.setCaption("--");
+    lblSystem.setCaption("メガドライブ");
+  } else {
+    lblTitle.setCaption("Serial Mode");
+    lblGame.setCaption("Beta Version");
+    lblAuthor.setCaption("--");
+    lblSystem.setCaption("Mega Drive / Genesis");
   }
+}
 
-  if (!_stopTimerDrawing) {
-    if (xSemaphoreTake(spFrameBuffer, 0) == pdTRUE) {
-      lblTitle.update();
-      lblGame.update();
-      lblAuthor.update();
-      lblSystem.update();
-      xSemaphoreGive(spFrameBuffer);
-    }
-    int64_t sec = playerWindow.dispData.time;
-    if (ND::canPlay == false || ND::isPaused) {
-      if (ND::isPaused) {
-        // カウントダウン中だけは点滅させず、残り秒数を常時表示する。
-        const bool visible = isPlayHoldCountdownActive() || ((millis() / 500) & 1) == 0;
-        playerWindow.updateHeader(sec, visible, 0);
+static void dispUpdateWorker() {
+  switch (disp.currentView) {
+    case ViewMode::Player: {  // プレイヤーのとき
+      if (tryLockDrawing()) {
+        lcd.startWrite();
+        lblTitle.update();
+        lblGame.update();
+        lblAuthor.update();
+        lblSystem.update();
+        lcd.setClipRect(0, 0, LCD_W, LCD_H);
+        lcd.endWrite();
+        unlockDrawing();
       }
-      return;
-    }
+      int64_t sec = playerWindow.dispData.time;
+      if (ND::canPlay == false || ND::isPaused) {
+        if (ND::isPaused) {
+          // カウントダウン中だけは点滅させず、残り秒数を常時表示する。
+          const bool visible = isPlayHoldCountdownActive() || ((millis() / 500) & 1) == 0;
+          playerWindow.updateHeader(sec, visible, 0);
+        }
+        return;
+      }
 
-    sec = vgm.getCurrentTime();
-    if (playerWindow.dispData.time != sec) {
-      playerWindow.updateHeader(sec, true, 0);
-      playerWindow.dispData.time = sec;
+      sec = vgm.getCurrentTime();
+      if (playerWindow.dispData.time != sec) {
+        playerWindow.updateHeader(sec, true, 0);
+        playerWindow.dispData.time = sec;
+      }
+      break;
     }
+    case ViewMode::Visual: {  // ビジュアルモードのとき
+      int64_t sec = playerWindow.dispData.time;
+      if (ND::canPlay == false || ND::isPaused) {
+        if (ND::isPaused) {
+          visualWindow.updateLabels();
+          // カウントダウン中だけは点滅させず、残り秒数を常時表示する。
+          const bool visible = isPlayHoldCountdownActive() || ((millis() / 500) & 1) == 0;
+          visualWindow.drawTimestamp(sec, visible);
+        }
+        return;
+      }
+      visualWindow.update();
+      sec = vgm.getCurrentTime();
+      if (playerWindow.dispData.time != sec) {
+        visualWindow.drawTimestamp(sec);
+        playerWindow.dispData.time = sec;
+      }
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+void dispUpdateTask(void* param) {
+  while (true) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    while (ulTaskNotifyTake(pdTRUE, 0) > 0) {
+      // queue collapse: 最新状態だけ描画
+    }
+    if (_stopTimerDrawing) {
+      continue;
+    }
+    dispUpdateWorker();
+  }
+}
+
+void dispTimerHandler(TimerHandle_t timer) {
+  if (hDispUpdateTask != nullptr) {
+    xTaskNotifyGive(hDispUpdateTask);
   }
 }
 
@@ -308,8 +833,10 @@ void PlayerWindow::redraw() {
   render.setCursor(27, 256);
   render.printf(dispData.date.c_str());
 
+  const bool serialMode = ndConfig.currentMode == MODE_SERIAL;
+
   // シャッフルアイコン
-  if (ndConfig.get(CFG_SHUFFLE) != TRANDOM_NO) {
+  if (!serialMode && ndConfig.get(CFG_SHUFFLE) != TRANDOM_NO) {
     render.setCursor(3, 2);
     render.setFontSize(16);
     render.setFontColor(C_LIGHTGRAY, C_HEADER);
@@ -332,7 +859,7 @@ void PlayerWindow::redraw() {
   render.setCursor(11, 303);
   render.printf("2");
 
-  if (dispData.no != 0 && dispData.maxFiles != 0) {
+  if (!serialMode && dispData.no != 0 && dispData.maxFiles != 0) {
     render.setFontSize(14);
     render.setFontColor(C_GRAY, C_HEADER);
     render.setCursor(167, 4);
@@ -340,26 +867,30 @@ void PlayerWindow::redraw() {
     render.printf("%02d/%02d", dispData.no, dispData.maxFiles);
   }
 
-  render.setFontSize(13);
-  if (ndFile.accessMode == ACCESS_CACHE) {
-    render.setFontColor(C_ACCENT_LIGHT, C_HEADER);
-  } else {
-    render.setFontColor(C_ORANGE, C_HEADER);
-  }
+  if (!serialMode) {
+    render.setFontSize(13);
+    if (ndFile.accessMode == ACCESS_CACHE) {
+      render.setFontColor(C_ACCENT_LIGHT, C_HEADER);
+    } else {
+      render.setFontColor(C_ORANGE, C_HEADER);
+    }
 
-  // シャッフルアイコン分ずらす
-  if (ndConfig.get(CFG_SHUFFLE) != TRANDOM_NO) {
-    render.setCursor(22, 4);
-  } else {
-    render.setCursor(4, 4);
+    // シャッフルアイコン分ずらす
+    if (ndConfig.get(CFG_SHUFFLE) != TRANDOM_NO) {
+      render.setCursor(22, 4);
+    } else {
+      render.setCursor(4, 4);
+    }
+    render.setAlignment(Align::TopLeft);
+    render.printf(dispData.type.c_str());
   }
-  render.setAlignment(Align::TopLeft);
-  render.printf(dispData.type.c_str());
   render.unloadFont();
 
   drawHeaderTime(frameBuffer, dispData.time, HEADER_TIME_X, HEADER_TIME_Y);
 
-  if (ndConfig.get(CFG_LANG) == LANG_JA) {
+  if (serialMode) {
+    setSerialModeLabels();
+  } else if (ndConfig.get(CFG_LANG) == LANG_JA) {
     lblTitle.setCaption(dispData.trackJp);
     lblGame.setCaption(dispData.gameJp);
     lblAuthor.setCaption(dispData.authorJp);
@@ -376,17 +907,19 @@ void PlayerWindow::redraw() {
   // 2) snap/[songno].png
   // 3) ***.png
 
-  String fileName = ndFile.getCurrentFileName();
-  fileName = fileName.substring(0, fileName.length() - 4);
+  if (!serialMode) {
+    String fileName = ndFile.getCurrentFileName();
+    fileName = fileName.substring(0, fileName.length() - 4);
 
-  String dirPath = ndFile.getCurrentDirPath();
-  String filePngName = ndFile.getCurrentFilePngName();
-  String dirPngName = ndFile.getCurrentDirPngName();
-  if (filePngName != "" && openPNG(dirPath + "/snap", filePngName, true, true) == false) {
-    openPNG(dirPath, dirPngName, true, true);
-  } else if (filePngName == "" && openPNG(dirPath + "/snap", fileName + ".png", true, true) == false) {
-    if (openPNG(dirPath + "/snap", String(dispData.no) + ".png", true, true) == false) {
+    String dirPath = ndFile.getCurrentDirPath();
+    String filePngName = ndFile.getCurrentFilePngName();
+    String dirPngName = ndFile.getCurrentDirPngName();
+    if (filePngName != "" && openPNG(dirPath + "/snap", filePngName, true, true) == false) {
       openPNG(dirPath, dirPngName, true, true);
+    } else if (filePngName == "" && openPNG(dirPath + "/snap", fileName + ".png", true, true) == false) {
+      if (openPNG(dirPath + "/snap", String(dispData.no) + ".png", true, true) == false) {
+        openPNG(dirPath, dirPngName, true, true);
+      }
     }
   }
 
@@ -402,8 +935,6 @@ void serialModeDraw() {
   playerWindow.drawBG();
   render.setUseRenderTask(false);
   render.setDrawer(frameBuffer);
-
-  frameBuffer.pushImage(170 - 2 - USB_ICON_WIDTH, 2, USB_ICON_WIDTH, USB_ICON_HEIGHT, usb_icon);  // usb icon
 
   render.loadFont(nimbusBold, sizeof(nimbusBold));
   render.setFontSize(13);
@@ -434,10 +965,6 @@ void serialModeDraw() {
   render.setCursor(11, 303);
   render.printf("2");
 
-  render.setFontColor(C_ORANGE, C_HEADER);
-  render.setCursor(4, 4);
-  render.setAlignment(Align::TopLeft);
-  render.printf("USB");
   render.unloadFont();
 
   render.loadFont(fontMain, sizeof(fontMain));
@@ -447,17 +974,7 @@ void serialModeDraw() {
   render.printf("--");
   render.unloadFont();
 
-  if (ndConfig.get(CFG_LANG) == LANG_JA) {
-    lblTitle.setCaption("シリアルモード");
-    lblGame.setCaption("ベータ版");
-    lblAuthor.setCaption("--");
-    lblSystem.setCaption("メガドライブ");
-  } else {
-    lblTitle.setCaption("Serial Mode");
-    lblGame.setCaption("Beta Version");
-    lblAuthor.setCaption("--");
-    lblSystem.setCaption("Mega Drive / Genesis");
-  }
+  setSerialModeLabels();
 
   frameBuffer.pushSprite(0, 0);
   xSemaphoreGive(spFrameBuffer);
@@ -470,6 +987,8 @@ void PlayerWindow::updateDisp(tDispData data) {
 
   if (disp.currentView == ViewMode::Player) {
     redraw();
+  } else if (disp.currentView == ViewMode::Visual) {
+    visualWindow.draw();
   }
 }
 
@@ -486,12 +1005,22 @@ bool initDisp() {
   // フレームバッファスプライト作成
   frameBuffer.setPsram(true);
   frameBuffer.createSprite(LCD_W, LCD_H);
+  visualWindow.init();
 
   if (!initPNGRenderer()) {
     return false;
   }
 
   _stopTimerDrawing = true;
+
+  hDispUpdateTask = NULL;
+  BaseType_t taskCreated =
+      xTaskCreatePinnedToCore(dispUpdateTask, "dispUpdate", DISP_UPDATE_TASK_STACK, NULL,
+                              DISP_UPDATE_TASK_PRIORITY, &hDispUpdateTask, DISP_UPDATE_TASK_CORE);
+  if (taskCreated != pdPASS || hDispUpdateTask == NULL) {
+    Serial.println("ERROR: dispUpdateTask create failed.");
+    return false;
+  }
 
   // タイマー生成
   hDispTimer = xTimerCreate("DISP_TIMER", DISP_TIMER_INTERVAL, pdTRUE, NULL, dispTimerHandler);
@@ -551,6 +1080,7 @@ void PlayerWindow::eventHandler(event ev) {
 
 void PlayerWindow::show() {
   disp.currentView = ViewMode::Player;
+  disp.lastView = ViewMode::Player;
   redraw();
 }
 
@@ -765,7 +1295,7 @@ void CFGWindow::close() {
     ESP.restart();
     return;
   }
-  playerWindow.show();
+  visualWindow.show();
 }
 
 void CFGWindow::eventHandler(event ev) {
@@ -962,6 +1492,369 @@ void CFGWindow::drawFooter(bool toFrameBuffer) {
   } else {
     _sprFooter.pushSprite(&lcd, 0, 293);
   }
+}
+
+//---------------------------------------------------------------------------
+// Visual view
+void VisualWindow::init() {
+  keyboardBuffer.createSprite(keyboard2Width, keyboard2Height);
+  pushPreparedVisualImage(keyboardBuffer, 0, 0, keyboard2Width, keyboard2Height, keyboard2);
+  keyboardBufferSub.createSprite(keyboard2Width, keyboard2Height);
+
+  cutPanMarkerSprite(panMarkerCenter, 0);
+  cutPanMarkerSprite(panMarkerLeft, 1);
+  cutPanMarkerSprite(panMarkerRight, 2);
+  cutPanMarkerSprite(panMarkerMute, 3);
+  for (uint8_t i = 0; i < kLevelSpriteCount; i++) {
+    cutLevelSprite(i);
+  }
+
+  for (uint8_t i = 0; i < kLabelSpriteCount; i++) {
+    cutLabelSprite(i);
+  }
+
+  _sprTime.setPsram(false);
+  _sprTime.createSprite(14, 48);
+}
+
+void VisualWindow::drawTimestamp(int64_t sec) {
+  lockDrawing();
+  drawTimestamp(sec, false, true);
+  unlockDrawing();
+}
+
+void VisualWindow::drawTimestamp(int64_t sec, bool visible) {
+  lockDrawing();
+  drawTimestamp(sec, false, visible);
+  unlockDrawing();
+}
+
+void VisualWindow::drawTimestamp(int64_t sec, bool toFrameBuffer, bool visible) {
+  if (_sprTime.width() == 0) {
+    return;
+  }
+  if (_lastTimestampSec == sec && _lastTimestampVisible == visible) {
+    return;
+  }
+
+  static constexpr int kTimestampSourceW = 48;
+  static constexpr int kTimestampSourceH = 14;
+  LGFX_Sprite source(&lcd);
+  source.setPsram(false);
+  source.createSprite(kTimestampSourceW, kTimestampSourceH);
+  if (source.width() == 0) {
+    return;
+  }
+
+  source.fillSprite(TFT_BLACK);
+  render.setDrawer(source);
+  render.setAlignment(Align::TopRight);
+  render.loadFont(nimbusBold, sizeof(nimbusBold));
+  render.setFontSize(14);
+  render.setFontColor(C_MDX_ON, TFT_BLACK);
+  if (visible) {
+    char timestamp[24];
+    formatTimestamp(timestamp, sizeof(timestamp), sec);
+    render.setCursor(source.width(), 0);
+    render.printf("%s", timestamp);
+  }
+  render.unloadFont();
+
+  _sprTime.fillSprite(TFT_BLACK);
+  source.setPivot(source.width() / 2.0f, source.height() / 2.0f);
+  const float angle = kVisualRotate180 ? 90.0f : -90.0f;
+  source.pushRotateZoom(&_sprTime, _sprTime.width() / 2.0f, _sprTime.height() / 2.0f,
+                        angle, 1.0f, 1.0f, TFT_BLACK);
+  source.deleteSprite();
+
+  const int x = LCD_W - _sprTime.width() - 2;
+  const int y = 0;
+  if (toFrameBuffer) {
+    pushVisualSpriteToFrameBuffer(_sprTime, x, y);
+  } else {
+    pushVisualSpriteToLcd(_sprTime, x, y);
+  }
+  _lastTimestampSec = sec;
+  _lastTimestampVisible = visible;
+}
+
+void VisualWindow::draw() {
+  xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
+  _stopTimerDrawing = true;
+
+  frameBuffer.fillSprite(TFT_BLACK);
+  pushVisualImage(frameBuffer, 0, 0, keyboardWidth, keyboardHeight, keyboard);
+
+  switch (ND::fileFormat) {
+    case FileFormat::VGM:
+    case FileFormat::VGZ:
+      drawLabelClip(frameBuffer, 2, kLabelVgmX, kLabelVgmY);
+      break;
+    case FileFormat::XGM1:
+      drawLabelClip(frameBuffer, 1, kLabelXgm1X, kLabelXgm1Y);
+      break;
+    case FileFormat::XGM2:
+      drawLabelClip(frameBuffer, 0, kLabelXgm2X, kLabelXgm2Y);
+      break;
+    default:
+      break;
+  }
+
+  String songTitle;
+  if (ndConfig.get(CFG_LANG) == LANG_JA) {
+    songTitle = playerWindow.dispData.trackJp;
+    if (playerWindow.dispData.gameJp != "") {
+      songTitle += " / " + playerWindow.dispData.gameJp;
+    }
+  } else {
+    songTitle = playerWindow.dispData.trackEn;
+    if (playerWindow.dispData.gameEn != "") {
+      songTitle += " / " + playerWindow.dispData.gameEn;
+    }
+  }
+  lblSongTitle.setCaption(songTitle);
+
+  _lastTimestampSec = INT64_MAX;
+  _lastTimestampVisible = false;
+  drawTimestamp(playerWindow.dispData.time, true, true);
+  frameBuffer.pushSprite(0, 0);
+
+  for (int i = 0; i < kLevelTrackCount; i++) {
+    lastTrackLevel[i] = -1;
+    lastTrackPeak[i] = -1;
+    trackLevelDisplayQ8[i] = 0;
+    trackLevelFallSpeedQ8[i] = 0;
+    trackPeakDisplayQ8[i] = 0;
+    trackPeakFallSpeedQ8[i] = 0;
+    trackPeakHoldFrames[i] = 0;
+  }
+  for (int i = 0; i < kPanTrackCount; i++) {
+    lastTrackPan[i] = -1;
+  }
+  for (int i = 0; i < kFmTrackCount; i++) {
+    lastTrackNote[i] = -1;
+    heldTrackNote[i] = 0xff;
+  }
+
+  _stopTimerDrawing = false;
+  xSemaphoreGive(spFrameBuffer);
+}
+
+void VisualWindow::update() {
+  if (disp.currentView != ViewMode::Visual) {
+    return;
+  }
+
+  NoteInfo keySnapshot[kFmTrackCount];
+  NoteInfo sn0KeySnapshot[4];
+  NoteInfo sn1KeySnapshot[4];
+  NoteInfo snKeySnapshot[8];
+  tPan panSnapshot[kPanTrackCount];
+  uint8_t levelSnapshot[kLevelTrackCount];
+  if (xSemaphoreTake(KeyBoard.keyinfoMutex, 0) != pdTRUE) {
+    return;
+  }
+  memcpy(keySnapshot, KeyBoard.keyInfo[YM2612_KEY], sizeof(keySnapshot));
+  memcpy(sn0KeySnapshot, KeyBoard.keyInfo[SN76489_0_KEY], sizeof(sn0KeySnapshot));
+  memcpy(sn1KeySnapshot, KeyBoard.keyInfo[SN76489_1_KEY], sizeof(sn1KeySnapshot));
+  memcpy(panSnapshot, KeyBoard.trackPan, sizeof(panSnapshot));
+  memcpy(levelSnapshot, KeyBoard.trackLevel, sizeof(levelSnapshot));
+  // Peak meters are latched one-shot values. Clear the sampled source and let the waterfall
+  // decay.
+  memset(KeyBoard.trackLevel, 0, sizeof(KeyBoard.trackLevel));
+  xSemaphoreGive(KeyBoard.keyinfoMutex);
+
+  uint8_t noteSnapshot[kFmTrackCount];
+  for (int i = 0; i < kFmTrackCount; i++) {
+    uint8_t ymNote = noteInfoToDisplayNoteNo(YM2612_KEY, keySnapshot[i]);
+    if (ymNote != 0xff) {
+      heldTrackNote[i] = ymNote;
+    } else {
+      heldTrackNote[i] = 0xff;
+    }
+    noteSnapshot[i] = heldTrackNote[i];
+  }
+  for (int i = 0; i < 4; i++) {
+    snKeySnapshot[i] = sn0KeySnapshot[i];
+    snKeySnapshot[i + 4] = sn1KeySnapshot[i];
+  }
+
+  if (!tryLockDrawing()) {
+    return;
+  }
+
+  keyboardBuffer.pushSprite(&keyboardBufferSub, 0, 0);
+  drawKeyboard(keyboardBufferSub, YM2612_KEY, keySnapshot);
+  pushVisualSpriteToLcd(keyboardBufferSub, 2, 0);
+
+  keyboardBuffer.pushSprite(&keyboardBufferSub, 0, 0);
+  drawKeyboard(keyboardBufferSub, SN76489_MIX_KEY, snKeySnapshot);
+  pushVisualSpriteToLcd(keyboardBufferSub, 30, 0);
+
+  for (int i = 0; i < kLevelTrackCount; i++) {
+    uint8_t displayLevel = updateTrackLevelWaterfall(i, levelSnapshot[i]);
+    uint8_t peakLevel = updateTrackPeakHold(i);
+    if (lastTrackLevel[i] != displayLevel || lastTrackPeak[i] != peakLevel) {
+      drawLevel(i, displayLevel, peakLevel);
+      lastTrackLevel[i] = displayLevel;
+      lastTrackPeak[i] = peakLevel;
+    }
+    if (i >= kPanTrackCount) {
+      continue;
+    }
+    if (lastTrackPan[i] != panSnapshot[i]) {
+      drawPan(i, panSnapshot[i]);
+      lastTrackPan[i] = panSnapshot[i];
+    }
+    if (i >= kFmTrackCount) {
+      continue;
+    }
+    if (lastTrackNote[i] != noteSnapshot[i]) {
+      lastTrackNote[i] = noteSnapshot[i];
+    }
+  }
+
+  lblSongTitle.update();
+  unlockDrawing();
+}
+
+void VisualWindow::updateLabels() {
+  if (!tryLockDrawing()) {
+    return;
+  }
+
+  // 再生ホールド中も Visual 画面の曲名スクロールだけは止めない。
+  lblSongTitle.update();
+  unlockDrawing();
+}
+
+// 個別のキーボードを描画する
+// 戻り値: true 描画更新した
+boolean VisualWindow::drawKeyboard(LGFX_Sprite& sprite, t_device device, const NoteInfo* notes) {
+  // 鍵盤描画位置用定数
+  const int notePos[12] = {5, 7, 10, 12, 15, 20, 22, 25, 27, 30, 32, 35};
+  const int noteWidth[12] = {4, 3, 4, 3, 4, 4, 3, 4, 3, 4, 3, 4};
+
+  bool touched = false;
+  const uint16_t keyOnColor = TFT_RED;
+
+  for (int i = 0; i < device_channels[device]; i++) {
+    int oct = notes[i].octave;
+    int note = notes[i].note;
+    if (oct > 0 || (oct == 0 && note > 8)) {  // オクターブ0は A以上
+      if (note < 0 || note > 11) {
+        continue;
+      }
+
+      touched = true;
+      sprite.setColor(keyOnColor);
+      int y = keyboard2Height - ((oct - 1) * 35 + notePos[note]) - 10;
+      if (y < 0 || y >= keyboard2Height) {
+        continue;
+      }
+
+      if (noteWidth[note] == 3) {
+        fillVisualRect(sprite, 0, y, 15, 3);  // 黒鍵
+      } else {
+        // keyboard2Width=25 に対して x=15 の白鍵側は 9px 幅が上限。
+        fillVisualRect(sprite, 15, y, 10, 4);
+        switch (note) {
+          case 0:
+          case 5:
+            fillVisualRect(sprite, 0, y + 1, 15, 3);
+            break;
+          case 4:
+          case 11:
+            fillVisualRect(sprite, 0, y, 15, 3);
+            break;
+          case 2:
+          case 7:
+          case 9:
+            fillVisualRect(sprite, 0, y + 1, 15, 2);
+            break;
+        }
+      }
+    }
+  }
+  return touched;
+}
+
+boolean VisualWindow::drawPan(uint8_t trackNo, tPan pan) {
+  LGFX_Sprite* marker = &panMarkerCenter;
+  if (pan == PAN_LEFT) {
+    marker = &panMarkerLeft;
+  } else if (pan == PAN_RIGHT) {
+    marker = &panMarkerRight;
+  } else if (pan == PAN_MUTE) {
+    marker = &panMarkerMute;
+  }
+
+  marker->pushSprite(visualX(99, marker->width()), visualY(264 - trackNo * 17, marker->height()));
+  return true;
+}
+
+boolean VisualWindow::drawLevel(uint8_t trackNo, uint8_t level, uint8_t peakLevel) {
+  if (trackNo >= kLevelTrackCount) {
+    return false;
+  }
+  if (level >= kLevelSpriteCount) {
+    level = kLevelSpriteCount - 1;
+  }
+  if (peakLevel >= kLevelSpriteCount) {
+    peakLevel = kLevelSpriteCount - 1;
+  }
+
+  // levels.png は上から大→小の順なので、表示レベルからスプライト番号を反転する。
+  const uint8_t spriteIndex = (kLevelSpriteCount - 1) - level;
+  memcpy(levelWorkBuffer, levelSprite[spriteIndex], sizeof(levelWorkBuffer));
+
+  if (peakLevel > 0) {
+    int peakX = kPeakLineX0 - (int)((peakLevel - 1) * 2);
+    if (peakX < 1) {
+      peakX = 1;
+    }
+    if (peakX >= kLevelSpriteWidth) {
+      peakX = kLevelSpriteWidth - 1;
+    }
+
+    for (uint8_t peakY = kPeakLineYTop; peakY <= kPeakLineYBottom; peakY++) {
+      const int drawX = kVisualRotate180 ? (kLevelSpriteWidth - 1 - peakX) : peakX;
+      const int drawY = kVisualRotate180 ? (kLevelSpriteHeight - 1 - peakY) : peakY;
+      levelWorkBuffer[drawY * kLevelSpriteWidth + drawX] = C_LV_PEAK;
+    }
+  }
+
+  const int y = kLevelDrawBottomY - trackNo * kLevelSpriteHeight;
+  pushVisualBufferToLcd(kLevelDrawX, y, kLevelSpriteWidth, kLevelSpriteHeight, levelWorkBuffer);
+  return true;
+}
+
+void VisualWindow::eventHandler(event ev) {
+  switch (ev) {
+    case event::Option:
+      draw();
+      break;
+    case event::Close:
+      close();
+      playerWindow.show();
+      break;
+    default:
+      break;
+  }
+}
+
+void VisualWindow::show() {
+  visible = true;
+  _stopTimerDrawing = true;
+  disp.currentView = ViewMode::Visual;
+  disp.lastView = ViewMode::Visual;
+  draw();
+}
+
+void VisualWindow::close() {
+  visible = false;
+  _stopTimerDrawing = true;
+  lblSongTitle.setEnabled(false);
 }
 
 CFGWindow cfgWindow;

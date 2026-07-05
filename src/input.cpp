@@ -189,6 +189,8 @@ void eventTask(void*) {
     // 表示中の画面にイベントを送信
     if (disp.currentView == ViewMode::Config) {
       cfgWindow.eventHandler(ev);
+    } else if (disp.currentView == ViewMode::Visual) {
+      visualWindow.eventHandler(ev);
     } else {
       playerWindow.eventHandler(ev);
     }
@@ -211,6 +213,8 @@ static void drawHoldTimestamp(int64_t sec) {
     } else {
       playerWindow.updateHeader(sec);
     }
+  } else if (disp.currentView == ViewMode::Visual) {
+    visualWindow.drawTimestamp(sec);
   }
 }
 
@@ -226,9 +230,9 @@ bool isPlayHoldCountdownActive() {
 // ホールドを解除し、0:00から実再生が始まるようにする。
 static void finishPlayHold() {
   holdCountdownActive = false;
-  drawHoldTimestamp(0);
   nju72341.unmute();
   ND::isPaused = false;
+  drawHoldTimestamp(0);
 }
 
 // CFG_PAUSE変更を、再生中のホールド状態へ即時反映する。
@@ -387,6 +391,29 @@ void Input::inputHandler() {
         sendEvent(event::Right);
         break;
       case btnSELECT:
+        sendEvent(event::Close);
+        break;
+      default:
+        break;
+    }
+  } else if (disp.currentView == ViewMode::Visual) {
+    switch (inputBuffer) {
+      case btnUP:
+        ndFile.dirPlay(1);
+        break;
+      case btnDOWN:
+        ndFile.dirPlay(-1);
+        break;
+      case btnRIGHT:
+        ndFile.filePlay(-1);
+        break;
+      case btnLEFT:
+        ndFile.filePlay(1);
+        break;
+      case btnSELECT:
+        if (releasePlayHold()) {
+          break;
+        }
         sendEvent(event::Close);
         break;
       default:

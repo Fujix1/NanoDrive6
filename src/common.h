@@ -29,6 +29,9 @@
 #define SCROLL_SPEED_AUTHOR .4F  // 文字スクロール速度 px
 #define SCROLL_DELAY 2000        // スクロール開始までのディレイ ms
 #define DISP_TIMER_INTERVAL 20   // ms 表示更新タイマー間隔
+#define DISP_UPDATE_TASK_STACK 6144
+#define DISP_UPDATE_TASK_PRIORITY 1
+#define DISP_UPDATE_TASK_CORE 0
 
 // SD Card
 #define SD_CS 7

@@ -1,8 +1,10 @@
 #include "fm.h"
 
 #include <driver/dedic_gpio.h>
+#include <math.h>
 
 #include "../../include/config.h"
+#include "../../include/keyinfo.h"
 #include "../../include/nd.h"
 
 dedic_gpio_bundle_handle_t dataBus = NULL;  // GPIOバンドル用ハンドラ
@@ -58,13 +60,34 @@ void FMChip::begin() {
 
 void FMChip::reset(void) {
   for (uint8_t chip = 0; chip < 3; chip++) {
+    _snLatchedReg[chip] = 0;
+    _snNoiseControl[chip] = 0;
+    for (uint8_t ch = 0; ch < 3; ch++) {
+      _snTonePeriod[chip][ch] = 0;
+    }
+    for (uint8_t ch = 0; ch < 4; ch++) {
+      _snVolume[chip][ch] = 15;
+    }
+  }
+
+  for (uint8_t chip = 0; chip < 3; chip++) {
     for (uint8_t bank = 0; bank < 2; bank++) {
       for (uint8_t reg = 0; reg < 16; reg++) {
         _ym2612TlReg[chip][bank][reg] = 0;
         _ym2612TlRegValid[chip][bank][reg] = false;
       }
+      for (uint8_t ch = 0; ch < 3; ch++) {
+        _ym2612FreqLow[chip][bank][ch] = 0;
+        _ym2612FreqHigh[chip][bank][ch] = 0;
+        _ym2612Alg[chip][bank][ch] = 0;
+      }
+    }
+    for (uint8_t ch = 0; ch < 6; ch++) {
+      _ym2612KeyOnSlots[chip][ch] = 0;
     }
   }
+  _ym2612DacLevelDecimator = 0;
+  _ym2612DacLevelPeak = 0;
 
   CS0_LOW;
   CS1_LOW;
@@ -153,9 +176,359 @@ void FMChip::writeRaw(byte data, byte chipno, si5351Freq_t freq) {
       CS2_HIGH;
       break;
   }
+
+  _updateSN76489VisualState(data, chipno, freq);
 }
 
 byte lastAddr = 0;
+
+static NoteInfo freqToNote(double freq) {
+  if (freq <= 0) {
+    return {0, 0};
+  }
+
+  const double n = 12.0 * log2(freq / 440.0);
+  const int noteIndexFromC0 = (int)round(n) + 57;
+  if (noteIndexFromC0 < 12) {
+    return {0, 0};
+  }
+
+  return {noteIndexFromC0 / 12, noteIndexFromC0 % 12};
+}
+
+static NoteInfo sn76489ToneToNote(uint16_t period, si5351Freq_t clock) {
+  if (clock <= 0) {
+    return {0, 0};
+  }
+
+  const uint16_t effectivePeriod = (period == 0) ? 0x0400 : period;
+  return freqToNote((double)clock / (32.0 * (double)effectivePeriod));
+}
+
+static t_device sn76489DeviceFromChipno(uint8_t chipno) {
+  if (chipno == 1) {
+    return SN76489_0_KEY;
+  }
+  if (chipno == 2) {
+    return SN76489_1_KEY;
+  }
+  return DEVICE_COUNT;
+}
+
+void FMChip::_updateSN76489ChannelNote(uint8_t chipno, uint8_t ch, si5351Freq_t freq) {
+  if (chipno >= 3 || ch >= 4) {
+    return;
+  }
+
+  t_device device = sn76489DeviceFromChipno(chipno);
+  if (device == DEVICE_COUNT) {
+    return;
+  }
+
+  uint8_t trackNo = 0xff;
+  if (chipno == 1) {
+    trackNo = (uint8_t)(8 + ch);   // Track 9-12: SN76489 (1)
+  } else if (chipno == 2) {
+    trackNo = (uint8_t)(12 + ch);  // Track 13-16: SN76489 (2)
+  }
+
+  NoteInfo note = {0, 0};
+  uint8_t level = 0;
+  if (_snVolume[chipno][ch] < 15) {
+    level = (uint8_t)(15 - _snVolume[chipno][ch]);
+    if (ch < 3) {
+      note = sn76489ToneToNote(_snTonePeriod[chipno][ch], freq);
+    } else {
+      switch (_snNoiseControl[chipno] & 0x03) {
+        case 0:
+          note = freqToNote((double)freq / 512.0);
+          break;
+        case 1:
+          note = freqToNote((double)freq / 1024.0);
+          break;
+        case 2:
+          note = freqToNote((double)freq / 2048.0);
+          break;
+        case 3:
+          note = sn76489ToneToNote(_snTonePeriod[chipno][2], freq);
+          break;
+      }
+    }
+  }
+
+  if (xSemaphoreTake(KeyBoard.keyinfoMutex, 0) == pdTRUE) {
+    KeyBoard.keyInfo[device][ch] = note;
+    if (trackNo < 16) {
+      KeyBoard.trackLevel[trackNo] = level;
+    }
+    xSemaphoreGive(KeyBoard.keyinfoMutex);
+  }
+}
+
+void FMChip::_updateSN76489VisualState(byte data, uint8_t chipno, si5351Freq_t freq) {
+  if (chipno >= 3) {
+    return;
+  }
+  if (sn76489DeviceFromChipno(chipno) == DEVICE_COUNT) {
+    return;
+  }
+
+  if ((data & 0x80) != 0) {
+    const uint8_t reg = (data >> 4) & 0x07;
+    _snLatchedReg[chipno] = reg;
+
+    if ((reg & 0x01) == 0) {
+      const uint8_t ch = reg >> 1;
+      if (ch < 3) {
+        _snTonePeriod[chipno][ch] =
+            (uint16_t)((_snTonePeriod[chipno][ch] & 0x03f0) | (data & 0x0f));
+        _updateSN76489ChannelNote(chipno, ch, freq);
+        if (ch == 2 && (_snNoiseControl[chipno] & 0x03) == 3) {
+          _updateSN76489ChannelNote(chipno, 3, freq);
+        }
+      } else {
+        _snNoiseControl[chipno] = data & 0x07;
+        _updateSN76489ChannelNote(chipno, 3, freq);
+      }
+    } else {
+      const uint8_t ch = reg >> 1;
+      if (ch < 4) {
+        _snVolume[chipno][ch] = data & 0x0f;
+        _updateSN76489ChannelNote(chipno, ch, freq);
+      }
+    }
+    return;
+  }
+
+  const uint8_t reg = _snLatchedReg[chipno];
+  if ((reg & 0x01) == 0) {
+    const uint8_t ch = reg >> 1;
+    if (ch < 3) {
+      _snTonePeriod[chipno][ch] =
+          (uint16_t)((_snTonePeriod[chipno][ch] & 0x000f) | ((data & 0x3f) << 4));
+      _updateSN76489ChannelNote(chipno, ch, freq);
+      if (ch == 2 && (_snNoiseControl[chipno] & 0x03) == 3) {
+        _updateSN76489ChannelNote(chipno, 3, freq);
+      }
+    }
+  }
+}
+
+static NoteInfo ym2612FreqToNote(uint16_t rawFreq) {
+  const uint16_t fnum = rawFreq & 0x07ff;
+  const uint8_t block = (rawFreq >> 11) & 0x07;
+  if (fnum == 0) {
+    return {0, 0};
+  }
+
+  double clock = ND::freq[0];
+  if (clock <= 0) {
+    clock = 7670453.0;
+  }
+
+  const double freq = (double)fnum * clock / (144.0 * pow(2.0, 20 - block));
+  if (freq <= 0) {
+    return {0, 0};
+  }
+
+  const double n = 12.0 * log2(freq / 440.0);
+  const int noteIndexFromC0 = (int)round(n) + 57;
+  if (noteIndexFromC0 < 12) {
+    return {0, 0};
+  }
+
+  return {noteIndexFromC0 / 12, noteIndexFromC0 % 12};
+}
+
+uint8_t FMChip::_getYM2612DisplayLevel(uint8_t chipno, uint8_t ch) const {
+  static constexpr uint8_t kYm2612CarrierSlots[8] = {0x08, 0x08, 0x08, 0x08,
+                                                     0x0a, 0x0e, 0x0e, 0x0f};
+  static constexpr uint8_t kYm2612TlOffsets[4] = {0, 8, 4, 12};
+
+  if (chipno >= 3 || ch >= 6 || _ym2612KeyOnSlots[chipno][ch] == 0) {
+    return 0;
+  }
+
+  const uint8_t bank = ch / 3;
+  const uint8_t bankCh = ch % 3;
+  const uint8_t alg = _ym2612Alg[chipno][bank][bankCh] & 0x07;
+  const uint8_t carrierMask = kYm2612CarrierSlots[alg];
+  const uint8_t keyOnMask = _ym2612KeyOnSlots[chipno][ch];
+  uint8_t minTl = 127;
+  bool hasCarrier = false;
+
+  for (uint8_t op = 0; op < 4; op++) {
+    const uint8_t slotBit = (uint8_t)(1u << op);
+    if ((carrierMask & slotBit) == 0 || (keyOnMask & slotBit) == 0) {
+      continue;
+    }
+
+    const uint8_t reg = kYm2612TlOffsets[op] + bankCh;
+    if (!_ym2612TlRegValid[chipno][bank][reg]) {
+      continue;
+    }
+    const uint8_t tl = _ym2612TlReg[chipno][bank][reg] & 0x7f;
+    if (!hasCarrier || tl < minTl) {
+      minTl = tl;
+      hasCarrier = true;
+    }
+  }
+
+  if (!hasCarrier) {
+    return 0;
+  }
+  return (uint8_t)((127 - minTl) >> 3);
+}
+
+void FMChip::_updateYM2612TrackLevel(uint8_t chipno, uint8_t ch) {
+  if (chipno != 0 || ch >= 6) {
+    return;
+  }
+
+  const uint8_t level = _getYM2612DisplayLevel(chipno, ch);
+  if (xSemaphoreTake(KeyBoard.keyinfoMutex, 0) == pdTRUE) {
+    KeyBoard.trackLevel[ch] = level;
+    xSemaphoreGive(KeyBoard.keyinfoMutex);
+  }
+}
+
+void FMChip::_updateYM2612KeyState(byte data, uint8_t chipno) {
+  if (chipno != 0) {
+    return;
+  }
+
+  uint8_t ch = data & 0x03;
+  if (ch >= 3) {
+    return;
+  }
+  if ((data & 0x04) != 0) {
+    ch += 3;
+  }
+
+  const uint8_t bank = ch / 3;
+  const uint8_t bankCh = ch % 3;
+  const uint8_t slotMask = (uint8_t)((data >> 4) & 0x0f);
+  const bool keyOn = slotMask != 0;
+  NoteInfo note = {0, 0};
+  if (keyOn) {
+    const uint16_t rawFreq =
+        ((uint16_t)(_ym2612FreqHigh[chipno][bank][bankCh] & 0x3f) << 8) |
+        _ym2612FreqLow[chipno][bank][bankCh];
+    note = ym2612FreqToNote(rawFreq);
+  }
+
+  if (xSemaphoreTake(KeyBoard.keyinfoMutex, 0) == pdTRUE) {
+    KeyBoard.keyInfo[YM2612_KEY][ch] = note;
+    KeyBoard.trackKeyOn[ch] = keyOn;
+    xSemaphoreGive(KeyBoard.keyinfoMutex);
+  }
+
+  _ym2612KeyOnSlots[chipno][ch] = slotMask;
+  _updateYM2612TrackLevel(chipno, ch);
+}
+
+void FMChip::_updateYM2612PanState(byte bank, byte addr, byte data) {
+  if ((uint8_t)(addr - 0xB4) > 2 || bank >= 2) {
+    return;
+  }
+
+  const uint8_t ch = bank * 3 + (addr - 0xB4);
+  tPan pan = PAN_MUTE;
+  const bool left = (data & 0x80) != 0;
+  const bool right = (data & 0x40) != 0;
+  if (left && right) {
+    pan = PAN_CENTER;
+  } else if (left) {
+    pan = PAN_LEFT;
+  } else if (right) {
+    pan = PAN_RIGHT;
+  }
+
+  if (xSemaphoreTake(KeyBoard.keyinfoMutex, 0) == pdTRUE) {
+    KeyBoard.trackPan[ch] = pan;
+    xSemaphoreGive(KeyBoard.keyinfoMutex);
+  }
+}
+
+void FMChip::_updateYM2612DacLevel(byte data, uint8_t chipno) {
+  if (chipno != 0) {
+    return;
+  }
+
+  int16_t centered = (int16_t)data - 0x80;
+  if (centered < 0) {
+    centered = -centered;
+  }
+
+  uint8_t level = (uint8_t)(centered >> 3);
+  if (level > 15) {
+    level = 15;
+  }
+  if (level > _ym2612DacLevelPeak) {
+    _ym2612DacLevelPeak = level;
+  }
+
+  // DACは約15kHzで呼ばれる。送信側では描画通知やmutexを使わず、数サンプルごとの
+  // ピークだけをTrack 7へ渡す。表示側が読み損ねても再生タイミングを優先する。
+  _ym2612DacLevelDecimator++;
+  if ((_ym2612DacLevelDecimator & 0x07) != 0) {
+    return;
+  }
+
+  if (_ym2612DacLevelPeak > KeyBoard.trackLevel[6]) {
+    KeyBoard.trackLevel[6] = _ym2612DacLevelPeak;
+  }
+  _ym2612DacLevelPeak = 0;
+}
+
+void FMChip::_updateYM2612VisualState(byte bank, byte addr, byte data, uint8_t chipno) {
+  if (chipno != 0 || bank >= 2) {
+    return;
+  }
+
+  if (addr >= 0x40 && addr <= 0x4F) {
+    const uint8_t reg = addr - 0x40;
+    const uint8_t bankCh = reg & 0x03;
+    if (bankCh < 3) {
+      _updateYM2612TrackLevel(chipno, bank * 3 + bankCh);
+    }
+  } else if ((uint8_t)(addr - 0xB0) <= 2) {
+    const uint8_t bankCh = addr - 0xB0;
+    _ym2612Alg[chipno][bank][bankCh] = data & 0x07;
+    _updateYM2612TrackLevel(chipno, bank * 3 + bankCh);
+  } else if ((uint8_t)(addr - 0xA0) <= 2) {
+    const uint8_t bankCh = addr - 0xA0;
+    const uint8_t ch = bank * 3 + bankCh;
+    _ym2612FreqLow[chipno][bank][bankCh] = data;
+    if (xSemaphoreTake(KeyBoard.keyinfoMutex, 0) == pdTRUE) {
+      if (KeyBoard.trackKeyOn[ch]) {
+        const uint16_t rawFreq =
+            ((uint16_t)(_ym2612FreqHigh[chipno][bank][bankCh] & 0x3f) << 8) |
+            _ym2612FreqLow[chipno][bank][bankCh];
+        KeyBoard.keyInfo[YM2612_KEY][ch] = ym2612FreqToNote(rawFreq);
+      }
+      xSemaphoreGive(KeyBoard.keyinfoMutex);
+    }
+  } else if ((uint8_t)(addr - 0xA4) <= 2) {
+    const uint8_t bankCh = addr - 0xA4;
+    const uint8_t ch = bank * 3 + bankCh;
+    _ym2612FreqHigh[chipno][bank][bankCh] = data;
+    if (xSemaphoreTake(KeyBoard.keyinfoMutex, 0) == pdTRUE) {
+      if (KeyBoard.trackKeyOn[ch]) {
+        const uint16_t rawFreq =
+            ((uint16_t)(_ym2612FreqHigh[chipno][bank][bankCh] & 0x3f) << 8) |
+            _ym2612FreqLow[chipno][bank][bankCh];
+        KeyBoard.keyInfo[YM2612_KEY][ch] = ym2612FreqToNote(rawFreq);
+      }
+      xSemaphoreGive(KeyBoard.keyinfoMutex);
+    }
+  } else if (addr == 0x28) {
+    _updateYM2612KeyState(data, chipno);
+  } else if ((uint8_t)(addr - 0xB4) <= 2) {
+    _updateYM2612PanState(bank, addr, data);
+  }
+}
+
 void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
   if (ndConfig.get(CFG_FMPCM) == FMPCM_FM && addr == 0x2A) {
     return;  // DAC data off (FM only)
@@ -178,6 +551,7 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
   }
 
   data = _applyYM2612OutputMode(bank, addr, data, chipno);
+  _updateYM2612VisualState(bank, addr, data, chipno);
 
   switch (chipno) {
     case 0:
@@ -232,6 +606,7 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
   // unsigned long deltaTime = micros() - startTime;
   // Serial.printf("%x%d\n", addr, deltaTime);
   if (addr == 0x2a) {
+    _updateYM2612DacLevel(data, chipno);
   } else if (addr >= 0x21 && addr <= 0x9e) {
     ets_delay_us(12);  // 83 cycles = 10.79us,
   } else if (addr >= 0xa0 && addr <= 0xb6) {
@@ -320,6 +695,8 @@ void FMChip::setYM2612DAC(byte data, uint8_t chipno) {
       CS1_HIGH;
       break;
   }
+
+  _updateYM2612DacLevel(data, chipno);
 }
 
 // YM2203, AY-8910用レジスタ設定
