@@ -278,8 +278,8 @@ bool VGM::ready() {
 
   u32_t n = 1 + ndFile.getCurrentFileIndex();  // フォルダ内曲番
   playerWindow.updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
-              gd3.date, ND::chipNames[0], ND::chipNames[1], FORMAT_LABEL[(int)ND::fileFormat], 0, n,
-              ndFile.getCurrentDirFileCount()});
+                           gd3.date, ND::chipNames[0], ND::chipNames[1], FORMAT_LABEL[(int)ND::fileFormat], 0, n,
+                           ndFile.getCurrentDirFileCount()});
 
   Serial.printf("%s\n", gd3.trackJp.c_str());
 
@@ -1174,6 +1174,7 @@ bool VGM::XGMReady() {
   _xgm2PSGEnded = false;
 
   _xgmWaitUntil = 0;
+  _xgm1NextPcmTick = 0;
   _xgmTimingStarted = false;
 
   XGMSampleAddressTable.clear();
@@ -1200,7 +1201,7 @@ bool VGM::XGMReady() {
     ND::fileFormat = FileFormat::Unknown;
     u32_t n = 1 + ndFile.getCurrentFileIndex();
     playerWindow.updateDisp({"Bad XGM file ident", "XGMファイル解析失敗", "", "", "--", "--", "--", "--", "--", "", "",
-                FORMAT_LABEL[(int)ND::fileFormat], 0, n, ndFile.getCurrentDirFileCount()});
+                             FORMAT_LABEL[(int)ND::fileFormat], 0, n, ndFile.getCurrentDirFileCount()});
     Serial.println("ERROR: Bad XGM file ident.");
 
     ND::canPlay = false;
@@ -1331,8 +1332,8 @@ bool VGM::XGMReady() {
   u32_t n = 1 + ndFile.getCurrentFileIndex();  // フォルダ内曲番
 
   playerWindow.updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
-              gd3.date, ND::chipNames[0], ND::chipNames[1], FORMAT_LABEL[(int)ND::fileFormat], 0, n,
-              ndFile.getCurrentDirFileCount()});
+                           gd3.date, ND::chipNames[0], ND::chipNames[1], FORMAT_LABEL[(int)ND::fileFormat], 0, n,
+                           ndFile.getCurrentDirFileCount()});
 
   ND::canPlay = true;
   return ND::canPlay;
@@ -1345,12 +1346,33 @@ void VGM::xgmProcess() {
   if (!_xgmTimingStarted) {
     _xgmStartTick = micros64();
     _xgmWaitUntil = _xgmStartTick;
+    _xgm1NextPcmTick = _xgmStartTick;
     _xgmTimingStarted = true;
   }
 
   // フェードアウト完了
   if (nju72341.fadeOutStatus == FADEOUT_COMPLETED) {
     endProcedure();
+    return;
+  }
+
+  auto processDuePcm = [&](u64_t now) {
+    int pcmGuard = 0;
+    while (_xgm1NextPcmTick <= now && _xgm1NextPcmTick + XGM1_PCM_DELAY < _xgmWaitUntil &&
+           pcmGuard < 256) {
+      _xgm1ProcessPCM();
+      _xgm1NextPcmTick += XGM1_PCM_DELAY;
+      pcmGuard++;
+    }
+    if (_xgm1NextPcmTick + XGM1_PCM_DELAY < now) {
+      _xgm1NextPcmTick = now + XGM1_PCM_DELAY;
+    }
+  };
+
+  u64_t now = micros64();
+  if (_xgmWaitUntil > now) {
+    processDuePcm(now);
+    taskYIELD();
     return;
   }
 
@@ -1366,10 +1388,7 @@ void VGM::xgmProcess() {
   _vgmSamples = _xgmYMSNFrame * 735;                      // 44100 / 60
 
   // PCM Stream mixing
-  while (_xgmWaitUntil - XGM1_PCM_DELAY > micros64()) {
-    _xgm1ProcessPCM();
-    ets_delay_us(XGM1_PCM_DELAY);
-  }
+  processDuePcm(micros64());
 }
 
 void VGM::_xgm1ProcessPCM() {

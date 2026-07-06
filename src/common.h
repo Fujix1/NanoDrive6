@@ -33,6 +33,13 @@
 #define DISP_UPDATE_TASK_PRIORITY 1
 #define DISP_UPDATE_TASK_CORE 0
 
+// PLAYBACK
+// VGM/XGM の再生処理は Arduino loop から分離し、入力/描画処理の長い処理に巻き込まれにくくする。
+// loop と同じ優先度で Core1 に固定し、FreeRTOS の time slice で入力処理と共存させる。
+#define PLAYBACK_TASK_STACK 8192
+#define PLAYBACK_TASK_PRIORITY 1
+#define PLAYBACK_TASK_CORE APP_CPU_NUM
+
 // SD Card
 #define SD_CS 7
 #define SD_MOSI 6

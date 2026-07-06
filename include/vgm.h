@@ -9,7 +9,7 @@
 #include "nd.h"
 
 #define XGM1_MAX_PCM_CH 8
-#define XGM1_PCM_DELAY 68
+#define XGM1_PCM_DELAY 72  // 71.429 us 14khz
 
 // XGM V2 FM
 #define WAIT_SHORT 0x00 ... 0x0e
@@ -58,7 +58,7 @@
 #define PSG_ENV2_DELTA 0xe0 ... 0xef
 #define PSG_ENV3_DELTA 0xf0 ... 0xff
 
-#define XGM2_PCM_DELAY 72
+#define XGM2_PCM_DELAY 72  // 13.3khz 75.188us
 
 // GD3 構造体
 typedef struct {
@@ -151,6 +151,7 @@ class VGM {
   u32_t _xgmYMSNFrame;
   u64_t _xgmStartTick;
   u64_t _xgmWaitUntil;
+  u64_t _xgm1NextPcmTick = 0;
   bool _xgmTimingStarted = false;
   u64_t _xgmWaitYMUntil;
   u64_t _xgmWaitPsgUntil;

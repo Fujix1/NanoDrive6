@@ -1,6 +1,5 @@
 #include "disp.h"
 
-#include "fm.h"
 #include "input.h"
 #include "pics.h"
 #include "png_renderer.h"
@@ -1004,7 +1003,9 @@ bool initDisp() {
   xSemaphoreGive(spFrameBuffer);
 
   // フレームバッファスプライト作成
-  frameBuffer.setPsram(true);
+  // XGM/VGM PCM はPSRAMから高頻度に読み出すため、描画用の全画面バッファは内部RAMに置く。
+  // PSRAM上に置くとVisual/Config描画とPCM送信が帯域競合し、PCMドロップの原因になる。
+  frameBuffer.setPsram(false);
   frameBuffer.createSprite(LCD_W, LCD_H);
   visualWindow.init();
 
@@ -1326,8 +1327,7 @@ void CFGWindow::eventHandler(event ev) {
       if (ndConfig.items[currentItemIndex].index > 0) {
         int prevRandom = ndConfig.get(CFG_SHUFFLE);
         ndConfig.items[currentItemIndex].index--;
-        ndConfig.applyCfg();
-        FM.requestApplyYM2612OutputMode();
+        ndConfig.applyItem((tConfig)currentItemIndex);
         _isChanged = true;
 
         // シャッフル設定の切り替え時は、シャッフルステートをリセット
@@ -1348,8 +1348,7 @@ void CFGWindow::eventHandler(event ev) {
           ndConfig.items[currentItemIndex].optionValues.size()) {
         int prevRandom = ndConfig.get(CFG_SHUFFLE);
         ndConfig.items[currentItemIndex].index++;
-        ndConfig.applyCfg();
-        FM.requestApplyYM2612OutputMode();
+        ndConfig.applyItem((tConfig)currentItemIndex);
         _isChanged = true;
 
         // シャッフル設定の切り替え時は、シャッフルステートをリセット
@@ -1403,14 +1402,35 @@ void CFGWindow::selectItem(int index) {
   if (index == currentItemIndex) return;
 
   xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
+  const int previousItemIndex = currentItemIndex;
+  const int previousScrollTop = pnlConfig.scrollTop;
   currentItemIndex = index;
   pnlConfig.setItemCount(ndConfig.items.size());
   pnlConfig.currentIndex = currentItemIndex;
   pnlConfig.ensureVisible();
-  pnlConfig.update(frameBuffer);
-  currentItemIndex = pnlConfig.currentIndex;
-  drawFooter(true);
-  frameBuffer.pushSprite(0, 0);
+
+  const int previousItemY = pnlConfig.y + previousItemIndex * CFG_ITEM_HEIGHT - pnlConfig.scrollTop;
+  const int currentItemY = pnlConfig.y + currentItemIndex * CFG_ITEM_HEIGHT - pnlConfig.scrollTop;
+  const bool scrollUnchanged = pnlConfig.scrollTop == previousScrollTop;
+  const bool previousFullyVisible =
+      previousItemY >= pnlConfig.y && previousItemY + CFG_ITEM_HEIGHT <= pnlConfig.y + pnlConfig.height;
+  const bool currentFullyVisible =
+      currentItemY >= pnlConfig.y && currentItemY + CFG_ITEM_HEIGHT <= pnlConfig.y + pnlConfig.height;
+
+  if (scrollUnchanged && previousFullyVisible && currentFullyVisible) {
+    // スクロール不要な上下移動では全画面 frameBuffer 転送を避ける。
+    // XGM PCM送信中は長いLCD転送だけでもタイミング揺れになるため、更新は2行+フッタに限定する。
+    drawItem(frameBuffer, previousItemIndex, pnlConfig.x, previousItemY, pnlConfig.itemWidth(), false);
+    _sprite.pushSprite(&lcd, pnlConfig.x, previousItemY);
+    drawItem(frameBuffer, currentItemIndex, pnlConfig.x, currentItemY, pnlConfig.itemWidth(), true);
+    _sprite.pushSprite(&lcd, pnlConfig.x, currentItemY);
+    drawFooter(false);
+  } else {
+    pnlConfig.update(frameBuffer);
+    currentItemIndex = pnlConfig.currentIndex;
+    drawFooter(true);
+    frameBuffer.pushSprite(0, 0);
+  }
   xSemaphoreGive(spFrameBuffer);
 }
 

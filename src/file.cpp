@@ -2,6 +2,7 @@
 
 #include <PNGdec.h>  // VGZ展開でPNGdec同梱のzlib型を使用
 #include <dirent.h>
+#include <esp_heap_caps.h>
 
 #include "input.h"
 #include "keyinfo.h"
@@ -18,6 +19,21 @@ static u16_t scanProgressY = 0;
 void showError(String message) {
   lcd.setCursor(0, 75);
   lcd.print(message.c_str());
+}
+
+static void printPlaybackMemoryDebug() {
+  const size_t internalFree = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  const size_t internalLargest =
+      heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  const size_t psramFree = heap_caps_get_free_size(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  const size_t psramLargest =
+      heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+
+  Serial.printf("Memory at playback start:\n");
+  Serial.printf("  Internal RAM - Free %'u, Largest free block %'u\n",
+                (unsigned int)internalFree, (unsigned int)internalLargest);
+  Serial.printf("  PSRAM        - Free %'u, Largest free block %'u\n",
+                (unsigned int)psramFree, (unsigned int)psramLargest);
 }
 
 static void updateScanProgress(int n) {
@@ -816,6 +832,8 @@ bool NDFile::_openFile(String path, int8_t att) {
       ND::canPlay = false;
       break;
   }
+
+  printPlaybackMemoryDebug();
 
   if (ND::canPlay && ndConfig.get(CFG_PAUSE) != HOLD_NONE) {
     ND::isPaused = true;

@@ -53,6 +53,41 @@
 #include "serialman.h"
 #include "vgm.h"
 
+static TaskHandle_t hPlaybackTask = nullptr;
+
+static void playbackTask(void* param) {
+  while (1) {
+    FM.applyPendingYM2612OutputMode();
+
+    if (ND::canPlay && !ND::isPaused) {
+      switch (ND::fileFormat) {
+        case FileFormat::VGM:
+        case FileFormat::VGZ:
+          vgm.vgmProcess();
+          break;
+        case FileFormat::XGM1:
+          vgm.xgmProcess();
+          break;
+        case FileFormat::XGM2:
+          vgm.xgm2Process();
+          break;
+        default:
+          break;
+      }
+    }
+
+    // 曲移動要求と open/read/ready は再生タスク側で処理する。
+    // 入力/表示側は request*() で要求だけ積み、ファイル状態の差し替えには直接触らない。
+    ndFile.processPlaybackQueue();
+
+    if (!ND::canPlay || ND::isPaused) {
+      vTaskDelay(1);
+    } else {
+      taskYIELD();
+    }
+  }
+}
+
 void setup() {
   disableCore0WDT();  // ウォッチドッグ0無効化
 
@@ -168,6 +203,15 @@ void setup() {
 
   cfgWindow.init();
 
+  if (ndConfig.currentMode == MODE_PLAYER) {
+    BaseType_t playbackTaskCreated =
+        xTaskCreatePinnedToCore(playbackTask, "playback", PLAYBACK_TASK_STACK, nullptr,
+                                PLAYBACK_TASK_PRIORITY, &hPlaybackTask, PLAYBACK_TASK_CORE);
+    if (playbackTaskCreated != pdPASS || hPlaybackTask == nullptr) {
+      Serial.println("ERROR: playback task init failed.");
+    }
+  }
+
   Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
   Serial.printf("Flash - %'d Bytes at %'d\n", ESP.getFlashChipSize(), ESP.getFlashChipSpeed());
   Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(), ESP.getFreePsram());
@@ -176,32 +220,13 @@ void setup() {
 void loop() {
   if (ndConfig.currentMode == MODE_PLAYER) {
     while (1) {
-      FM.applyPendingYM2612OutputMode();
-      if (ND::canPlay && !ND::isPaused) {
-        switch (ND::fileFormat) {
-          case FileFormat::VGM:
-          case FileFormat::VGZ:
-            vgm.vgmProcess();
-            break;
-          case FileFormat::XGM1:
-            vgm.xgmProcess();
-            break;
-          case FileFormat::XGM2:
-            vgm.xgm2Process();
-            break;
-          default:
-            break;
-        }
-      }
-      ndFile.processPlaybackQueue();
-      input.inputHandler();
+      vTaskDelay(1000);
     }
 
   } else {
     while (1) {
       FM.applyPendingYM2612OutputMode();
-      input.inputHandler();
-      delay(1);
+      vTaskDelay(1);
     }
   }
 }

@@ -143,6 +143,31 @@ void NDConfig::applyCfg() {
   syncPlayHoldConfig();
 }
 
+void NDConfig::applyItem(tConfig item) {
+  switch (item) {
+    case CFG_FADEOUT:
+      nju72341.setFadeoutDuration(get(CFG_FADEOUT));
+      break;
+    case CFG_AMPLIFY: {
+      const tNJU72341_GAIN inputGain = amplifyToInputGain(get(CFG_AMPLIFY));
+      nju72341.setInputGain(1, inputGain);
+      nju72341.setInputGain(2, inputGain);
+      break;
+    }
+    case CFG_PAUSE:
+      // Play Hold設定だけは、現在ホールド中の再生にも即時反映する。
+      syncPlayHoldConfig();
+      break;
+    case CFG_FMPCM:
+    case CFG_YM2612_PAN:
+      FM.requestApplyYM2612OutputMode();
+      break;
+    default:
+      // LOOP/REPEAT/SCROLL/HISTORY/SHUFFLE/LANG/MODE は、変更時点でハードウェア反映不要。
+      break;
+  }
+}
+
 void NDConfig::saveCfg() {
   uint32_t dummy = 0;
   xQueueSend(cfgSaveQueue, &dummy, 0);

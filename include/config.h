@@ -80,6 +80,7 @@ class NDConfig {
   std::vector<sConfig> items;
   void init();
   void applyCfg();
+  void applyItem(tConfig item);
   void saveCfg();
   void saveCfgNow();
   void saveHistory();

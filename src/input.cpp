@@ -14,6 +14,7 @@ Adafruit_TCA8418 keypad;
 TaskHandle_t tcaTaskHandle = nullptr;
 TaskHandle_t adcTaskHandle = nullptr;
 TaskHandle_t eventTaskHandle = nullptr;
+TaskHandle_t inputHandlerTaskHandle = nullptr;
 TimerHandle_t keyRepeatTimer = nullptr;
 QueueHandle_t inputEventQueue = nullptr;
 bool holdCountdownActive = false;
@@ -206,6 +207,13 @@ void eventTask(void*) {
   }
 }
 
+void inputHandlerTask(void*) {
+  while (true) {
+    input.inputHandler();
+    vTaskDelay(1);
+  }
+}
+
 // イベント送信
 void sendEvent(event ev) {
   if (inputEventQueue != nullptr) xQueueOverwrite(inputEventQueue, &ev);
@@ -330,6 +338,13 @@ bool Input::init() {
       eventTask, "inputEvent", 8192, nullptr, 1, &eventTaskHandle, PRO_CPU_NUM);
   if (eventTaskCreated != pdPASS) {
     Serial.println("Failed: input event task init.");
+    return false;
+  }
+
+  BaseType_t inputHandlerTaskCreated = xTaskCreatePinnedToCore(
+      inputHandlerTask, "inputHandler", 4096, nullptr, 1, &inputHandlerTaskHandle, PRO_CPU_NUM);
+  if (inputHandlerTaskCreated != pdPASS) {
+    Serial.println("Failed: input handler task init.");
     return false;
   }
 
