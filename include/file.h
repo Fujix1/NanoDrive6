@@ -117,15 +117,6 @@ class NDFile {
   void listDir(const char* dirname);
   FileFormat readFile(String path);
 
-  // 再生所有者側の実行API。
-  // 入力/表示イベント側からは直接呼ばず、request*() 経由で再生ループへ依頼する。
-  // setup() 中の初回再生も request*() 後に processPlaybackQueue() を同期実行する。
-  bool filePlay(int count);
-  bool dirPlay(int count);
-  bool play(uint16_t d, uint16_t f, int8_t att = -1);
-  bool fileOpen(uint16_t d, uint16_t f, int8_t att = -1);
-  bool openFile(String path, int8_t att = -1);
-
   // 入力/表示イベント側からの再生要求API。
   // 要求はバッファリングせず最新1件だけ保持し、processPlaybackQueue() が再生ループ側で処理する。
   bool requestFilePlay(int count);
@@ -223,6 +214,14 @@ class NDFile {
   RandomSequenceState _folderFileRandomState;
   RandomSequenceState _allFileRandomState;
   QueueHandle_t _playbackQueue = nullptr;
+
+  // 再生所有者側の実行API。
+  // 外部からは直接呼ばず、request*() -> processPlaybackQueue() 経由で実行する。
+  bool _filePlay(int count);
+  bool _dirPlay(int count);
+  bool _playIndex(uint16_t d, uint16_t f, int8_t att = -1);
+  bool _fileOpen(uint16_t d, uint16_t f, int8_t att = -1);
+  bool _openFile(String path, int8_t att = -1);
 
   bool _sendPlaybackCommand(const PlaybackCommand& command);
   bool _playNode(Node* node, int8_t att = -1);

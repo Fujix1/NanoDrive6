@@ -205,7 +205,7 @@ bool NDFile::init() {
   }
 
   // 入力/表示イベントタスクからの再生要求を、再生ループ側で処理するためのキュー。
-  // 初期段階ではスレッド分離せず、openFile()/readFile()/vgm.ready() の所有者を loop() に寄せる。
+  // 初期段階ではスレッド分離せず、_openFile()/readFile()/vgm.ready() の所有者を loop() に寄せる。
   _playbackQueue = xQueueCreate(1, sizeof(PlaybackCommand));
   if (!_playbackQueue) {
     Serial.println("ERROR: playbackQueue create failed!");
@@ -531,9 +531,9 @@ FileFormat NDFile::readFile(String path) {
 
 //----------------------------------------------------------------------
 // ディレクトリ内の count 個あとの曲再生。マイナスは前の曲
-// 再生所有者側の実行API。入力/表示イベント側は requestFilePlay() を使う。
+// 再生所有者側の内部実行API。入力/表示イベント側は requestFilePlay() を使う。
 // 戻り値: 成功/不成功
-bool NDFile::filePlay(int count) {
+bool NDFile::_filePlay(int count) {
   switch (ndConfig.get(CFG_SHUFFLE)) {
     case TRANDOM_FOLDER:
       return _playRandomFile(count);
@@ -609,9 +609,9 @@ bool NDFile::_playRandomAll(int count) {
 //----------------------------------------------------------------------
 // count 個あとのディレクトリを開いて最初のファイルを再生。
 // マイナスは前のディレクトリ
-// 再生所有者側の実行API。入力/表示イベント側は requestDirPlay() を使う。
+// 再生所有者側の内部実行API。入力/表示イベント側は requestDirPlay() を使う。
 // 戻り値: 成功/不成功
-bool NDFile::dirPlay(int count) {
+bool NDFile::_dirPlay(int count) {
   switch (ndConfig.get(CFG_SHUFFLE)) {
     case TRANDOM_FOLDER:
       break;
@@ -664,7 +664,7 @@ bool NDFile::_sendPlaybackCommand(const PlaybackCommand& command) {
 }
 
 // 再生操作リクエスト。
-// 入力/表示イベント側からはここだけを呼び、openFile()/readFile()/vgm.ready()/XGMReady()
+// 入力/表示イベント側からはここだけを呼び、_openFile()/readFile()/vgm.ready()/XGMReady()
 // は再生ループ側の processPlaybackQueue() に集約する。
 bool NDFile::requestFilePlay(int count) {
   PlaybackCommand command = {PlaybackCommandType::FileRelative, count, 0, -1};
@@ -698,23 +698,23 @@ bool NDFile::processPlaybackQueue() {
   RandomSequenceState previousAllRandomState = _allFileRandomState;
   bool result = false;
 
-  // openFile()/readFile()/vgm.ready()/XGMReady() はここから呼ばれる既存経路に集約する。
+  // _openFile()/readFile()/vgm.ready()/XGMReady() はここから呼ばれる既存経路に集約する。
   // 将来 PlaybackTask 化する場合も、この関数を再生側所有者に移すだけで済むようにする。
   switch (command.type) {
     case PlaybackCommandType::FileRelative:
-      result = filePlay(command.a);
+      result = _filePlay(command.a);
       break;
     case PlaybackCommandType::DirRelative:
-      result = dirPlay(command.a);
+      result = _dirPlay(command.a);
       break;
     case PlaybackCommandType::PlayIndex:
-      result = play((uint16_t)command.a, (uint16_t)command.b, command.att);
+      result = _playIndex((uint16_t)command.a, (uint16_t)command.b, command.att);
       break;
   }
 
   if (!result) {
-    // _playNode() は openFile() の前に currentNode を進める。
-    // openFile() 失敗時に表示・次回移動の基準だけが進まないよう、要求処理前の状態へ戻す。
+    // _playNode() は _openFile() の前に currentNode を進める。
+    // _openFile() 失敗時に表示・次回移動の基準だけが進まないよう、要求処理前の状態へ戻す。
     currentNode = previousNode;
     currentDir = previousDir;
     currentFile = previousFile;
@@ -731,15 +731,15 @@ void NDFile::clearPlaybackQueue() {
   }
 
   // キーを離した後に残っている最新要求を破棄する。
-  // openFile() 中にキーリピートが上書きした1件を、離鍵後に実行しないため。
+  // _openFile() 中にキーリピートが上書きした1件を、離鍵後に実行しないため。
   xQueueReset(_playbackQueue);
 }
 
 //----------------------------------------------------------------------
 // 直接ファイル再生。
-// 再生所有者側の実行API。入力/表示イベント側は requestPlay() を使う。
+// 再生所有者側の内部実行API。入力/表示イベント側は requestPlay() を使う。
 // 戻り値: 成功/不成功
-bool NDFile::play(uint16_t d, uint16_t f, int8_t att) {
+bool NDFile::_playIndex(uint16_t d, uint16_t f, int8_t att) {
   Node* targetDir = fileTree.getDirNodeByIndex(d);
   Node* targetFile = fileTree.getFileNodeByIndexInDir(targetDir, f);
   if (!targetFile) {
@@ -753,8 +753,8 @@ bool NDFile::play(uint16_t d, uint16_t f, int8_t att) {
 // 戻り値: 成功/不成功
 // att: 音量減衰率 0 - 96 dB, -1 = 変更しない
 
-bool NDFile::fileOpen(uint16_t d, uint16_t f, int8_t att) {
-  return play(d, f, att);
+bool NDFile::_fileOpen(uint16_t d, uint16_t f, int8_t att) {
+  return _playIndex(d, f, att);
 }
 
 bool NDFile::_playNode(Node* node, int8_t att) {
@@ -762,17 +762,17 @@ bool NDFile::_playNode(Node* node, int8_t att) {
   currentNode = node;
   _updateCurrentIndexes();
   String path = fileTree.getFullPath(currentNode);
-  return openFile(path, att);
+  return _openFile(path, att);
 }
 
-bool NDFile::openFile(String path, int8_t att) {
+bool NDFile::_openFile(String path, int8_t att) {
   if (xSemaphoreTake(spFileOpen, 0) != pdTRUE) {
     Serial.printf("Semapho is already taken.\n");
     return false;
   }
 
   // 再生ループは loop() 側で継続しているため、ファイル/音源状態を差し替える前に
-  // 必ず停止扱いへ落とす。ND8 と同じく openFile() の入口で再生可能状態を閉じる。
+  // 必ず停止扱いへ落とす。ND8 と同じく _openFile() の入口で再生可能状態を閉じる。
   ND::canPlay = false;
   ND::isPaused = false;
 

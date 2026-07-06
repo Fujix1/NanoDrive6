@@ -2075,7 +2075,7 @@ void VGM::endProcedure() {
   switch (ndConfig.get(CFG_REPEAT)) {
     case REPEAT_ONE: {
       // 曲終了時の自動再生も入力操作と同じキュー経路に通す。
-      // openFile()/readFile()/ready() の実行箇所を processPlaybackQueue() に集約し、
+      // _openFile()/readFile()/ready() の実行箇所を processPlaybackQueue() に集約し、
       // 再生失敗時の currentNode 復旧も同じルールで扱う。
       ndFile.requestFilePlay(0);
       break;
