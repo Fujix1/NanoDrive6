@@ -190,6 +190,7 @@ void loop() {
             break;
         }
       }
+      ndFile.processPlaybackQueue();
       input.inputHandler();
     }
 

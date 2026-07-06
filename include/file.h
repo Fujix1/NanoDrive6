@@ -121,6 +121,10 @@ class NDFile {
   bool play(uint16_t d, uint16_t f, int8_t att = -1);
   bool fileOpen(uint16_t d, uint16_t f, int8_t att = -1);
   bool openFile(String path, int8_t att = -1);
+  bool requestFilePlay(int count);
+  bool requestDirPlay(int count);
+  bool requestPlay(uint16_t d, uint16_t f, int8_t att = -1);
+  bool processPlaybackQueue();
   uint8_t getFolderAttenuation(String path);  // フォルダの音量減衰取得
   Node* findFileNodeByHistory(const String& dir, const String& file);
 
@@ -167,6 +171,19 @@ class NDFile {
   void resetRandomSession();
 
  private:
+  enum class PlaybackCommandType : u8_t {
+    FileRelative,
+    DirRelative,
+    PlayIndex,
+  };
+
+  struct PlaybackCommand {
+    PlaybackCommandType type;
+    int32_t a;
+    int32_t b;
+    int8_t att;
+  };
+
   enum RandomStateKind : u8_t {
     RANDOM_STATE_NONE,
     RANDOM_STATE_FOLDER_FILE,
@@ -197,7 +214,9 @@ class NDFile {
 
   RandomSequenceState _folderFileRandomState;
   RandomSequenceState _allFileRandomState;
+  QueueHandle_t _playbackQueue = nullptr;
 
+  bool _sendPlaybackCommand(const PlaybackCommand& command);
   bool _playNode(Node* node, int8_t att = -1);
   bool _playRandomFile(int count);
   bool _playRandomAll(int count);

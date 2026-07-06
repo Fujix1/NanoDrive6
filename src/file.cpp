@@ -1,9 +1,10 @@
 #include "file.h"
+
+#include <PNGdec.h>  // VGZ展開でPNGdec同梱のzlib型を使用
+#include <dirent.h>
+
 #include "input.h"
 #include "keyinfo.h"
-
-#include <dirent.h>
-#include <PNGdec.h>  // VGZ展開でPNGdec同梱のzlib型を使用
 
 static SPIClass SPI_SD;
 static File hFile;
@@ -200,6 +201,14 @@ bool NDFile::init() {
   cacheQueue = xQueueCreate(2, sizeof(CacheTaskParam));
   if (!cacheQueue) {
     Serial.println("ERROR: cacheQueue create failed!");
+    return false;
+  }
+
+  // 入力/表示イベントタスクからの再生要求を、再生ループ側で処理するためのキュー。
+  // 初期段階ではスレッド分離せず、openFile()/readFile()/vgm.ready() の所有者を loop() に寄せる。
+  _playbackQueue = xQueueCreate(4, sizeof(PlaybackCommand));
+  if (!_playbackQueue) {
+    Serial.println("ERROR: playbackQueue create failed!");
     return false;
   }
 
@@ -640,6 +649,61 @@ bool NDFile::dirPlay(int count) {
     return false;
   }
   return _playNode(targetFile);
+}
+
+bool NDFile::_sendPlaybackCommand(const PlaybackCommand& command) {
+  if (_playbackQueue == nullptr) {
+    return false;
+  }
+
+  if (xQueueSend(_playbackQueue, &command, 0) == pdTRUE) {
+    return true;
+  }
+
+  // 操作連打時は古い再生要求より最新の入力を優先する。
+  PlaybackCommand dropped;
+  xQueueReceive(_playbackQueue, &dropped, 0);
+  return xQueueSend(_playbackQueue, &command, 0) == pdTRUE;
+}
+
+// 再生操作リクエスト
+bool NDFile::requestFilePlay(int count) {
+  PlaybackCommand command = {PlaybackCommandType::FileRelative, count, 0, -1};
+  return _sendPlaybackCommand(command);
+}
+
+bool NDFile::requestDirPlay(int count) {
+  PlaybackCommand command = {PlaybackCommandType::DirRelative, count, 0, -1};
+  return _sendPlaybackCommand(command);
+}
+
+bool NDFile::requestPlay(uint16_t d, uint16_t f, int8_t att) {
+  PlaybackCommand command = {PlaybackCommandType::PlayIndex, d, f, att};
+  return _sendPlaybackCommand(command);
+}
+
+bool NDFile::processPlaybackQueue() {
+  if (_playbackQueue == nullptr) {
+    return false;
+  }
+
+  PlaybackCommand command;
+  if (xQueueReceive(_playbackQueue, &command, 0) != pdTRUE) {
+    return false;
+  }
+
+  // openFile()/readFile()/vgm.ready()/XGMReady() はここから呼ばれる既存経路に集約する。
+  // 将来 PlaybackTask 化する場合も、この関数を再生側所有者に移すだけで済むようにする。
+  switch (command.type) {
+    case PlaybackCommandType::FileRelative:
+      return filePlay(command.a);
+    case PlaybackCommandType::DirRelative:
+      return dirPlay(command.a);
+    case PlaybackCommandType::PlayIndex:
+      return play((uint16_t)command.a, (uint16_t)command.b, command.att);
+  }
+
+  return false;
 }
 
 //----------------------------------------------------------------------

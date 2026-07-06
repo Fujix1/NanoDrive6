@@ -399,16 +399,16 @@ void Input::inputHandler() {
   } else if (disp.currentView == ViewMode::Visual) {
     switch (inputBuffer) {
       case btnUP:
-        ndFile.dirPlay(1);
+        ndFile.requestDirPlay(1);
         break;
       case btnDOWN:
-        ndFile.dirPlay(-1);
+        ndFile.requestDirPlay(-1);
         break;
       case btnRIGHT:
-        ndFile.filePlay(-1);
+        ndFile.requestFilePlay(-1);
         break;
       case btnLEFT:
-        ndFile.filePlay(1);
+        ndFile.requestFilePlay(1);
         break;
       case btnSELECT:
         if (releasePlayHold()) {
@@ -422,16 +422,16 @@ void Input::inputHandler() {
   } else if (ndConfig.currentMode == MODE_PLAYER) {
     switch (inputBuffer) {
       case btnUP:
-        ndFile.dirPlay(1);
+        ndFile.requestDirPlay(1);
         break;
       case btnDOWN:
-        ndFile.dirPlay(-1);
+        ndFile.requestDirPlay(-1);
         break;
       case btnRIGHT:
-        ndFile.filePlay(-1);
+        ndFile.requestFilePlay(-1);
         break;
       case btnLEFT:
-        ndFile.filePlay(1);
+        ndFile.requestFilePlay(1);
         break;
       case btnSELECT:
         if (releasePlayHold()) {
