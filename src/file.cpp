@@ -691,18 +691,38 @@ bool NDFile::processPlaybackQueue() {
     return false;
   }
 
+  Node* previousNode = currentNode;
+  uint16_t previousDir = currentDir;
+  uint16_t previousFile = currentFile;
+  RandomSequenceState previousFolderRandomState = _folderFileRandomState;
+  RandomSequenceState previousAllRandomState = _allFileRandomState;
+  bool result = false;
+
   // openFile()/readFile()/vgm.ready()/XGMReady() はここから呼ばれる既存経路に集約する。
   // 将来 PlaybackTask 化する場合も、この関数を再生側所有者に移すだけで済むようにする。
   switch (command.type) {
     case PlaybackCommandType::FileRelative:
-      return filePlay(command.a);
+      result = filePlay(command.a);
+      break;
     case PlaybackCommandType::DirRelative:
-      return dirPlay(command.a);
+      result = dirPlay(command.a);
+      break;
     case PlaybackCommandType::PlayIndex:
-      return play((uint16_t)command.a, (uint16_t)command.b, command.att);
+      result = play((uint16_t)command.a, (uint16_t)command.b, command.att);
+      break;
   }
 
-  return false;
+  if (!result) {
+    // _playNode() は openFile() の前に currentNode を進める。
+    // openFile() 失敗時に表示・次回移動の基準だけが進まないよう、要求処理前の状態へ戻す。
+    currentNode = previousNode;
+    currentDir = previousDir;
+    currentFile = previousFile;
+    _folderFileRandomState = previousFolderRandomState;
+    _allFileRandomState = previousAllRandomState;
+  }
+
+  return result;
 }
 
 void NDFile::clearPlaybackQueue() {

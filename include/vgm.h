@@ -164,6 +164,8 @@ class VGM {
   u32_t _xgm2_ym_pos;
   u32_t _xgm2_psg_offset;
   u32_t _xgm2_psg_pos;
+  bool _xgm2YMEnded = false;
+  bool _xgm2PSGEnded = false;
 
   si5351Freq_t normalizeFreq(u32_t freq, t_chip chip);
 

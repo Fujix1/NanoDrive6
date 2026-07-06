@@ -992,7 +992,7 @@ void VGM::vgmProcessMain() {
         return;
       } else {
         _vgmLoop++;
-        if (_vgmLoop == ndConfig.get(CFG_NUM_LOOP) &&
+        if (_vgmLoop >= ndConfig.get(CFG_NUM_LOOP) &&
             ndConfig.get(CFG_NUM_LOOP) != LOOP_INIFITE) {  //   フェードアウトON
           nju72341.startFadeout();
         }
@@ -1163,6 +1163,8 @@ bool VGM::XGMReady() {
   // XGM2
   _xgmYMFrame = 0;
   _xgmPSGFrame = 0;
+  _xgm2YMEnded = false;
+  _xgm2PSGEnded = false;
 
   _xgmWaitUntil = 0;
   _xgmTimingStarted = false;
@@ -1443,7 +1445,7 @@ bool VGM::_xgm1ProcessYMSN() {
       // Loop command, used for music looping sequence
       _vgmLoop++;
       Serial.printf("loops: %d\n", _vgmLoop);
-      if (_vgmLoop == ndConfig.get(CFG_NUM_LOOP) && ndConfig.get(CFG_NUM_LOOP) != LOOP_INIFITE) {  //   フェードアウトON
+      if (_vgmLoop >= ndConfig.get(CFG_NUM_LOOP) && ndConfig.get(CFG_NUM_LOOP) != LOOP_INIFITE) {  //   フェードアウトON
         nju72341.startFadeout();
       }
       ndFile.pos = 0x108 + XGM_SLEN + ndFile.get_ui24();  // ループ位置
@@ -1475,20 +1477,34 @@ void VGM::xgm2Process() {
     return;
   }
 
-  while (_xgmYMFrame <= _xgmFrame) {
+  while (!_xgm2YMEnded && _xgmYMFrame <= _xgmFrame) {
     if (_xgm2ProcessYM()) {
-      endProcedure();
-      return;
+      _xgm2YMEnded = true;
+      break;
     };
   }
-  while (_xgmPSGFrame <= _xgmFrame) {
+  while (!_xgm2PSGEnded && _xgmPSGFrame <= _xgmFrame) {
     if (_xgm2ProcessSN()) {
-      endProcedure();
-      return;
+      _xgm2PSGEnded = true;
+      break;
     };
   }
 
-  _xgmFrame = (_xgmPSGFrame < _xgmYMFrame) ? _xgmPSGFrame : _xgmYMFrame;
+  if (_xgm2YMEnded && _xgm2PSGEnded) {
+    endProcedure();
+    return;
+  }
+
+  // XGM2 は FM と PSG が別ストリーム。片側だけ end marker を踏んでも、
+  // もう片側がループ/継続している場合は曲全体を終了しない。
+  // 終了済みストリームを min() に含めるとフレームが進まなくなるため、残った側を基準にする。
+  if (_xgm2YMEnded) {
+    _xgmFrame = _xgmPSGFrame;
+  } else if (_xgm2PSGEnded) {
+    _xgmFrame = _xgmYMFrame;
+  } else {
+    _xgmFrame = (_xgmPSGFrame < _xgmYMFrame) ? _xgmPSGFrame : _xgmYMFrame;
+  }
   _xgmWaitUntil = _xgmStartTick + _xgmFrame * 16666;  // 60Hz
   _vgmSamples = _xgmFrame * 735;                      // 44100 / 60
 
@@ -1554,7 +1570,7 @@ bool VGM::_xgm2ProcessYM() {
         _xgm2_ym_pos = _xgm2_ym_offset + loopOffset;
 
         Serial.printf("loops: %d\n", _vgmLoop);
-        if (_vgmLoop == ndConfig.get(CFG_NUM_LOOP) &&
+        if (_vgmLoop >= ndConfig.get(CFG_NUM_LOOP) &&
             ndConfig.get(CFG_NUM_LOOP) != LOOP_INIFITE) {  //   フェードアウトON
           nju72341.startFadeout();
         }
@@ -2058,15 +2074,18 @@ void VGM::endProcedure() {
 
   switch (ndConfig.get(CFG_REPEAT)) {
     case REPEAT_ONE: {
-      ndFile.filePlay(0);
+      // 曲終了時の自動再生も入力操作と同じキュー経路に通す。
+      // openFile()/readFile()/ready() の実行箇所を processPlaybackQueue() に集約し、
+      // 再生失敗時の currentNode 復旧も同じルールで扱う。
+      ndFile.requestFilePlay(0);
       break;
     }
     case REPEAT_FOLDER: {
-      ndFile.filePlay(1);
+      ndFile.requestFilePlay(1);
       break;
     }
     case REPEAT_ALL: {
-      ndFile.filePlay(1);
+      ndFile.requestFilePlay(1);
       break;
     }
   }
