@@ -119,7 +119,7 @@ class NDFile {
 
   // 再生所有者側の実行API。
   // 入力/表示イベント側からは直接呼ばず、request*() 経由で再生ループへ依頼する。
-  // 例外として、setup() 中の初回再生だけはまだ直接呼び出す。
+  // setup() 中の初回再生も request*() 後に processPlaybackQueue() を同期実行する。
   bool filePlay(int count);
   bool dirPlay(int count);
   bool play(uint16_t d, uint16_t f, int8_t att = -1);
