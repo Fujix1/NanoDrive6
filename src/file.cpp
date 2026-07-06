@@ -741,6 +741,11 @@ bool NDFile::openFile(String path, int8_t att) {
     return false;
   }
 
+  // 再生ループは loop() 側で継続しているため、ファイル/音源状態を差し替える前に
+  // 必ず停止扱いへ落とす。ND8 と同じく openFile() の入口で再生可能状態を閉じる。
+  ND::canPlay = false;
+  ND::isPaused = false;
+
   nju72341.mute();
   // 新しい曲を開くときは、前曲の3秒カウントダウンを破棄する。
   cancelPlayHoldCountdown();
