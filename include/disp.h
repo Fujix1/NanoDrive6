@@ -232,6 +232,7 @@ class CFGWindow {
   LGFX_Sprite _sprFooter;
   LGFX_Sprite _sprHeaderJP;
   LGFX_Sprite _sprHeaderEN;
+  bool _isChanged = false;
 
   void initHeaders();
   void drawPanelView();

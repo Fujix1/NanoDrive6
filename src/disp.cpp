@@ -1,5 +1,6 @@
 #include "disp.h"
 
+#include "fm.h"
 #include "input.h"
 #include "pics.h"
 #include "png_renderer.h"
@@ -1285,13 +1286,27 @@ void CFGWindow::initHeaders() {
 
 // 表示
 void CFGWindow::show() {
+  const bool isOpening = disp.currentView != ViewMode::Config;
+  if (isOpening) {
+    _isChanged = false;
+  }
   disp.currentView = ViewMode::Config;
   _stopTimerDrawing = true;
   drawPanelView();
 }
 
 void CFGWindow::close() {
-  if ((tMode)ndConfig.items[CFG_MODE].index != ndConfig.currentMode) {
+  const bool modeChanged = (tMode)ndConfig.items[CFG_MODE].index != ndConfig.currentMode;
+  if (_isChanged) {
+    if (modeChanged) {
+      // 動作モード変更時はこの直後に再起動するため、非同期保存キューを待たずに同期保存する。
+      ndConfig.saveCfgNow();
+    } else {
+      ndConfig.saveCfg();
+    }
+    _isChanged = false;
+  }
+  if (modeChanged) {
     ESP.restart();
     return;
   }
@@ -1311,7 +1326,9 @@ void CFGWindow::eventHandler(event ev) {
       if (ndConfig.items[currentItemIndex].index > 0) {
         int prevRandom = ndConfig.get(CFG_SHUFFLE);
         ndConfig.items[currentItemIndex].index--;
-        ndConfig.saveCfg();
+        ndConfig.applyCfg();
+        FM.requestApplyYM2612OutputMode();
+        _isChanged = true;
 
         // シャッフル設定の切り替え時は、シャッフルステートをリセット
         if (currentItemIndex == CFG_SHUFFLE && prevRandom != ndConfig.get(CFG_SHUFFLE)) {
@@ -1331,7 +1348,9 @@ void CFGWindow::eventHandler(event ev) {
           ndConfig.items[currentItemIndex].optionValues.size()) {
         int prevRandom = ndConfig.get(CFG_SHUFFLE);
         ndConfig.items[currentItemIndex].index++;
-        ndConfig.saveCfg();
+        ndConfig.applyCfg();
+        FM.requestApplyYM2612OutputMode();
+        _isChanged = true;
 
         // シャッフル設定の切り替え時は、シャッフルステートをリセット
         if (currentItemIndex == CFG_SHUFFLE && prevRandom != ndConfig.get(CFG_SHUFFLE)) {

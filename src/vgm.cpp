@@ -657,6 +657,13 @@ void VGM::vgmProcess() {
   u8_t processedCommands = 0;
   while (_vgmSamples <= _vgmRealSamples) {
     vgmProcessMain();
+    if (!ND::canPlay) {
+      // 0x66終端などで endProcedure() が次曲要求をキューへ積んだら、
+      // この vgmProcess() 内ではそれ以上コマンドを読まない。
+      // queue化後は次曲 open が後段の processPlaybackQueue() で行われるため、
+      // 終端後のデータを読み続けると範囲外参照になる。
+      return;
+    }
     if (++processedCommands >= kVgmCommandBudgetPerLoop && _vgmSamples <= _vgmRealSamples) {
       taskYIELD();
       return;
