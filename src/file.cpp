@@ -206,7 +206,7 @@ bool NDFile::init() {
 
   // 入力/表示イベントタスクからの再生要求を、再生ループ側で処理するためのキュー。
   // 初期段階ではスレッド分離せず、openFile()/readFile()/vgm.ready() の所有者を loop() に寄せる。
-  _playbackQueue = xQueueCreate(4, sizeof(PlaybackCommand));
+  _playbackQueue = xQueueCreate(1, sizeof(PlaybackCommand));
   if (!_playbackQueue) {
     Serial.println("ERROR: playbackQueue create failed!");
     return false;
@@ -656,14 +656,9 @@ bool NDFile::_sendPlaybackCommand(const PlaybackCommand& command) {
     return false;
   }
 
-  if (xQueueSend(_playbackQueue, &command, 0) == pdTRUE) {
-    return true;
-  }
-
-  // 操作連打時は古い再生要求より最新の入力を優先する。
-  PlaybackCommand dropped;
-  xQueueReceive(_playbackQueue, &dropped, 0);
-  return xQueueSend(_playbackQueue, &command, 0) == pdTRUE;
+  // 再生要求はバッファリングしない。キーリピートや連打時に古い要求が残ると、
+  // 入力を離した後も曲移動が続くため、常に最新の1件だけを保持する。
+  return xQueueOverwrite(_playbackQueue, &command) == pdTRUE;
 }
 
 // 再生操作リクエスト
@@ -704,6 +699,16 @@ bool NDFile::processPlaybackQueue() {
   }
 
   return false;
+}
+
+void NDFile::clearPlaybackQueue() {
+  if (_playbackQueue == nullptr) {
+    return;
+  }
+
+  // キーを離した後に残っている最新要求を破棄する。
+  // openFile() 中にキーリピートが上書きした1件を、離鍵後に実行しないため。
+  xQueueReset(_playbackQueue);
 }
 
 //----------------------------------------------------------------------

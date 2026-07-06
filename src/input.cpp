@@ -82,6 +82,10 @@ void onKeyUp(Button button) {
   if (keyRepeatTimer != nullptr) xTimerStop(keyRepeatTimer, 0);
   keyRepeatState = KeyRepeatState::Idle;
   activeButton = btnNONE;
+  input.inputBuffer = btnNONE;
+  if (button == btnUP || button == btnDOWN || button == btnLEFT || button == btnRIGHT) {
+    ndFile.clearPlaybackQueue();
+  }
 }
 
 void keyRepeatTimerHandler(TimerHandle_t) {
@@ -149,6 +153,11 @@ Button checkAdcButton() {
   const Button button = readAdcButton();
 
   if (button == btnNONE) {
+    if (adcLastButton == btnUP || adcLastButton == btnDOWN || adcLastButton == btnLEFT ||
+        adcLastButton == btnRIGHT) {
+      ndFile.clearPlaybackQueue();
+    }
+    input.inputBuffer = btnNONE;
     adcLastButton = btnNONE;
     return btnNONE;
   }
@@ -469,6 +478,7 @@ void Input::setEnabled(bool state) {
     adcLastButton = btnNONE;
     adcButtonRepeatStarted = 0;
     keyRepeatState = KeyRepeatState::Idle;
+    ndFile.clearPlaybackQueue();
     if (keyRepeatTimer != nullptr) xTimerStop(keyRepeatTimer, 0);
   }
 }
