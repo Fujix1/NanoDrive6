@@ -81,6 +81,7 @@ class NDConfig {
   void init();
   void applyCfg();
   void saveCfg();
+  void saveCfgNow();
   void saveHistory();
   void loadCfg();
   u32_t loadHistory();

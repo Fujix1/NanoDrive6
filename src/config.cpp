@@ -29,15 +29,19 @@ static tNJU72341_GAIN amplifyToInputGain(int amplify) {
 
 QueueHandle_t cfgSaveQueue;  // 設定保存用メッセージキュー
 
+static void saveConfigItems() {
+  for (int i = 0; i < ndConfig.items.size(); i++) {
+    preferences.putUChar(ndConfig.items[i].slug.c_str(), ndConfig.items[i].index);
+  }
+}
+
 // 設定保存メッセージ待ち受け
 void cfgSaveTask(void* pvParameters) {
   while (1) {
     u32_t dummy;
     if (xQueueReceive(cfgSaveQueue, &dummy, portMAX_DELAY) == pdTRUE) {
       // 保存
-      for (int i = 0; i < ndConfig.items.size(); i++) {
-        preferences.putUChar(ndConfig.items[i].slug.c_str(), ndConfig.items[i].index);
-      }
+      saveConfigItems();
     }
     vTaskDelay(1);
   }
@@ -145,6 +149,12 @@ void NDConfig::saveCfg() {
   applyCfg();
   FM.requestApplyYM2612OutputMode();
   return;
+}
+
+void NDConfig::saveCfgNow() {
+  saveConfigItems();
+  applyCfg();
+  FM.requestApplyYM2612OutputMode();
 }
 
 // ヒストリ保存
