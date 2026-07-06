@@ -531,6 +531,7 @@ FileFormat NDFile::readFile(String path) {
 
 //----------------------------------------------------------------------
 // ディレクトリ内の count 個あとの曲再生。マイナスは前の曲
+// 再生所有者側の実行API。入力/表示イベント側は requestFilePlay() を使う。
 // 戻り値: 成功/不成功
 bool NDFile::filePlay(int count) {
   switch (ndConfig.get(CFG_SHUFFLE)) {
@@ -608,6 +609,7 @@ bool NDFile::_playRandomAll(int count) {
 //----------------------------------------------------------------------
 // count 個あとのディレクトリを開いて最初のファイルを再生。
 // マイナスは前のディレクトリ
+// 再生所有者側の実行API。入力/表示イベント側は requestDirPlay() を使う。
 // 戻り値: 成功/不成功
 bool NDFile::dirPlay(int count) {
   switch (ndConfig.get(CFG_SHUFFLE)) {
@@ -661,7 +663,9 @@ bool NDFile::_sendPlaybackCommand(const PlaybackCommand& command) {
   return xQueueOverwrite(_playbackQueue, &command) == pdTRUE;
 }
 
-// 再生操作リクエスト
+// 再生操作リクエスト。
+// 入力/表示イベント側からはここだけを呼び、openFile()/readFile()/vgm.ready()/XGMReady()
+// は再生ループ側の processPlaybackQueue() に集約する。
 bool NDFile::requestFilePlay(int count) {
   PlaybackCommand command = {PlaybackCommandType::FileRelative, count, 0, -1};
   return _sendPlaybackCommand(command);
@@ -712,7 +716,8 @@ void NDFile::clearPlaybackQueue() {
 }
 
 //----------------------------------------------------------------------
-// 直接ファイル再生
+// 直接ファイル再生。
+// 再生所有者側の実行API。入力/表示イベント側は requestPlay() を使う。
 // 戻り値: 成功/不成功
 bool NDFile::play(uint16_t d, uint16_t f, int8_t att) {
   Node* targetDir = fileTree.getDirNodeByIndex(d);

@@ -142,6 +142,8 @@ void setup() {
     lastDirIndex = history & 0xffff;
     lastTrackIndex = (history & 0xffff0000) >> 16;
 
+    // setup() 中の初回再生だけは、まだキューを通さず同期的に開く。
+    // 入力/表示イベントからの曲移動は request*() -> processPlaybackQueue() に集約する。
     switch (ndConfig.get(CFG_HISTORY)) {
       case HISTORY_FOLDER:
         ndFile.play(lastDirIndex, 0);
