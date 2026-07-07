@@ -119,6 +119,13 @@ void NDConfig::init() {
                    {"0dB", "3dB", "6dB", "9dB"},
                    {"0dB", "3dB", "6dB", "9dB"},
                    {AMP_0, AMP_3, AMP_6, AMP_9}});
+  items.push_back({"keyon",
+                   0,  // 初期値idx
+                   "キーオン色",
+                   "Keyon Color",
+                   {"赤", "緑", "青"},
+                   {"Red", "Green", "Blue"},
+                   {KEYON_RED, KEYON_GREEN, KEYON_BLUE}});
   items.push_back({"pause",
                    0,  // 初期値idx
                    "再生ホールド",

@@ -1908,7 +1908,7 @@ boolean VisualWindow::drawKeyboard(LGFX_Sprite& sprite, t_device device, const N
   const int noteWidth[12] = {4, 3, 4, 3, 4, 4, 3, 4, 3, 4, 3, 4};
 
   bool touched = false;
-  const uint16_t keyOnColor = TFT_RED;
+  const uint16_t keyOnColor = static_cast<uint16_t>(ndConfig.get(CFG_KEYON));
 
   for (int i = 0; i < device_channels[device]; i++) {
     int oct = notes[i].octave;

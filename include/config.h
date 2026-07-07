@@ -49,6 +49,11 @@ typedef enum { FMPCM_BOTH,
 typedef enum { TPAN_NORMAL, TPAN_INVERT } tCfgPan;
 typedef enum { HOLD_NONE, HOLD_YES, HOLD_3SEC } tPause;  // 再生時一時停止
 typedef enum { LAST_VIEW_PLAYER = 0, LAST_VIEW_VISUAL = 1 } tLastView;  // 最後開いていたウィンドウ
+typedef enum {
+  KEYON_RED = 0xF800,
+  KEYON_GREEN = 0x67e1,
+  KEYON_BLUE = 0x843f,
+} tKeyon;  // キーオン色
 
 typedef enum {
   CFG_LANG,      // 言語
@@ -61,6 +66,7 @@ typedef enum {
   CFG_FMPCM,     // FM PCM 再生モード
   CFG_YM2612_PAN, // YM2612パン
   CFG_AMPLIFY,   // 出力増幅
+  CFG_KEYON,     // キーオン色
   CFG_PAUSE,     // 再生時一時停止
   CFG_MODE,      // 動作モード
 } tConfig;

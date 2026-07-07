@@ -606,6 +606,21 @@ bool NDFile::_playRandomAll(int count) {
   return _playNode(target);
 }
 
+bool NDFile::_autoNextPlay() {
+  // シャッフル時は既存のファイル移動ルールに任せる。
+  // 通常再生時だけ、フォルダ終端で次ディレクトリへ進む。
+  if (ndConfig.get(CFG_SHUFFLE) != TRANDOM_NO) {
+    return _filePlay(1);
+  }
+
+  Node* targetFile = fileTree.getNextFileNode(currentNode, false);
+  if (targetFile) {
+    return _playNode(targetFile);
+  }
+
+  return _dirPlay(1);
+}
+
 //----------------------------------------------------------------------
 // count 個あとのディレクトリを開いて最初のファイルを再生。
 // マイナスは前のディレクトリ
@@ -676,6 +691,11 @@ bool NDFile::requestDirPlay(int count) {
   return _sendPlaybackCommand(command);
 }
 
+bool NDFile::requestAutoNextPlay() {
+  PlaybackCommand command = {PlaybackCommandType::AutoNext, 0, 0, -1};
+  return _sendPlaybackCommand(command);
+}
+
 bool NDFile::requestPlay(uint16_t d, uint16_t f, int8_t att) {
   PlaybackCommand command = {PlaybackCommandType::PlayIndex, d, f, att};
   return _sendPlaybackCommand(command);
@@ -706,6 +726,9 @@ bool NDFile::processPlaybackQueue() {
       break;
     case PlaybackCommandType::DirRelative:
       result = _dirPlay(command.a);
+      break;
+    case PlaybackCommandType::AutoNext:
+      result = _autoNextPlay();
       break;
     case PlaybackCommandType::PlayIndex:
       result = _playIndex((uint16_t)command.a, (uint16_t)command.b, command.att);

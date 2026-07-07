@@ -121,6 +121,7 @@ class NDFile {
   // 要求はバッファリングせず最新1件だけ保持し、processPlaybackQueue() が再生ループ側で処理する。
   bool requestFilePlay(int count);
   bool requestDirPlay(int count);
+  bool requestAutoNextPlay();
   bool requestPlay(uint16_t d, uint16_t f, int8_t att = -1);
   bool processPlaybackQueue();
   void clearPlaybackQueue();
@@ -173,6 +174,7 @@ class NDFile {
   enum class PlaybackCommandType : u8_t {
     FileRelative,
     DirRelative,
+    AutoNext,
     PlayIndex,
   };
 
@@ -219,6 +221,7 @@ class NDFile {
   // 外部からは直接呼ばず、request*() -> processPlaybackQueue() 経由で実行する。
   bool _filePlay(int count);
   bool _dirPlay(int count);
+  bool _autoNextPlay();
   bool _playIndex(uint16_t d, uint16_t f, int8_t att = -1);
   bool _fileOpen(uint16_t d, uint16_t f, int8_t att = -1);
   bool _openFile(String path, int8_t att = -1);

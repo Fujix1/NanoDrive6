@@ -2111,7 +2111,7 @@ void VGM::endProcedure() {
       break;
     }
     case REPEAT_ALL: {
-      ndFile.requestFilePlay(1);
+      ndFile.requestAutoNextPlay();
       break;
     }
   }
