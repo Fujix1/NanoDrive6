@@ -197,15 +197,21 @@ static constexpr int kLevelDrawX = 67;         // レベルメータX
 static constexpr int kLevelDrawBottomY = 262;  // レベルメータY下端
 static constexpr uint8_t kFmTrackCount = 6;
 static constexpr uint8_t kNoteTrackCount = 16;
-static constexpr uint8_t kPanTrackCount = 7;    // Track 1-6: FM, Track 7: PCM
+static constexpr uint8_t kPanTrackCount = 16;   // Track 1-6: FM, Track 7: PCM, 9-16: PSG
 static constexpr uint8_t kLevelTrackCount = 16;  // Track 1-6: FM, 7: PCM, 9-16: SN76489
+static constexpr uint8_t kPcmTrack = 6;          // UI Track 7
+static constexpr uint8_t kUnusedTrack = 7;       // UI Track 8
+static constexpr uint8_t kSn0ToneTrackFirst = 8;   // UI Track 9
+static constexpr uint8_t kSn0NoiseTrack = 11;      // UI Track 12
+static constexpr uint8_t kSn1ToneTrackFirst = 12;  // UI Track 13
+static constexpr uint8_t kSn1NoiseTrack = 15;      // UI Track 16
 static uint16_t levelSprite[kLevelSpriteCount][kLevelSpriteWidth * kLevelSpriteHeight];
 static uint16_t levelWorkBuffer[kLevelSpriteWidth * kLevelSpriteHeight];
 static uint16_t numberSprite[kNumberSpriteCount][kNumberSpriteWidth * kNumberSpriteHeight];
 static uint16_t numberWorkBuffer[kNumberSpriteWidth * (kNumberSpriteHeight * 2)];
 static uint16_t labelSprite[kLabelSpriteCount][kLabelSpriteWidth * kLabelSpriteHeight];
 static uint16_t visualRowBuffer[LCD_W];
-static int8_t lastTrackPan[kPanTrackCount] = {-1, -1, -1, -1, -1, -1, -1};
+static int8_t lastTrackPan[kPanTrackCount];
 static int8_t lastTrackLevel[kLevelTrackCount];
 static int8_t lastTrackPeak[kLevelTrackCount];
 static int16_t lastTrackNote[kNoteTrackCount];
@@ -423,8 +429,13 @@ static uint8_t getNumberGlyphIndex(char c) {
   return 0;
 }
 
+static bool isNoteDisplayTrack(uint8_t trackNo) {
+  return trackNo != kPcmTrack && trackNo != kUnusedTrack && trackNo != kSn0NoiseTrack &&
+         trackNo != kSn1NoiseTrack;
+}
+
 static uint8_t noteInfoToDisplayNoteNo(t_device device, const NoteInfo& ni) {
-  if (ni.octave < 0 || ni.octave > 8 || ni.note < 0 || ni.note > 11) {
+  if (ni.octave <= 0 || ni.octave > 8 || ni.note < 0 || ni.note > 11) {
     return 0xff;
   }
 
@@ -1805,15 +1816,15 @@ void VisualWindow::update() {
   }
   for (int i = 0; i < 3; i++) {
     uint8_t sn0Note = noteInfoToDisplayNoteNo(SN76489_0_KEY, sn0KeySnapshot[i]);
-    const int sn0Track = 8 + i;  // Track 9-11: SN76489 (1) tone
-    if (levelSnapshot[sn0Track] > 0 && sn0Note != 0xff) {
+    const int sn0Track = kSn0ToneTrackFirst + i;  // UI Track 9-11: SN76489 (1) tone
+    if (sn0Note != 0xff) {
       heldTrackNote[sn0Track] = sn0Note;
     }
     noteSnapshot[sn0Track] = heldTrackNote[sn0Track];
 
     uint8_t sn1Note = noteInfoToDisplayNoteNo(SN76489_1_KEY, sn1KeySnapshot[i]);
-    const int sn1Track = 12 + i;  // Track 13-15: SN76489 (2) tone
-    if (levelSnapshot[sn1Track] > 0 && sn1Note != 0xff) {
+    const int sn1Track = kSn1ToneTrackFirst + i;  // UI Track 13-15: SN76489 (2) tone
+    if (sn1Note != 0xff) {
       heldTrackNote[sn1Track] = sn1Note;
     }
     noteSnapshot[sn1Track] = heldTrackNote[sn1Track];
@@ -1843,13 +1854,19 @@ void VisualWindow::update() {
       lastTrackLevel[i] = displayLevel;
       lastTrackPeak[i] = peakLevel;
     }
-    // Track 7 はYM2612 DAC、Track 8 は未割当、Track 12/16 はSN76489 NoiseなのでKEY値は表示しない。
-    const bool showNote = i != 6 && i != 7 && i != 11 && i != 15;
-    if (showNote && lastTrackNote[i] != noteSnapshot[i]) {
+    if (isNoteDisplayTrack(i) && lastTrackNote[i] != noteSnapshot[i]) {
       drawNote(i, noteSnapshot[i]);
       lastTrackNote[i] = noteSnapshot[i];
     }
-    if (i >= kPanTrackCount) {
+    if (i >= kPanTrackCount || i == kUnusedTrack) {
+      continue;
+    }
+    const bool monoPanTrack = i == kPcmTrack || i >= kSn0ToneTrackFirst;
+    if (monoPanTrack) {
+      if (levelSnapshot[i] > 0 && lastTrackPan[i] != PAN_CENTER) {
+        drawPan(i, PAN_CENTER);
+        lastTrackPan[i] = PAN_CENTER;
+      }
       continue;
     }
     if (lastTrackPan[i] != panSnapshot[i]) {
