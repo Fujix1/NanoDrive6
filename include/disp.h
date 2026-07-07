@@ -263,6 +263,7 @@ class VisualWindow {
   boolean drawKeyboard(LGFX_Sprite& sprite, t_device device, const NoteInfo* notes);
   boolean drawPan(uint8_t trackNo, tPan pan);
   boolean drawLevel(uint8_t trackNo, uint8_t level, uint8_t peakLevel);
+  boolean drawNote(uint8_t trackNo, uint8_t noteNo);
   LGFX_Sprite _sprShuffleOn;
   LGFX_Sprite _sprShuffleOff;
   LGFX_Sprite _sprTime;

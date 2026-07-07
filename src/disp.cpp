@@ -182,26 +182,34 @@ static constexpr uint16_t kLabelXgm2Y = 135;
 static constexpr uint8_t kLevelSpriteCount = 16;  // level 0 .. 15
 static constexpr uint16_t kLevelSpriteWidth = levelsWidth;
 static constexpr uint16_t kLevelSpriteHeight = 17;
+static constexpr uint8_t kNumberSpriteCount = 11;  // "--", 9 .. 0
+static constexpr uint16_t kNumberSpriteWidth = numbersWidth;
+static constexpr uint16_t kNumberSpriteHeight = 8;
 static constexpr uint16_t kLevelWaterfallAccelQ8 = 16;         // 落下加速度
 static constexpr uint16_t kLevelWaterfallInitialSpeedQ8 = 32;  // 落下開始初速
 static constexpr uint8_t kPeakHoldDelayFrames = 10;            // ピークホールドフレーム数
 static constexpr uint8_t kPeakLineX0 = 29;
 static constexpr uint8_t kPeakLineYTop = 2;
 static constexpr uint8_t kPeakLineYBottom = 14;
+static constexpr uint16_t kNoteDrawX = 115;        // キー表示 X
+static constexpr uint16_t kNoteDrawBottomY = 263;  // キー表示 Y 下端
 static constexpr int kLevelDrawX = 67;         // レベルメータX
 static constexpr int kLevelDrawBottomY = 262;  // レベルメータY下端
 static constexpr uint8_t kFmTrackCount = 6;
+static constexpr uint8_t kNoteTrackCount = 16;
 static constexpr uint8_t kPanTrackCount = 7;    // Track 1-6: FM, Track 7: PCM
 static constexpr uint8_t kLevelTrackCount = 16;  // Track 1-6: FM, 7: PCM, 9-16: SN76489
 static uint16_t levelSprite[kLevelSpriteCount][kLevelSpriteWidth * kLevelSpriteHeight];
 static uint16_t levelWorkBuffer[kLevelSpriteWidth * kLevelSpriteHeight];
+static uint16_t numberSprite[kNumberSpriteCount][kNumberSpriteWidth * kNumberSpriteHeight];
+static uint16_t numberWorkBuffer[kNumberSpriteWidth * (kNumberSpriteHeight * 2)];
 static uint16_t labelSprite[kLabelSpriteCount][kLabelSpriteWidth * kLabelSpriteHeight];
 static uint16_t visualRowBuffer[LCD_W];
 static int8_t lastTrackPan[kPanTrackCount] = {-1, -1, -1, -1, -1, -1, -1};
 static int8_t lastTrackLevel[kLevelTrackCount];
 static int8_t lastTrackPeak[kLevelTrackCount];
-static int16_t lastTrackNote[kFmTrackCount] = {-1, -1, -1, -1, -1, -1};
-static uint8_t heldTrackNote[kFmTrackCount] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+static int16_t lastTrackNote[kNoteTrackCount];
+static uint8_t heldTrackNote[kNoteTrackCount];
 static uint16_t trackLevelDisplayQ8[kLevelTrackCount] = {0};
 static uint16_t trackLevelFallSpeedQ8[kLevelTrackCount] = {0};
 static uint16_t trackPeakDisplayQ8[kLevelTrackCount] = {0};
@@ -360,6 +368,31 @@ static void cutLevelSprite(uint8_t levelIndex) {
   }
 }
 
+// 数字画像切り出し
+static void cutNumberSprite(uint8_t glyphIndex) {
+  if (glyphIndex >= kNumberSpriteCount) {
+    return;
+  }
+
+  const uint16_t srcY = (uint16_t)(glyphIndex * kNumberSpriteHeight);
+  uint16_t* dst = numberSprite[glyphIndex];
+
+  if (kVisualRotate180) {
+    for (uint16_t y = 0; y < kNumberSpriteHeight; y++) {
+      for (uint16_t x = 0; x < kNumberSpriteWidth; x++) {
+        dst[y * kNumberSpriteWidth + x] =
+            numbers[(srcY + (kNumberSpriteHeight - 1 - y)) * numbersWidth +
+                    (kNumberSpriteWidth - 1 - x)];
+      }
+    }
+  } else {
+    for (uint16_t y = 0; y < kNumberSpriteHeight; y++) {
+      const uint16_t* src = &numbers[(srcY + y) * numbersWidth];
+      memcpy(&dst[y * kNumberSpriteWidth], src, sizeof(uint16_t) * kNumberSpriteWidth);
+    }
+  }
+}
+
 // ラベル画像切り出し
 static void cutLabelSprite(uint8_t labelIndex) {
   if (labelIndex >= kLabelSpriteCount) {
@@ -378,6 +411,16 @@ static void drawLabelClip(LGFX_Sprite& target, uint8_t labelIndex, int x, int y)
 
   target.pushImage(visualX(x, kLabelSpriteWidth), visualY(y, kLabelSpriteHeight), kLabelSpriteWidth,
                    kLabelSpriteHeight, labelSprite[labelIndex]);
+}
+
+static uint8_t getNumberGlyphIndex(char c) {
+  if (c == '-') {
+    return 0;
+  }
+  if (c >= '0' && c <= '9') {
+    return (uint8_t)(10 - (c - '0'));
+  }
+  return 0;
 }
 
 static uint8_t noteInfoToDisplayNoteNo(t_device device, const NoteInfo& ni) {
@@ -1582,6 +1625,10 @@ void VisualWindow::init() {
     cutLevelSprite(i);
   }
 
+  for (uint8_t i = 0; i < kNumberSpriteCount; i++) {
+    cutNumberSprite(i);
+  }
+
   for (uint8_t i = 0; i < kLabelSpriteCount; i++) {
     cutLabelSprite(i);
   }
@@ -1714,7 +1761,7 @@ void VisualWindow::draw() {
   for (int i = 0; i < kPanTrackCount; i++) {
     lastTrackPan[i] = -1;
   }
-  for (int i = 0; i < kFmTrackCount; i++) {
+  for (int i = 0; i < kNoteTrackCount; i++) {
     lastTrackNote[i] = -1;
     heldTrackNote[i] = 0xff;
   }
@@ -1747,15 +1794,29 @@ void VisualWindow::update() {
   memset(KeyBoard.trackLevel, 0, sizeof(KeyBoard.trackLevel));
   xSemaphoreGive(KeyBoard.keyinfoMutex);
 
-  uint8_t noteSnapshot[kFmTrackCount];
+  uint8_t noteSnapshot[kNoteTrackCount];
+  memset(noteSnapshot, 0xff, sizeof(noteSnapshot));
   for (int i = 0; i < kFmTrackCount; i++) {
     uint8_t ymNote = noteInfoToDisplayNoteNo(YM2612_KEY, keySnapshot[i]);
     if (ymNote != 0xff) {
       heldTrackNote[i] = ymNote;
-    } else {
-      heldTrackNote[i] = 0xff;
     }
     noteSnapshot[i] = heldTrackNote[i];
+  }
+  for (int i = 0; i < 3; i++) {
+    uint8_t sn0Note = noteInfoToDisplayNoteNo(SN76489_0_KEY, sn0KeySnapshot[i]);
+    const int sn0Track = 8 + i;  // Track 9-11: SN76489 (1) tone
+    if (levelSnapshot[sn0Track] > 0 && sn0Note != 0xff) {
+      heldTrackNote[sn0Track] = sn0Note;
+    }
+    noteSnapshot[sn0Track] = heldTrackNote[sn0Track];
+
+    uint8_t sn1Note = noteInfoToDisplayNoteNo(SN76489_1_KEY, sn1KeySnapshot[i]);
+    const int sn1Track = 12 + i;  // Track 13-15: SN76489 (2) tone
+    if (levelSnapshot[sn1Track] > 0 && sn1Note != 0xff) {
+      heldTrackNote[sn1Track] = sn1Note;
+    }
+    noteSnapshot[sn1Track] = heldTrackNote[sn1Track];
   }
   for (int i = 0; i < 4; i++) {
     snKeySnapshot[i] = sn0KeySnapshot[i];
@@ -1782,18 +1843,18 @@ void VisualWindow::update() {
       lastTrackLevel[i] = displayLevel;
       lastTrackPeak[i] = peakLevel;
     }
+    // Track 7 はYM2612 DAC、Track 8 は未割当、Track 12/16 はSN76489 NoiseなのでKEY値は表示しない。
+    const bool showNote = i != 6 && i != 7 && i != 11 && i != 15;
+    if (showNote && lastTrackNote[i] != noteSnapshot[i]) {
+      drawNote(i, noteSnapshot[i]);
+      lastTrackNote[i] = noteSnapshot[i];
+    }
     if (i >= kPanTrackCount) {
       continue;
     }
     if (lastTrackPan[i] != panSnapshot[i]) {
       drawPan(i, panSnapshot[i]);
       lastTrackPan[i] = panSnapshot[i];
-    }
-    if (i >= kFmTrackCount) {
-      continue;
-    }
-    if (lastTrackNote[i] != noteSnapshot[i]) {
-      lastTrackNote[i] = noteSnapshot[i];
     }
   }
 
@@ -1909,6 +1970,32 @@ boolean VisualWindow::drawLevel(uint8_t trackNo, uint8_t level, uint8_t peakLeve
 
   const int y = kLevelDrawBottomY - trackNo * kLevelSpriteHeight;
   pushVisualBufferToLcd(kLevelDrawX, y, kLevelSpriteWidth, kLevelSpriteHeight, levelWorkBuffer);
+  return true;
+}
+
+boolean VisualWindow::drawNote(uint8_t trackNo, uint8_t noteNo) {
+  if (trackNo >= kNoteTrackCount) {
+    return false;
+  }
+
+  char upperChar = '-';
+  char lowerChar = '-';
+  if (noteNo <= 96) {
+    upperChar = (char)('0' + (noteNo / 10));
+    lowerChar = (char)('0' + (noteNo % 10));
+  }
+
+  const uint8_t upperIndex = getNumberGlyphIndex(upperChar);
+  const uint8_t lowerIndex = getNumberGlyphIndex(lowerChar);
+  const int y = kNoteDrawBottomY - trackNo * kLevelSpriteHeight;
+
+  memcpy(&numberWorkBuffer[0], numberSprite[upperIndex],
+         sizeof(uint16_t) * kNumberSpriteWidth * kNumberSpriteHeight);
+  memcpy(&numberWorkBuffer[kNumberSpriteWidth * kNumberSpriteHeight], numberSprite[lowerIndex],
+         sizeof(uint16_t) * kNumberSpriteWidth * kNumberSpriteHeight);
+
+  pushVisualBufferToLcd(kNoteDrawX, y, kNumberSpriteWidth, kNumberSpriteHeight * 2,
+                        numberWorkBuffer);
   return true;
 }
 
