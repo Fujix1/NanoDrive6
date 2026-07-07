@@ -48,6 +48,7 @@ typedef enum { FMPCM_BOTH,
                FMPCM_PCM } tFMPCM;
 typedef enum { TPAN_NORMAL, TPAN_INVERT } tCfgPan;
 typedef enum { HOLD_NONE, HOLD_YES, HOLD_3SEC } tPause;  // 再生時一時停止
+typedef enum { LAST_VIEW_PLAYER = 0, LAST_VIEW_VISUAL = 1 } tLastView;  // 最後開いていたウィンドウ
 
 typedef enum {
   CFG_LANG,      // 言語
@@ -84,13 +85,16 @@ class NDConfig {
   void saveCfg();
   void saveCfgNow();
   void saveHistory();
+  void saveLastView(tLastView view);
   void loadCfg();
   u32_t loadHistory();
+  tLastView loadLastView();
   void remove();
   int get(tConfig item);
   String lastFolderName = "";
 
  private:
+  tLastView _lastView = LAST_VIEW_PLAYER;
 };
 
 extern NDConfig ndConfig;
