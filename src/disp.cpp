@@ -899,6 +899,11 @@ void PlayerWindow::drawBG() {
 
 // プレーヤー描画
 void PlayerWindow::redraw() {
+  if (ndConfig.currentMode == MODE_SERIAL) {
+    serialModeDraw();
+    return;
+  }
+
   xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
   _stopTimerDrawing = true;
   playerWindow.drawBG();
@@ -1014,6 +1019,11 @@ void serialModeDraw() {
   playerWindow.drawBG();
   render.setUseRenderTask(false);
   render.setDrawer(frameBuffer);
+
+  frameBuffer.pushImage(170 - 2 - USB_ICON_WIDTH, 2, USB_ICON_WIDTH, USB_ICON_HEIGHT,
+                        usb_icon);  // usb icon
+
+  render.setAlignment(Align::TopLeft);
 
   render.loadFont(nimbusBold, sizeof(nimbusBold));
   render.setFontSize(13);
