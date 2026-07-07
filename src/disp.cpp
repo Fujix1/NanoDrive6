@@ -265,6 +265,42 @@ static void pushVisualSpriteToLcd(LGFX_Sprite& sprite, int x, int y) {
   sprite.pushSprite(visualX(x, sprite.width()), visualY(y, sprite.height()));
 }
 
+static void createVisualShuffleIconSprite(LGFX_Sprite& target, uint16_t color) {
+  static constexpr int kShuffleIconSize = 18;
+
+  LGFX_Sprite source(&lcd);
+  source.setPsram(false);
+  source.createSprite(kShuffleIconSize, kShuffleIconSize);
+  if (source.width() == 0) {
+    return;
+  }
+
+  target.deleteSprite();
+  target.setPsram(false);
+  target.createSprite(kShuffleIconSize, kShuffleIconSize);
+  if (target.width() == 0) {
+    source.deleteSprite();
+    return;
+  }
+
+  source.fillSprite(TFT_BLACK);
+  render.setDrawer(source);
+  render.loadFont(fontMain, sizeof(fontMain));
+  render.setFontSize(15);
+  render.setAlignment(Align::TopCenter);
+  render.setFontColor(color, TFT_BLACK);
+  render.setCursor(kShuffleIconSize / 2, 1);
+  render.printf("丂");
+  render.unloadFont();
+
+  target.fillSprite(TFT_BLACK);
+  source.setPivot(kShuffleIconSize / 2.0f, kShuffleIconSize / 2.0f);
+  const float angle = kVisualRotate180 ? 90.0f : -90.0f;
+  source.pushRotateZoom(&target, kShuffleIconSize / 2.0f, kShuffleIconSize / 2.0f, angle,
+                        1.0f, 1.0f, TFT_BLACK);
+  source.deleteSprite();
+}
+
 static void pushVisualBufferToLcd(int x, int y, int w, int h, const uint16_t* data) {
   lcd.pushImage(visualX(x, w), visualY(y, h), w, h, data);
 }
@@ -1003,9 +1039,7 @@ bool initDisp() {
   xSemaphoreGive(spFrameBuffer);
 
   // フレームバッファスプライト作成
-  // XGM/VGM PCM はPSRAMから高頻度に読み出すため、描画用の全画面バッファは内部RAMに置く。
-  // PSRAM上に置くとVisual/Config描画とPCM送信が帯域競合し、PCMドロップの原因になる。
-  frameBuffer.setPsram(false);
+  frameBuffer.setPsram(true);
   frameBuffer.createSprite(LCD_W, LCD_H);
   visualWindow.init();
 
@@ -1552,6 +1586,9 @@ void VisualWindow::init() {
     cutLabelSprite(i);
   }
 
+  createVisualShuffleIconSprite(_sprShuffleOn, C_MDX_ON);
+  createVisualShuffleIconSprite(_sprShuffleOff, C_MDX_OFF);
+
   _sprTime.setPsram(false);
   _sprTime.createSprite(14, 48);
 }
@@ -1652,6 +1689,13 @@ void VisualWindow::draw() {
     }
   }
   lblSongTitle.setCaption(songTitle);
+
+  // シャッフル再生のアイコン表示
+  if (ndConfig.get(CFG_SHUFFLE) != TRANDOM_NO) {
+    pushVisualSpriteToFrameBuffer(_sprShuffleOn, 154, 113);
+  } else {
+    pushVisualSpriteToFrameBuffer(_sprShuffleOff, 154, 113);
+  }
 
   _lastTimestampSec = INT64_MAX;
   _lastTimestampVisible = false;

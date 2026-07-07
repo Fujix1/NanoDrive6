@@ -246,7 +246,7 @@ extern CFGWindow cfgWindow;
 // ビジュアル画面クラス
 class VisualWindow {
  public:
-  VisualWindow() : _sprTime(&lcd) {
+  VisualWindow() : _sprShuffleOn(&lcd), _sprShuffleOff(&lcd), _sprTime(&lcd) {
   }
   void init();
   void draw();
@@ -263,6 +263,8 @@ class VisualWindow {
   boolean drawKeyboard(LGFX_Sprite& sprite, t_device device, const NoteInfo* notes);
   boolean drawPan(uint8_t trackNo, tPan pan);
   boolean drawLevel(uint8_t trackNo, uint8_t level, uint8_t peakLevel);
+  LGFX_Sprite _sprShuffleOn;
+  LGFX_Sprite _sprShuffleOff;
   LGFX_Sprite _sprTime;
   int64_t _lastTimestampSec = INT64_MAX;
   bool _lastTimestampVisible = false;
