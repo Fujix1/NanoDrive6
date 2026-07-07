@@ -137,6 +137,7 @@ void setup() {
   // ユーザ設定
   ndConfig.init();
   ndConfig.loadCfg();
+  const tLastView savedLastView = ndConfig.loadLastView();
 
   // I2C機器初期化
   // NJU72341/NJU72342 初期化
@@ -177,6 +178,14 @@ void setup() {
     lastDirIndex = history & 0xffff;
     lastTrackIndex = (history & 0xffff0000) >> 16;
 
+    if (savedLastView == LAST_VIEW_VISUAL) {
+      disp.currentView = ViewMode::Visual;
+      disp.lastView = ViewMode::Visual;
+    } else {
+      disp.currentView = ViewMode::Player;
+      disp.lastView = ViewMode::Player;
+    }
+
     // 初回再生も request*() -> processPlaybackQueue() 経由にする。
     // setup() 中は loop() がまだ動かないため、要求投入後にここで同期的に1回処理する。
     switch (ndConfig.get(CFG_HISTORY)) {
@@ -204,6 +213,12 @@ void setup() {
   cfgWindow.init();
 
   if (ndConfig.currentMode == MODE_PLAYER) {
+    if (savedLastView == LAST_VIEW_VISUAL) {
+      visualWindow.show();
+    } else {
+      playerWindow.show();
+    }
+
     BaseType_t playbackTaskCreated =
         xTaskCreatePinnedToCore(playbackTask, "playback", PLAYBACK_TASK_STACK, nullptr,
                                 PLAYBACK_TASK_PRIORITY, &hPlaybackTask, PLAYBACK_TASK_CORE);

@@ -12,6 +12,7 @@
 #include "nd.h"
 
 Preferences preferences;
+static constexpr const char* kLastViewKey = "last_view";
 
 static tNJU72341_GAIN amplifyToInputGain(int amplify) {
   switch (amplify) {
@@ -191,6 +192,12 @@ void NDConfig::saveHistory() {
   }
 }
 
+void NDConfig::saveLastView(tLastView view) {
+  if (_lastView == view) return;
+  preferences.putUChar(kLastViewKey, static_cast<u8_t>(view));
+  _lastView = view;
+}
+
 void NDConfig::loadCfg() {
   // READ FILE
   for (int i = 0; i < ndConfig.items.size(); i++) {
@@ -226,6 +233,13 @@ u32_t NDConfig::loadHistory() {
   }
 
   return 0;
+}
+
+tLastView NDConfig::loadLastView() {
+  const u8_t rawView = preferences.getUChar(kLastViewKey, static_cast<u8_t>(LAST_VIEW_PLAYER));
+  _lastView =
+      (rawView == static_cast<u8_t>(LAST_VIEW_VISUAL)) ? LAST_VIEW_VISUAL : LAST_VIEW_PLAYER;
+  return _lastView;
 }
 
 void NDConfig::remove() { preferences.clear(); }

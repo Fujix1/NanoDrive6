@@ -1171,6 +1171,7 @@ void PlayerWindow::eventHandler(event ev) {
 void PlayerWindow::show() {
   disp.currentView = ViewMode::Player;
   disp.lastView = ViewMode::Player;
+  ndConfig.saveLastView(LAST_VIEW_PLAYER);
   redraw();
 }
 
@@ -2036,6 +2037,7 @@ void VisualWindow::show() {
   _stopTimerDrawing = true;
   disp.currentView = ViewMode::Visual;
   disp.lastView = ViewMode::Visual;
+  ndConfig.saveLastView(LAST_VIEW_VISUAL);
   draw();
 }
 
