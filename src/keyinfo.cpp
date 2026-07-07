@@ -8,7 +8,7 @@ keyboard::keyboard() {
     }
   }
   for (int i = 0; i < 16; i++) {
-    trackPan[i] = (i < 7) ? PAN_CENTER : PAN_MUTE;
+    trackPan[i] = (i < 6) ? PAN_CENTER : PAN_MUTE;
     trackKeyOn[i] = false;
     trackLevel[i] = 0;
   }
@@ -22,7 +22,7 @@ void keyboard::reset() {
       }
     }
     for (int i = 0; i < 16; i++) {
-      trackPan[i] = (i < 7) ? PAN_CENTER : PAN_MUTE;
+      trackPan[i] = (i < 6) ? PAN_CENTER : PAN_MUTE;
       trackKeyOn[i] = false;
       trackLevel[i] = 0;
     }
