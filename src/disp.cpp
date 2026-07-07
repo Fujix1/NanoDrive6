@@ -1989,9 +1989,10 @@ boolean VisualWindow::drawNote(uint8_t trackNo, uint8_t noteNo) {
   const uint8_t lowerIndex = getNumberGlyphIndex(lowerChar);
   const int y = kNoteDrawBottomY - trackNo * kLevelSpriteHeight;
 
-  memcpy(&numberWorkBuffer[0], numberSprite[upperIndex],
+  // numbers.png は横書きの数字列を左90度回転しているため、一の位を上、十の位を下に積む。
+  memcpy(&numberWorkBuffer[0], numberSprite[lowerIndex],
          sizeof(uint16_t) * kNumberSpriteWidth * kNumberSpriteHeight);
-  memcpy(&numberWorkBuffer[kNumberSpriteWidth * kNumberSpriteHeight], numberSprite[lowerIndex],
+  memcpy(&numberWorkBuffer[kNumberSpriteWidth * kNumberSpriteHeight], numberSprite[upperIndex],
          sizeof(uint16_t) * kNumberSpriteWidth * kNumberSpriteHeight);
 
   pushVisualBufferToLcd(kNoteDrawX, y, kNumberSpriteWidth, kNumberSpriteHeight * 2,
