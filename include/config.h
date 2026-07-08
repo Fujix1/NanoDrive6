@@ -69,16 +69,17 @@ typedef enum {
   CFG_SHUFFLE,     // シャッフル再生
   CFG_NUM_LOOP,    // ループ回数
   CFG_REPEAT,      // リピート単位
-  CFG_FMPCM,       // FM PCM 再生モード
   CFG_SCROLL,      // テキストスクロール回数
   CFG_HISTORY,     // 起動時復旧
   CFG_FADEOUT,     // フェードアウト時間
+  CFG_FMPCM,       // FM PCM 再生モード
+  CFG_YM2612_PAN,  // YM2612パン
+  CFG_AMPLIFY,     // 出力増幅
   CFG_KEYON,       // キーオン色
   CFG_PAUSE,       // 再生時一時停止
-  CFG_AMPLIFY,     // 出力増幅
-  CFG_YM2612_PAN,  // YM2612パン
   CFG_SNATT,       // SN76489 アッテネータ
   CFG_MODE,        // 動作モード
+  CFG_UNKNOWN,
 } tConfig;
 
 // 設定用構造体
@@ -107,6 +108,8 @@ class NDConfig {
   tLastView loadLastView();
   void remove();
   int get(tConfig item);
+  int indexOf(tConfig item);
+  tConfig configAt(int index);
   String lastFolderName = "";
 
  private:

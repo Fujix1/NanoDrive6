@@ -1396,7 +1396,7 @@ void CFGWindow::show() {
 }
 
 void CFGWindow::close() {
-  const bool modeChanged = (tMode)ndConfig.items[CFG_MODE].index != ndConfig.currentMode;
+  const bool modeChanged = (tMode)ndConfig.get(CFG_MODE) != ndConfig.currentMode;
   if (_isChanged) {
     if (modeChanged) {
       // 動作モード変更時はこの直後に再起動するため、非同期保存キューを待たずに同期保存する。
@@ -1426,16 +1426,17 @@ void CFGWindow::eventHandler(event ev) {
       if (ndConfig.items[currentItemIndex].index > 0) {
         int prevRandom = ndConfig.get(CFG_SHUFFLE);
         ndConfig.items[currentItemIndex].index--;
-        ndConfig.applyItem((tConfig)currentItemIndex);
+        const tConfig changedItem = ndConfig.configAt(currentItemIndex);
+        ndConfig.applyItem(changedItem);
         _isChanged = true;
 
         // シャッフル設定の切り替え時は、シャッフルステートをリセット
-        if (currentItemIndex == CFG_SHUFFLE && prevRandom != ndConfig.get(CFG_SHUFFLE)) {
+        if (changedItem == CFG_SHUFFLE && prevRandom != ndConfig.get(CFG_SHUFFLE)) {
           ndFile.resetRandomSession();
         }
 
         // 言語はすぐ再描画
-        if (currentItemIndex == CFG_LANG) {
+        if (changedItem == CFG_LANG) {
           drawPanelView();
         } else {
           refreshCurrentItem();
@@ -1447,16 +1448,17 @@ void CFGWindow::eventHandler(event ev) {
           ndConfig.items[currentItemIndex].optionValues.size()) {
         int prevRandom = ndConfig.get(CFG_SHUFFLE);
         ndConfig.items[currentItemIndex].index++;
-        ndConfig.applyItem((tConfig)currentItemIndex);
+        const tConfig changedItem = ndConfig.configAt(currentItemIndex);
+        ndConfig.applyItem(changedItem);
         _isChanged = true;
 
         // シャッフル設定の切り替え時は、シャッフルステートをリセット
-        if (currentItemIndex == CFG_SHUFFLE && prevRandom != ndConfig.get(CFG_SHUFFLE)) {
+        if (changedItem == CFG_SHUFFLE && prevRandom != ndConfig.get(CFG_SHUFFLE)) {
           ndFile.resetRandomSession();
         }
 
         // 言語はすぐ再描画
-        if (currentItemIndex == CFG_LANG) {
+        if (changedItem == CFG_LANG) {
           drawPanelView();
         } else {
           refreshCurrentItem();

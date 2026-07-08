@@ -28,6 +28,51 @@ static tNJU72341_GAIN amplifyToInputGain(int amplify) {
   }
 }
 
+static const char* configSlug(tConfig item) {
+  switch (item) {
+    case CFG_LANG:
+      return "lang";
+    case CFG_SHUFFLE:
+      return "shuffle";
+    case CFG_NUM_LOOP:
+      return "loop";
+    case CFG_REPEAT:
+      return "repeat";
+    case CFG_SCROLL:
+      return "scroll";
+    case CFG_HISTORY:
+      return "resume";
+    case CFG_FADEOUT:
+      return "fadeout";
+    case CFG_FMPCM:
+      return "fmpcm";
+    case CFG_YM2612_PAN:
+      return "ym2612pan";
+    case CFG_AMPLIFY:
+      return "amplify";
+    case CFG_KEYON:
+      return "keyon";
+    case CFG_PAUSE:
+      return "pause";
+    case CFG_SNATT:
+      return "snatt";
+    case CFG_MODE:
+      return "mode";
+    default:
+      return "";
+  }
+}
+
+static tConfig configFromSlug(const String& slug) {
+  for (int i = CFG_LANG; i < CFG_UNKNOWN; i++) {
+    const tConfig item = static_cast<tConfig>(i);
+    if (slug == configSlug(item)) {
+      return item;
+    }
+  }
+  return CFG_UNKNOWN;
+}
+
 QueueHandle_t cfgSaveQueue;  // 設定保存用メッセージキュー
 
 static void saveConfigItems() {
@@ -59,6 +104,13 @@ void NDConfig::init() {
                    {"なし", "フォルダ", "全曲"},
                    {"No", "Folder", "All"},
                    {TRANDOM_NO, TRANDOM_FOLDER, TRANDOM_ALL}});
+  items.push_back({"pause",
+                   0,  // 初期値idx
+                   "再生ホールド",
+                   "Play Hold",
+                   {"オフ", "オン", "3秒前"},
+                   {"Off", "On", "3 sec."},
+                   {HOLD_NONE, HOLD_YES, HOLD_3SEC}});
   items.push_back({
       "loop",
       LOOP_1,  // 初期値
@@ -76,13 +128,6 @@ void NDConfig::init() {
                    {"全曲", "フォルダ", "1曲"},
                    {"All", "Folder", "One Song"},
                    {REPEAT_ALL, REPEAT_FOLDER, REPEAT_ONE}});
-  items.push_back({"scroll",
-                   3,  // 初期値
-                   "文字スクロール",
-                   "Text scroll",
-                   {"なし", "1回", "2回", "無限"},
-                   {"None", "1", "2", "Infinite"},
-                   {SCROLL_0, SCROLL_1, SCROLL_2, SCROLL_INFINITE}});
   items.push_back({"resume",
                    2,  // 初期値
                    "起動時",
@@ -112,27 +157,6 @@ void NDConfig::init() {
                    {"ふつう", "反転"},
                    {"Normal", "Invert"},
                    {TPAN_NORMAL, TPAN_INVERT}});
-  items.push_back({"amplify",
-                   1,  // 初期値idx
-                   "出力増幅",
-                   "Output Gain",
-                   {"0dB", "3dB", "6dB", "9dB"},
-                   {"0dB", "3dB", "6dB", "9dB"},
-                   {AMP_0, AMP_3, AMP_6, AMP_9}});
-  items.push_back({"keyon",
-                   0,  // 初期値idx
-                   "キーオン色",
-                   "Keyon Color",
-                   {"赤", "緑", "青"},
-                   {"Red", "Green", "Blue"},
-                   {KEYON_RED, KEYON_GREEN, KEYON_BLUE}});
-  items.push_back({"pause",
-                   0,  // 初期値idx
-                   "再生ホールド",
-                   "Play Hold",
-                   {"オフ", "オン", "3秒前"},
-                   {"Off", "On", "3 sec."},
-                   {HOLD_NONE, HOLD_YES, HOLD_3SEC}});
   items.push_back({"snatt",
                    0,  // 初期値idx
                    "SN音量調整",
@@ -140,6 +164,27 @@ void NDConfig::init() {
                    {"-0dB", "-2dB", "-4dB"},
                    {"-0dB", "-2dB", "-4dB"},
                    {SN_ATT_0, SN_ATT_2, SN_ATT_4}});
+  items.push_back({"amplify",
+                   1,  // 初期値idx
+                   "出力増幅",
+                   "Output Gain",
+                   {"0dB", "3dB", "6dB", "9dB"},
+                   {"0dB", "3dB", "6dB", "9dB"},
+                   {AMP_0, AMP_3, AMP_6, AMP_9}});
+  items.push_back({"scroll",
+                   3,  // 初期値
+                   "文字スクロール",
+                   "Text scroll",
+                   {"なし", "1回", "2回", "無限"},
+                   {"None", "1", "2", "Infinite"},
+                   {SCROLL_0, SCROLL_1, SCROLL_2, SCROLL_INFINITE}});
+  items.push_back({"keyon",
+                   0,  // 初期値idx
+                   "キーオン色",
+                   "Keyon Color",
+                   {"赤", "緑", "青"},
+                   {"Red", "Green", "Blue"},
+                   {KEYON_RED, KEYON_GREEN, KEYON_BLUE}});
   items.push_back(
       {"mode", 0, "動作モード", "Mode", {"プレーヤー", "シリアル"}, {"Player", "Serial"}, {MODE_PLAYER, MODE_SERIAL}});
   preferences.begin("NanoDrive");
@@ -223,11 +268,7 @@ void NDConfig::loadCfg() {
   }
 
   // 現在の動作モード
-  if (items.size() > CFG_MODE) {
-    currentMode = (tMode)items[CFG_MODE].index;
-  } else {
-    currentMode = MODE_PLAYER;
-  }
+  currentMode = (tMode)get(CFG_MODE);
 }
 
 // 最後に開いたフォルダ番号の照合
@@ -259,11 +300,36 @@ tLastView NDConfig::loadLastView() {
 void NDConfig::remove() { preferences.clear(); }
 
 int NDConfig::get(tConfig item) {
-  if (items.size() > item) {
-    return items[item].optionValues[items[item].index];
-  } else {
+  const int itemIndex = indexOf(item);
+  if (itemIndex < 0) {
     return 0;
   }
+
+  const sConfig& config = items[itemIndex];
+  if (config.index >= config.optionValues.size()) {
+    return 0;
+  }
+  return config.optionValues[config.index];
+}
+
+int NDConfig::indexOf(tConfig item) {
+  const char* slug = configSlug(item);
+  if (slug[0] == '\0') {
+    return -1;
+  }
+  for (int i = 0; i < items.size(); i++) {
+    if (items[i].slug == slug) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+tConfig NDConfig::configAt(int index) {
+  if (index < 0 || index >= items.size()) {
+    return CFG_UNKNOWN;
+  }
+  return configFromSlug(items[index].slug);
 }
 
 NDConfig ndConfig = NDConfig();
