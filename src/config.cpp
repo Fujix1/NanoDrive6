@@ -165,7 +165,7 @@ void NDConfig::init() {
                    {"-0dB", "-2dB", "-4dB"},
                    {SN_ATT_0, SN_ATT_2, SN_ATT_4}});
   items.push_back({"amplify",
-                   1,  // 初期値idx
+                   2,  // 初期値idx
                    "出力増幅",
                    "Output Gain",
                    {"0dB", "3dB", "6dB", "9dB"},
