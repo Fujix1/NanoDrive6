@@ -122,6 +122,38 @@ void FMChip::reset(void) {
 }
 
 // SN76489
+static byte applySN76489Attenuation(byte data) {
+  if ((data & 0x80) == 0) {
+    return data;
+  }
+
+  const uint8_t reg = (data >> 4) & 0x07;
+  if ((reg & 0x01) == 0) {
+    return data;
+  }
+
+  uint8_t attenuation = data & 0x0f;
+  switch (ndConfig.get(CFG_SNATT)) {
+    case SN_ATT_2:
+      if (attenuation <= 7) {
+        attenuation++;
+      }
+      break;
+    case SN_ATT_4:
+      if (attenuation <= 4) {
+        attenuation += 2;
+      } else if (attenuation <= 9) {
+        attenuation++;
+      }
+      break;
+    case SN_ATT_0:
+    default:
+      break;
+  }
+
+  return (data & 0xf0) | (attenuation & 0x0f);
+}
+
 void FMChip::write(byte data, byte chipno, si5351Freq_t freq) {
   //
 
@@ -142,6 +174,9 @@ void FMChip::write(byte data, byte chipno, si5351Freq_t freq) {
 }
 
 void FMChip::writeRaw(byte data, byte chipno, si5351Freq_t freq) {
+  const byte visualData = data;
+  data = applySN76489Attenuation(data);
+
   switch (chipno) {
     case 0:
       CS0_LOW;
@@ -177,7 +212,7 @@ void FMChip::writeRaw(byte data, byte chipno, si5351Freq_t freq) {
       break;
   }
 
-  _updateSN76489VisualState(data, chipno, freq);
+  _updateSN76489VisualState(visualData, chipno, freq);
 }
 
 byte lastAddr = 0;

@@ -40,15 +40,24 @@ typedef enum { AMP_0 = 0,
                AMP_3 = 3,
                AMP_6 = 6,
                AMP_9 = 9 } tAmp;
-typedef enum { TRANDOM_NO, TRANDOM_FOLDER, TRANDOM_ALL } tRandom;
+typedef enum { TRANDOM_NO,
+               TRANDOM_FOLDER,
+               TRANDOM_ALL } tRandom;
 typedef enum { MODE_PLAYER,
                MODE_SERIAL } tMode;
 typedef enum { FMPCM_BOTH,
                FMPCM_FM,
                FMPCM_PCM } tFMPCM;
-typedef enum { TPAN_NORMAL, TPAN_INVERT } tCfgPan;
-typedef enum { HOLD_NONE, HOLD_YES, HOLD_3SEC } tPause;  // 再生時一時停止
-typedef enum { LAST_VIEW_PLAYER = 0, LAST_VIEW_VISUAL = 1 } tLastView;  // 最後開いていたウィンドウ
+typedef enum { TPAN_NORMAL,
+               TPAN_INVERT } tCfgPan;
+typedef enum { HOLD_NONE,
+               HOLD_YES,
+               HOLD_3SEC } tPause;  // 再生時一時停止
+typedef enum { SN_ATT_0,
+               SN_ATT_2,
+               SN_ATT_4 } tSNAtt;  // SN76489 アッテネータ
+typedef enum { LAST_VIEW_PLAYER = 0,
+               LAST_VIEW_VISUAL = 1 } tLastView;  // 最後開いていたウィンドウ
 typedef enum {
   KEYON_RED = 0xF800,
   KEYON_GREEN = 0x67e1,
@@ -56,19 +65,20 @@ typedef enum {
 } tKeyon;  // キーオン色
 
 typedef enum {
-  CFG_LANG,      // 言語
-  CFG_SHUFFLE,   // シャッフル再生
-  CFG_NUM_LOOP,  // ループ回数
-  CFG_REPEAT,    // リピート単位
-  CFG_SCROLL,    // テキストスクロール回数
-  CFG_HISTORY,   // 起動時復旧
-  CFG_FADEOUT,   // フェードアウト時間
-  CFG_FMPCM,     // FM PCM 再生モード
-  CFG_YM2612_PAN, // YM2612パン
-  CFG_AMPLIFY,   // 出力増幅
-  CFG_KEYON,     // キーオン色
-  CFG_PAUSE,     // 再生時一時停止
-  CFG_MODE,      // 動作モード
+  CFG_LANG,        // 言語
+  CFG_SHUFFLE,     // シャッフル再生
+  CFG_NUM_LOOP,    // ループ回数
+  CFG_REPEAT,      // リピート単位
+  CFG_FMPCM,       // FM PCM 再生モード
+  CFG_SCROLL,      // テキストスクロール回数
+  CFG_HISTORY,     // 起動時復旧
+  CFG_FADEOUT,     // フェードアウト時間
+  CFG_KEYON,       // キーオン色
+  CFG_PAUSE,       // 再生時一時停止
+  CFG_AMPLIFY,     // 出力増幅
+  CFG_YM2612_PAN,  // YM2612パン
+  CFG_SNATT,       // SN76489 アッテネータ
+  CFG_MODE,        // 動作モード
 } tConfig;
 
 // 設定用構造体

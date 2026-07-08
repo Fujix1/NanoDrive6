@@ -133,6 +133,13 @@ void NDConfig::init() {
                    {"オフ", "オン", "3秒前"},
                    {"Off", "On", "3 sec."},
                    {HOLD_NONE, HOLD_YES, HOLD_3SEC}});
+  items.push_back({"snatt",
+                   0,  // 初期値idx
+                   "SN音量調整",
+                   "SN Volume",
+                   {"-0dB", "-2dB", "-4dB"},
+                   {"-0dB", "-2dB", "-4dB"},
+                   {SN_ATT_0, SN_ATT_2, SN_ATT_4}});
   items.push_back(
       {"mode", 0, "動作モード", "Mode", {"プレーヤー", "シリアル"}, {"Player", "Serial"}, {MODE_PLAYER, MODE_SERIAL}});
   preferences.begin("NanoDrive");
