@@ -15,6 +15,10 @@
 
 namespace {
 constexpr u8_t kVgmCommandBudgetPerLoop = 64;
+
+static bool isYM2203FmRegister(u8_t reg) {
+  return reg == 0x28 || (reg >= 0x30 && reg <= 0x9E) || (reg >= 0xA0 && reg <= 0xB6);
+}
 }
 
 //---------------------------------------------------------------------
@@ -204,6 +208,13 @@ bool VGM::ready() {
         ND::freq[CHIP0_CLOCK] = normalizeFreq(ym2203_clock, CHIP_YM2610);
       } else if (CHIP1 == CHIP_YM2610) {
         ND::freq[CHIP1_CLOCK] = normalizeFreq(ym2203_clock, CHIP_YM2612);
+      }
+    }
+
+    if (CHIP0 == CHIP_YM2612) {
+      // YM2203 FMはモノラルなので、YM2612で代替再生するときはCH1-3をセンター固定にする。
+      for (u8_t ch = 0; ch < 3; ch++) {
+        FM.setYM2612(0, 0xB4 + ch, 0xC0, 0);
       }
     }
   }
@@ -941,7 +952,18 @@ void VGM::vgmProcessMain() {
     case 0x55:  // YM2203_0
       reg = ndFile.get_ui8();
       dat = ndFile.get_ui8();
-      FM.setRegister(reg, dat, 0);
+      if (CHIP0 == CHIP_YM2612) {
+        // YM2203のFM部だけをYM2612 port 0で代替再生する。
+        // YM2203 PSG/タイマ/プリスケーラはND6では扱わない。
+        if (isYM2203FmRegister(reg)) {
+          if (reg >= 0xB4 && reg <= 0xB6) {
+            dat |= 0xC0;
+          }
+          FM.setYM2612(0, reg, dat, 0);
+        }
+      } else {
+        FM.setRegister(reg, dat, 0);
+      }
       break;
 #endif
 
