@@ -158,12 +158,12 @@ void NDConfig::init() {
                    {"Normal", "Invert"},
                    {TPAN_NORMAL, TPAN_INVERT}});
   items.push_back({"snatt",
-                   0,  // 初期値idx
+                   2,  // 初期値idx
                    "SN音量調整",
                    "SN Volume",
-                   {"-0dB", "-2dB", "-4dB"},
-                   {"-0dB", "-2dB", "-4dB"},
-                   {SN_ATT_0, SN_ATT_2, SN_ATT_4}});
+                   {"-4dB", "-2dB", "-0dB"},
+                   {"-4dB", "-2dB", "-0dB"},
+                   {SN_ATT_4, SN_ATT_2, SN_ATT_0}});
   items.push_back({"amplify",
                    2,  // 初期値idx
                    "出力増幅",
@@ -292,8 +292,7 @@ u32_t NDConfig::loadHistory() {
 
 tLastView NDConfig::loadLastView() {
   const u8_t rawView = preferences.getUChar(kLastViewKey, static_cast<u8_t>(LAST_VIEW_PLAYER));
-  _lastView =
-      (rawView == static_cast<u8_t>(LAST_VIEW_VISUAL)) ? LAST_VIEW_VISUAL : LAST_VIEW_PLAYER;
+  _lastView = (rawView == static_cast<u8_t>(LAST_VIEW_VISUAL)) ? LAST_VIEW_VISUAL : LAST_VIEW_PLAYER;
   return _lastView;
 }
 

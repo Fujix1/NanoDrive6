@@ -8,8 +8,10 @@
 #include "disp.h"
 #include "nd.h"
 
+#define VGM_TIME_SCALE 10  // 10倍スケール0.1usで計測
+
 #define XGM1_MAX_PCM_CH 8
-#define XGM1_PCM_DELAY 72  // 71.429 us 14khz
+#define XGM1_PCM_INTERVAL 714  // 71.4 us (14 kHz), in 0.1 us units
 
 // XGM V2 FM
 #define WAIT_SHORT 0x00 ... 0x0e
@@ -58,7 +60,7 @@
 #define PSG_ENV2_DELTA 0xe0 ... 0xef
 #define PSG_ENV3_DELTA 0xf0 ... 0xff
 
-#define XGM2_PCM_DELAY 72  // 13.3khz 75.188us
+#define XGM2_PCM_INTERVAL 752  // 75.2 us (13.3 kHz), in 0.1 us units
 
 // GD3 構造体
 typedef struct {
@@ -119,7 +121,7 @@ class VGM {
     u32_t endBankOffset = 0;
     bool loop = false;
     bool reverse = false;
-    u64_t nextTickUs = 0;
+    u64_t nextTick = 0;
   };
 
   t_gd3 gd3;
@@ -133,7 +135,7 @@ class VGM {
   u32_t _pcmpos = 0;
   std::vector<t_vgmDataBlock> _vgmDataBlocks[0x40];
   t_vgmStreamState _vgmStreams[VGM_STREAM_MAX];
-  s64_t micros64();
+  u64_t _micros10();
   bool _vgmResolveDataBankOffset(u8_t bankID, u32_t bankOffset, u32_t& filePos);
   bool _vgmResolveDataBankRange(u8_t bankID, u32_t bankOffset, u32_t byteLength, u32_t& startPos, u32_t& endPos);
   u32_t _vgmDataBankSize(u8_t bankID);

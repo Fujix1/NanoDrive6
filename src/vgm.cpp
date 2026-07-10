@@ -647,7 +647,7 @@ void VGM::vgmProcess() {
   // ready() 後の初期化や描画にかかった時間を再生時間へ含めない。
   // 実際に再生処理へ入った時点をVGMの時刻原点にする。
   if (!_vgmTimingStarted) {
-    _vgmStart = micros64();
+    _vgmStart = _micros10();
     _vgmWaitUntil = _vgmStart;
     _vgmTimingStarted = true;
   }
@@ -659,7 +659,7 @@ void VGM::vgmProcess() {
   }
 
   // VGMのウェイト中も入力処理へ制御を返す。
-  if (_vgmWaitUntil > micros64()) {
+  if (_vgmWaitUntil > _micros10()) {
     _vgmProcessStreams();
     taskYIELD();
     return;
@@ -682,7 +682,7 @@ void VGM::vgmProcess() {
   }
 
   _vgmRealSamples = _vgmSamples;
-  _vgmWaitUntil = _vgmStart + (_vgmRealSamples * 1000000) / 44100;
+  _vgmWaitUntil = _vgmStart + (_vgmRealSamples * 1000000ULL * VGM_TIME_SCALE) / 44100;
 }
 
 void VGM::_vgmStopStream(u8_t streamID) {
@@ -806,7 +806,7 @@ void VGM::_vgmStartStream(u8_t streamID, u32_t dataStart, u8_t lengthMode, u32_t
   stream.bankOffset = stream.reverse ? stream.endBankOffset - stream.stepSize : stream.startBankOffset;
   stream.pos = stream.reverse ? endPos - stream.stepSize : startPos;
   stream.playing = true;
-  stream.nextTickUs = micros64();
+  stream.nextTick = _micros10();
 }
 
 void VGM::_vgmProcessStreams() {
@@ -814,7 +814,7 @@ void VGM::_vgmProcessStreams() {
     return;
   }
 
-  u64_t now = micros64();
+  u64_t now = _micros10();
 
   for (int i = 0; i < VGM_STREAM_MAX; i++) {
     t_vgmStreamState& stream = _vgmStreams[i];
@@ -827,13 +827,13 @@ void VGM::_vgmProcessStreams() {
       continue;
     }
 
-    u64_t intervalUs = 1000000ULL / stream.frequency;
-    if (intervalUs == 0) {
-      intervalUs = 1;
+    u64_t interval = (1000000ULL * VGM_TIME_SCALE + stream.frequency / 2) / stream.frequency;
+    if (interval == 0) {
+      interval = 1;
     }
 
     int guard = 0;
-    while (stream.playing && stream.nextTickUs <= now && guard < 512) {
+    while (stream.playing && stream.nextTick <= now && guard < 512) {
       if (!stream.reverse && stream.bankOffset >= stream.endBankOffset) {
         if (!stream.loop) {
           stream.playing = false;
@@ -865,12 +865,12 @@ void VGM::_vgmProcessStreams() {
       } else {
         stream.bankOffset += stream.stepSize;
       }
-      stream.nextTickUs += intervalUs;
+      stream.nextTick += interval;
       guard++;
     }
 
-    if (stream.nextTickUs + intervalUs < now) {
-      stream.nextTickUs = now + intervalUs;
+    if (stream.nextTick + interval < now) {
+      stream.nextTick = now + interval;
     }
   }
 }
@@ -1157,7 +1157,7 @@ void VGM::vgmProcessMain() {
             stream.bankOffset = stream.reverse ? stream.endBankOffset - stream.stepSize : stream.startBankOffset;
             stream.playing = true;
             stream.pos = stream.reverse ? blockEnd - stream.stepSize : blockStart;
-            stream.nextTickUs = micros64();
+            stream.nextTick = _micros10();
           }
         }
       }
@@ -1366,7 +1366,7 @@ bool VGM::XGMReady() {
 void VGM::xgmProcess() {
   // XGMReady() 後の初期化時間を再生時間へ含めない。
   if (!_xgmTimingStarted) {
-    _xgmStartTick = micros64();
+    _xgmStartTick = _micros10();
     _xgmWaitUntil = _xgmStartTick;
     _xgm1NextPcmTick = _xgmStartTick;
     _xgmTimingStarted = true;
@@ -1380,18 +1380,18 @@ void VGM::xgmProcess() {
 
   auto processDuePcm = [&](u64_t now) {
     int pcmGuard = 0;
-    while (_xgm1NextPcmTick <= now && _xgm1NextPcmTick + XGM1_PCM_DELAY < _xgmWaitUntil &&
+    while (_xgm1NextPcmTick <= now && _xgm1NextPcmTick + XGM1_PCM_INTERVAL < _xgmWaitUntil &&
            pcmGuard < 256) {
       _xgm1ProcessPCM();
-      _xgm1NextPcmTick += XGM1_PCM_DELAY;
+      _xgm1NextPcmTick += XGM1_PCM_INTERVAL;
       pcmGuard++;
     }
-    if (_xgm1NextPcmTick + XGM1_PCM_DELAY < now) {
-      _xgm1NextPcmTick = now + XGM1_PCM_DELAY;
+    if (_xgm1NextPcmTick + XGM1_PCM_INTERVAL < now) {
+      _xgm1NextPcmTick = now + XGM1_PCM_INTERVAL;
     }
   };
 
-  u64_t now = micros64();
+  u64_t now = _micros10();
   if (_xgmWaitUntil > now) {
     processDuePcm(now);
     taskYIELD();
@@ -1406,11 +1406,11 @@ void VGM::xgmProcess() {
   }
 
   _xgmFrame = _xgmYMSNFrame;
-  _xgmWaitUntil = _xgmStartTick + _xgmYMSNFrame * 16666;  // 60Hz
+  _xgmWaitUntil = _xgmStartTick + ((u64_t)_xgmYMSNFrame * 1000000 * VGM_TIME_SCALE) / 60;
   _vgmSamples = _xgmYMSNFrame * 735;                      // 44100 / 60
 
   // PCM Stream mixing
-  processDuePcm(micros64());
+  processDuePcm(_micros10());
 }
 
 void VGM::_xgm1ProcessPCM() {
@@ -1514,8 +1514,9 @@ bool VGM::_xgm1ProcessYMSN() {
 void VGM::xgm2Process() {
   // XGMReady() 後の初期化時間を再生時間へ含めない。
   if (!_xgmTimingStarted) {
-    _xgmStartTick = micros64();
+    _xgmStartTick = _micros10();
     _xgmWaitUntil = _xgmStartTick;
+    _xgm1NextPcmTick = _xgmStartTick;
     _xgmTimingStarted = true;
   }
 
@@ -1553,12 +1554,23 @@ void VGM::xgm2Process() {
   } else {
     _xgmFrame = (_xgmPSGFrame < _xgmYMFrame) ? _xgmPSGFrame : _xgmYMFrame;
   }
-  _xgmWaitUntil = _xgmStartTick + _xgmFrame * 16666;  // 60Hz
+  _xgmWaitUntil = _xgmStartTick + ((u64_t)_xgmFrame * 1000000 * VGM_TIME_SCALE) / 60;
   _vgmSamples = _xgmFrame * 735;                      // 44100 / 60
 
-  while (_xgmWaitUntil - XGM2_PCM_DELAY >= micros64()) {
+  u64_t now = _micros10();
+  if (_xgm1NextPcmTick + XGM2_PCM_INTERVAL < now) {
+    _xgm1NextPcmTick = now;
+  }
+
+  while (_xgm1NextPcmTick + XGM2_PCM_INTERVAL <= _xgmWaitUntil) {
+    now = _micros10();
+    if (_xgm1NextPcmTick > now) {
+      ets_delay_us((_xgm1NextPcmTick - now) / VGM_TIME_SCALE);
+      while (_micros10() < _xgm1NextPcmTick) {
+      }
+    }
     _xgm2ProcessPCM();
-    ets_delay_us(XGM2_PCM_DELAY);
+    _xgm1NextPcmTick += XGM2_PCM_INTERVAL;
   }
 }
 
@@ -2144,9 +2156,8 @@ u64_t VGM::getCurrentTime() {
   return _vgmSamples / 44100;
 }
 
-s64_t VGM::micros64() {
-  //
-  return esp_timer_get_time();
+u64_t VGM::_micros10() {
+  return (u64_t)esp_timer_get_time() * VGM_TIME_SCALE;
 }
 
 VGM vgm = VGM();
