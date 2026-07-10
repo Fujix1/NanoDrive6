@@ -19,7 +19,7 @@ constexpr u8_t kVgmCommandBudgetPerLoop = 64;
 static bool isYM2203FmRegister(u8_t reg) {
   return reg == 0x28 || (reg >= 0x30 && reg <= 0x9E) || (reg >= 0xA0 && reg <= 0xB6);
 }
-}
+}  // namespace
 
 //---------------------------------------------------------------------
 static std::string wstringToUTF8(const std::wstring& src) {
@@ -75,6 +75,7 @@ bool VGM::ready() {
   for (int i = 0; i < VGM_STREAM_MAX; i++) {
     _vgmStreams[i] = t_vgmStreamState();
   }
+  _vgmHasPlayingStream = false;
 
   // ヘッダキャッシュ版
   if (!ndFile.getHeaderCache(ndFile.getCurrentFilePath())) {
@@ -288,9 +289,9 @@ bool VGM::ready() {
   while (ND::chipNames.size() < 2) ND::chipNames.push_back("");
 
   u32_t n = 1 + ndFile.getCurrentFileIndex();  // フォルダ内曲番
-  playerWindow.updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
-                           gd3.date, ND::chipNames[0], ND::chipNames[1], FORMAT_LABEL[(int)ND::fileFormat], 0, n,
-                           ndFile.getCurrentDirFileCount()});
+  playerWindow.updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn,
+                           gd3.authorJp, gd3.date, ND::chipNames[0], ND::chipNames[1],
+                           FORMAT_LABEL[(int)ND::fileFormat], 0, n, ndFile.getCurrentDirFileCount()});
 
   Serial.printf("%s\n", gd3.trackJp.c_str());
 
@@ -660,7 +661,9 @@ void VGM::vgmProcess() {
 
   // VGMのウェイト中も入力処理へ制御を返す。
   if (_vgmWaitUntil > _micros10()) {
-    _vgmProcessStreams();
+    if (_vgmHasPlayingStream) {
+      _vgmProcessStreams();
+    }
     taskYIELD();
     return;
   }
@@ -690,6 +693,17 @@ void VGM::_vgmStopStream(u8_t streamID) {
     return;
   }
   _vgmStreams[streamID].playing = false;
+  _vgmRefreshPlayingStreamState();
+}
+
+void VGM::_vgmRefreshPlayingStreamState() {
+  _vgmHasPlayingStream = false;
+  for (int i = 0; i < VGM_STREAM_MAX; i++) {
+    if (_vgmStreams[i].playing) {
+      _vgmHasPlayingStream = true;
+      return;
+    }
+  }
 }
 
 u32_t VGM::_vgmDataBankSize(u8_t bankID) {
@@ -769,6 +783,7 @@ void VGM::_vgmStartStream(u8_t streamID, u32_t dataStart, u8_t lengthMode, u32_t
       stream.endBankOffset = dataStart;
     }
     stream.playing = false;
+    _vgmRefreshPlayingStreamState();
     return;
   }
 
@@ -801,24 +816,23 @@ void VGM::_vgmStartStream(u8_t streamID, u32_t dataStart, u8_t lengthMode, u32_t
   stream.reverse = (lengthMode & 0x10) != 0;
   if (byteLength < stream.stepSize) {
     stream.playing = false;
+    _vgmRefreshPlayingStreamState();
     return;
   }
   stream.bankOffset = stream.reverse ? stream.endBankOffset - stream.stepSize : stream.startBankOffset;
   stream.pos = stream.reverse ? endPos - stream.stepSize : startPos;
   stream.playing = true;
+  _vgmHasPlayingStream = true;
   stream.nextTick = _micros10();
 }
 
 void VGM::_vgmProcessStreams() {
-  if (ndConfig.get(CFG_FMPCM) == FMPCM_FM) {
-    return;
-  }
-
   u64_t now = _micros10();
+  bool streamStopped = false;
 
   for (int i = 0; i < VGM_STREAM_MAX; i++) {
     t_vgmStreamState& stream = _vgmStreams[i];
-    if (!stream.playing || stream.frequency == 0 || stream.stepSize == 0 ||
+    if (!stream.playing || stream.intervalTicks == 0 || stream.stepSize == 0 ||
         stream.startBankOffset >= stream.endBankOffset) {
       continue;
     }
@@ -827,22 +841,19 @@ void VGM::_vgmProcessStreams() {
       continue;
     }
 
-    u64_t interval = (1000000ULL * VGM_TIME_SCALE + stream.frequency / 2) / stream.frequency;
-    if (interval == 0) {
-      interval = 1;
-    }
-
     int guard = 0;
     while (stream.playing && stream.nextTick <= now && guard < 512) {
       if (!stream.reverse && stream.bankOffset >= stream.endBankOffset) {
         if (!stream.loop) {
           stream.playing = false;
+          streamStopped = true;
           break;
         }
         stream.bankOffset = stream.startBankOffset;
       } else if (stream.reverse && (stream.bankOffset == 0xFFFFFFFFUL || stream.bankOffset < stream.startBankOffset)) {
         if (!stream.loop) {
           stream.playing = false;
+          streamStopped = true;
           break;
         }
         stream.bankOffset = stream.endBankOffset - stream.stepSize;
@@ -851,6 +862,7 @@ void VGM::_vgmProcessStreams() {
       u32_t filePos;
       if (!_vgmResolveDataBankOffset(stream.dataBankId, stream.bankOffset, filePos)) {
         stream.playing = false;
+        streamStopped = true;
         break;
       }
 
@@ -865,13 +877,17 @@ void VGM::_vgmProcessStreams() {
       } else {
         stream.bankOffset += stream.stepSize;
       }
-      stream.nextTick += interval;
+      stream.nextTick += stream.intervalTicks;
       guard++;
     }
 
-    if (stream.nextTick + interval < now) {
-      stream.nextTick = now + interval;
+    if (stream.nextTick + stream.intervalTicks < now) {
+      stream.nextTick = now + stream.intervalTicks;
     }
+  }
+
+  if (streamStopped) {
+    _vgmRefreshPlayingStreamState();
   }
 }
 
@@ -942,7 +958,7 @@ void VGM::vgmProcessMain() {
     case 0xa4:
       reg = ndFile.get_ui8();
       dat = ndFile.get_ui8();
-      if (reg != 0x10 || reg != 0x11) {  // タイマー設定は無視
+      if (reg != 0x10 && reg != 0x11) {  // タイマー設定は無視
         FM.setRegisterOPM(reg, dat, 0);
       }
       break;
@@ -1049,9 +1065,7 @@ void VGM::vgmProcessMain() {
       break;
 
     case 0x80 ... 0x8f:
-      if (ndConfig.get(CFG_FMPCM) != FMPCM_FM) {
-        FM.setYM2612DAC(ndFile.data[_pcmpos++], 0);
-      }
+      FM.setYM2612DAC(ndFile.data[_pcmpos++], 0);
 
       _vgmSamples += (command & 15);
       break;
@@ -1070,8 +1084,6 @@ void VGM::vgmProcessMain() {
         _vgmStreams[streamID].command = commandReg;
       }
 
-      Serial.printf("Setup Stream Control 0x90: stream %d chip 0x%02x port 0x%02x cmd 0x%02x\n", streamID, chipType,
-                    port, commandReg);
       break;
     }
     case 0x91: {
@@ -1087,8 +1099,6 @@ void VGM::vgmProcessMain() {
         _vgmStreams[streamID].stepBase = stepBase;
       }
 
-      Serial.printf("Set Stream Data 0x91: stream %d bank %d step %d base %d\n", streamID, dataBankID, stepSize,
-                    stepBase);
       break;
     }
     case 0x92: {
@@ -1097,10 +1107,18 @@ void VGM::vgmProcessMain() {
       u32_t frequency = ndFile.get_ui32();
 
       if (streamID < VGM_STREAM_MAX) {
-        _vgmStreams[streamID].frequency = frequency;
+        t_vgmStreamState& stream = _vgmStreams[streamID];
+        stream.frequency = frequency;
+        if (frequency == 0) {
+          stream.intervalTicks = 0;
+        } else {
+          stream.intervalTicks = (1000000ULL * VGM_TIME_SCALE + frequency / 2) / frequency;
+          if (stream.intervalTicks == 0) {
+            stream.intervalTicks = 1;
+          }
+        }
       }
 
-      Serial.printf("Set Stream Frequency 0x92: id %d, 0x%x\n", streamID, frequency);
       break;
     }
     case 0x93: {
@@ -1110,8 +1128,6 @@ void VGM::vgmProcessMain() {
       u8_t lengthMode = ndFile.get_ui8();
       u32_t dataLength = ndFile.get_ui32();
       _vgmStartStream(streamID, dataStart, lengthMode, dataLength);
-      Serial.printf("Start Stream 0x93: stream %d start 0x%x mode 0x%02x len 0x%x\n", streamID, dataStart, lengthMode,
-                    dataLength);
       break;
     }
     case 0x94: {
@@ -1124,7 +1140,6 @@ void VGM::vgmProcessMain() {
       } else {
         _vgmStopStream(streamID);
       }
-      Serial.printf("Stop Stream 0x94: stream ID %d\n", streamID);
       break;
     }
     case 0x95: {
@@ -1151,17 +1166,17 @@ void VGM::vgmProcessMain() {
             stream.loop = (flags & 0x01) != 0;
             stream.reverse = (flags & 0x10) != 0;
             if (block.size < stream.stepSize) {
-              stream.playing = false;
+              _vgmStopStream(streamID);
               break;
             }
             stream.bankOffset = stream.reverse ? stream.endBankOffset - stream.stepSize : stream.startBankOffset;
             stream.playing = true;
             stream.pos = stream.reverse ? blockEnd - stream.stepSize : blockStart;
             stream.nextTick = _micros10();
+            _vgmHasPlayingStream = true;
           }
         }
       }
-      Serial.printf("Start Stream Fast 0x95: stream ID %d, blockID %d, flags 0x%x\n", streamID, blockID, flags);
       break;
     }
     case 0xe0:
@@ -1353,9 +1368,9 @@ bool VGM::XGMReady() {
 
   u32_t n = 1 + ndFile.getCurrentFileIndex();  // フォルダ内曲番
 
-  playerWindow.updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn, gd3.authorJp,
-                           gd3.date, ND::chipNames[0], ND::chipNames[1], FORMAT_LABEL[(int)ND::fileFormat], 0, n,
-                           ndFile.getCurrentDirFileCount()});
+  playerWindow.updateDisp({gd3.trackEn, gd3.trackJp, gd3.gameEn, gd3.gameJp, gd3.systemEn, gd3.systemJp, gd3.authorEn,
+                           gd3.authorJp, gd3.date, ND::chipNames[0], ND::chipNames[1],
+                           FORMAT_LABEL[(int)ND::fileFormat], 0, n, ndFile.getCurrentDirFileCount()});
 
   ND::canPlay = true;
   return ND::canPlay;
@@ -1380,8 +1395,7 @@ void VGM::xgmProcess() {
 
   auto processDuePcm = [&](u64_t now) {
     int pcmGuard = 0;
-    while (_xgm1NextPcmTick <= now && _xgm1NextPcmTick + XGM1_PCM_INTERVAL < _xgmWaitUntil &&
-           pcmGuard < 256) {
+    while (_xgm1NextPcmTick <= now && _xgm1NextPcmTick + XGM1_PCM_INTERVAL < _xgmWaitUntil && pcmGuard < 256) {
       _xgm1ProcessPCM();
       _xgm1NextPcmTick += XGM1_PCM_INTERVAL;
       pcmGuard++;
@@ -1407,7 +1421,7 @@ void VGM::xgmProcess() {
 
   _xgmFrame = _xgmYMSNFrame;
   _xgmWaitUntil = _xgmStartTick + ((u64_t)_xgmYMSNFrame * 1000000 * VGM_TIME_SCALE) / 60;
-  _vgmSamples = _xgmYMSNFrame * 735;                      // 44100 / 60
+  _vgmSamples = _xgmYMSNFrame * 735;  // 44100 / 60
 
   // PCM Stream mixing
   processDuePcm(_micros10());
@@ -1431,9 +1445,7 @@ void VGM::_xgm1ProcessPCM() {
     } else if (samp < INT8_MIN)
       samp = INT8_MIN;
     samp += 128;
-    if (ndConfig.get(CFG_FMPCM) != FMPCM_FM) {
-      FM.setYM2612DAC(samp, 0);
-    }
+    FM.setYM2612DAC(samp, 0);
   }
 }
 
@@ -1555,7 +1567,7 @@ void VGM::xgm2Process() {
     _xgmFrame = (_xgmPSGFrame < _xgmYMFrame) ? _xgmPSGFrame : _xgmYMFrame;
   }
   _xgmWaitUntil = _xgmStartTick + ((u64_t)_xgmFrame * 1000000 * VGM_TIME_SCALE) / 60;
-  _vgmSamples = _xgmFrame * 735;                      // 44100 / 60
+  _vgmSamples = _xgmFrame * 735;  // 44100 / 60
 
   u64_t now = _micros10();
   if (_xgm1NextPcmTick + XGM2_PCM_INTERVAL < now) {
@@ -1599,9 +1611,7 @@ void VGM::_xgm2ProcessPCM() {
     } else if (samp < INT8_MIN)
       samp = INT8_MIN;
     samp += 128;
-    if (ndConfig.get(CFG_FMPCM) != FMPCM_FM) {
-      FM.setYM2612DAC(samp, 0);
-    }
+    FM.setYM2612DAC(samp, 0);
   }
 }
 
@@ -2156,8 +2166,6 @@ u64_t VGM::getCurrentTime() {
   return _vgmSamples / 44100;
 }
 
-u64_t VGM::_micros10() {
-  return (u64_t)esp_timer_get_time() * VGM_TIME_SCALE;
-}
+u64_t VGM::_micros10() { return (u64_t)esp_timer_get_time() * VGM_TIME_SCALE; }
 
 VGM vgm = VGM();
