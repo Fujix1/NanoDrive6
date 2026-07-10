@@ -92,7 +92,7 @@ void setup() {
   lcd.setFont(&fonts::Font2);
   lcd.printf("NANO DRIVE %s\n", ND::versionLabel());
   lcd.println("2024-2026 fujix@e2j.net");
-  lcd.printf("Firmware ver 3.0 alpha 5\n\n");
+  lcd.printf("Firmware ver 3.0 alpha 6\n\n");
 
   // PSRAM 初期化確認
   if (psramInit()) {
@@ -188,8 +188,8 @@ void setup() {
     }
 
     BaseType_t playbackTaskCreated =
-        xTaskCreatePinnedToCore(playbackTask, "playback", PLAYBACK_TASK_STACK, nullptr,
-                                PLAYBACK_TASK_PRIORITY, &hPlaybackTask, PLAYBACK_TASK_CORE);
+        xTaskCreatePinnedToCore(playbackTask, "playback", PLAYBACK_TASK_STACK, nullptr, PLAYBACK_TASK_PRIORITY,
+                                &hPlaybackTask, PLAYBACK_TASK_CORE);
     if (playbackTaskCreated != pdPASS || hPlaybackTask == nullptr) {
       Serial.println("ERROR: playback task init failed.");
     }
