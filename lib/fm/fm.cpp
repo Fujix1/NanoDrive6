@@ -481,6 +481,10 @@ void FMChip::_updateYM2612PanState(byte bank, byte addr, byte data) {
 
   if (xSemaphoreTake(KeyBoard.keyinfoMutex, 0) == pdTRUE) {
     KeyBoard.trackPan[ch] = pan;
+    if (ch == 5) {
+      // YM2612 DACはChannel 6のパン設定を通るため、Track 7のPCM表示にも反映する。
+      KeyBoard.trackPan[6] = pan;
+    }
     xSemaphoreGive(KeyBoard.keyinfoMutex);
   }
 }

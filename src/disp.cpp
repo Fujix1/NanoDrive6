@@ -1874,7 +1874,7 @@ void VisualWindow::update() {
     if (i >= kPanTrackCount || i == kUnusedTrack) {
       continue;
     }
-    const bool monoPanTrack = i == kPcmTrack || i >= kSn0ToneTrackFirst;
+    const bool monoPanTrack = i >= kSn0ToneTrackFirst;
     if (monoPanTrack) {
       if (levelSnapshot[i] > 0 && lastTrackPan[i] != PAN_CENTER) {
         drawPan(i, PAN_CENTER);

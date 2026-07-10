@@ -939,7 +939,8 @@ void VGM::vgmProcessMain() {
     case 0x52:  // YM2612 port 0, write value dd to register aa
       reg = ndFile.get_ui8();
       dat = ndFile.get_ui8();
-      if ((reg >= 0x30 && reg <= 0xB6) || reg == 0x22 || reg == 0x27 || reg == 0x28 || reg == 0x2A || reg == 0x2B) {
+      if ((reg >= 0x30 && reg <= 0xB6) || reg == 0x22 || reg == 0x27 || reg == 0x28 || reg == 0x2A ||
+          reg == 0x2B || reg == 0x2C) {  // 未ドキュメント命令
         FM.setYM2612(0, reg, dat, 0);
       }
       break;
