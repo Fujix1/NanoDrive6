@@ -11,6 +11,8 @@
 
 #include "SI5351_types.hpp"
 
+enum class VolumeChip;
+
 // チップ定義
 typedef enum {
   CHIP_NONE,
@@ -55,6 +57,7 @@ typedef enum { nd_v60, nd_v61 } t_ndVersion;
 class ND {
  public:
   static t_ndVersion version;     // 本体バージョン
+  static VolumeChip volumeChip;   // ボリュームチップ種別
   static FileFormat fileFormat;  //
   static bool canPlay;           // ファイル処理可能
   static bool isPaused;          // 再生ホールド中

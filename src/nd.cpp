@@ -1,5 +1,7 @@
 #include "nd.h"
 
+#include "NJU72341.h"
+
 const std::array<String, 15> CHIP_LABEL = {"",       "SN76489", "SN76489", "YM2413", "YM2612",
                                            "YM2151", "YM2203",  "YM2203",  "YM2608", "YM2610",
                                            "YM3526", "YM3812",  "AY8910",  "YMF262", "M6258"};
@@ -8,6 +10,7 @@ const std::array<String, 7> FORMAT_LABEL = {"--", "VGM", "VGZ", "MDX", "XGM1", "
 
 // ND ステートの初期化
 t_ndVersion ND::version = nd_v60;
+VolumeChip ND::volumeChip = VolumeChip::None;
 FileFormat ND::fileFormat = FileFormat::Unknown;
 bool ND::canPlay = false;
 bool ND::isPaused = false;

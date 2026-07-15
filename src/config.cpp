@@ -197,8 +197,7 @@ void NDConfig::init() {
 void NDConfig::applyCfg() {
   nju72341.setFadeoutDuration(get(CFG_FADEOUT));
   const tNJU72341_GAIN inputGain = amplifyToInputGain(get(CFG_AMPLIFY));
-  nju72341.setInputGain(1, inputGain);
-  nju72341.setInputGain(2, inputGain);
+  nju72341.setMainInputGain(inputGain);
   // Play Hold設定だけは、現在ホールド中の再生にも即時反映する。
   syncPlayHoldConfig();
 }
@@ -210,8 +209,7 @@ void NDConfig::applyItem(tConfig item) {
       break;
     case CFG_AMPLIFY: {
       const tNJU72341_GAIN inputGain = amplifyToInputGain(get(CFG_AMPLIFY));
-      nju72341.setInputGain(1, inputGain);
-      nju72341.setInputGain(2, inputGain);
+      nju72341.setMainInputGain(inputGain);
       break;
     }
     case CFG_PAUSE:

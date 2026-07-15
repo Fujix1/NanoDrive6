@@ -7,8 +7,14 @@
 
 #include <Arduino.h>
 
-#define NJU72341_ADDR 0x44  // I2C address
-#define NJU72342_ADDR 0x40  // I2C address
+#define NJU72341_ADDR 0x44  // 7-bit I2C address (datasheet: 0x88)
+#define NJU72342_ADDR 0x40  // 7-bit I2C address (datasheet: 0x80)
+
+enum class VolumeChip {
+  None,
+  NJU72341,
+  NJU72342,
+};
 
 typedef enum { GAIN0 = 0b00, GAIN3 = 0b01, GAIN6 = 0b10, GAIN9 = 0b11 } tNJU72341_GAIN;
 
@@ -21,9 +27,10 @@ typedef enum {
 class NJU72341 {
  public:
   tFadeOutStatus fadeOutStatus = FADEOUT_BEFORE;
-  void init(u8_t SDA, u8_t SCL, u8_t MUTE, uint16_t fadeOutDuration, bool NJU72342);
+  void init(u8_t SDA, u8_t SCL, u8_t MUTE, uint16_t fadeOutDuration, VolumeChip chip);
   void reset(int8_t att);
   void setInputGain(u8_t ch, tNJU72341_GAIN newInputGain);
+  void setMainInputGain(tNJU72341_GAIN newInputGain);
   void setVolume_1B_2B(uint8_t newGain);
   void setVolume_3B_4B(uint8_t newGain);
   void setVolumeAll(uint8_t newGain);
@@ -44,6 +51,7 @@ class NJU72341 {
   uint16_t _fadeOutDuration;
   byte _slaveAddress;
   bool _isNJU72342;
+  bool _isInitialized = false;
 };
 
 extern NJU72341 nju72341;

@@ -29,10 +29,14 @@ static void fadeOutTimerHandler(void* param) {
   }
 }
 
-void NJU72341::init(u8_t SDA, u8_t SCL, u8_t MUTE, uint16_t fadeOutDuration, bool NJU72342) {
+void NJU72341::init(u8_t SDA, u8_t SCL, u8_t MUTE, uint16_t fadeOutDuration, VolumeChip chip) {
+  if (chip == VolumeChip::None) {
+    return;
+  }
+
   Wire.begin(SDA, SCL, 600000);
 
-  if (NJU72342) {
+  if (chip == VolumeChip::NJU72342) {
     _slaveAddress = NJU72342_ADDR;
     _isNJU72342 = true;
   } else {
@@ -42,13 +46,13 @@ void NJU72341::init(u8_t SDA, u8_t SCL, u8_t MUTE, uint16_t fadeOutDuration, boo
   _attenuation = 0;
   _currentGain = 255;
   fadeOutStatus = FADEOUT_BEFORE;
+  _isInitialized = true;
 
   _isFadeoutEnabled = (fadeOutDuration != FO_0);
   pinMode(MUTE, OUTPUT);
   mute();
 
-  setInputGain(1, GAIN9);
-  setInputGain(2, GAIN9);
+  setMainInputGain(GAIN9);
 
   // タイマー生成
   if (fadeOutDuration == FO_0) {
@@ -61,6 +65,8 @@ void NJU72341::init(u8_t SDA, u8_t SCL, u8_t MUTE, uint16_t fadeOutDuration, boo
 }
 
 void NJU72341::setFadeoutDuration(uint16_t fadeOutDuration) {
+  if (!_isInitialized) return;
+
   if (fadeOutDuration == FO_0) {
     _isFadeoutEnabled = false;
   } else {
@@ -73,6 +79,8 @@ void NJU72341::setFadeoutDuration(uint16_t fadeOutDuration) {
 }
 
 void NJU72341::startFadeout() {
+  if (!_isInitialized) return;
+
   // すでに処理中のときはなにもしない。フェード時間よりループが短い場合
   if (fadeOutStatus == FADEOUT_PROCESSING) {
     return;
@@ -90,6 +98,8 @@ void NJU72341::startFadeout() {
 
 // att 減衰量dB: -1 = 変更しない
 void NJU72341::reset(int8_t att) {
+  if (!_isInitialized) return;
+
   if (att >= 0) {
     _attenuation = att;
   }
@@ -98,13 +108,15 @@ void NJU72341::reset(int8_t att) {
 }
 
 void NJU72341::resetFadeout() {
+  if (!_isInitialized) return;
+
   xTimerStop(hFadeOutTimer, 0);
   fadeOutStatus = FADEOUT_BEFORE;
   _fadeOutStep = 0;
 }
 
 void NJU72341::setInputGain(u8_t ch, tNJU72341_GAIN newInputGain) {
-  if (ch < 1 || ch > 4) return;
+  if (!_isInitialized || ch < 1 || ch > 4) return;
 
   const u8_t shift = (ch - 1) * 2;
   _inputGain &= ~(0b11 << shift);                  // 指定chの2bitをクリア
@@ -116,22 +128,28 @@ void NJU72341::setInputGain(u8_t ch, tNJU72341_GAIN newInputGain) {
   Wire.endTransmission();
 }
 
+void NJU72341::setMainInputGain(tNJU72341_GAIN newInputGain) {
+  const u8_t firstChannel = _isNJU72342 ? 3 : 1;
+  setInputGain(firstChannel, newInputGain);
+  setInputGain(firstChannel + 1, newInputGain);
+}
+
 // 全チャンネルの音量設定
 // 0:最大, 96: ミュート
 void NJU72341::setVolumeAll(uint8_t newGain) {
+  if (!_isInitialized) return;
+
   uint8_t bit = 119 - newGain - _attenuation;
   Wire.beginTransmission(_slaveAddress);
-  Wire.write(0x01);
+  Wire.write(_isNJU72342 ? 0x03 : 0x01);
   Wire.write(bit);
   Wire.write(bit);
-  if (_isNJU72342) {
-    Wire.write(bit);
-    Wire.write(bit);
-  }
   Wire.endTransmission();
 }
 
 void NJU72341::setVolume_1B_2B(uint8_t newGain) {
+  if (!_isInitialized) return;
+
   if (_currentGain == newGain) {
     return;  // 変更なしのとき
   }
@@ -146,6 +164,8 @@ void NJU72341::setVolume_1B_2B(uint8_t newGain) {
 }
 
 void NJU72341::setVolume_3B_4B(uint8_t newGain) {
+  if (!_isInitialized) return;
+
   uint8_t bit = 119 - newGain;
   Wire.beginTransmission(_slaveAddress);
   Wire.write(0x03);
@@ -155,18 +175,24 @@ void NJU72341::setVolume_3B_4B(uint8_t newGain) {
 }
 
 void NJU72341::mute() {
+  if (!_isInitialized) return;
+
   _isMuted = true;
   // digitalWrite(NJU72341_MUTE_PIN, HIGH);
   setVolumeAll(96);
 }
 
 void NJU72341::unmute() {
+  if (!_isInitialized) return;
+
   setVolumeAll(0);
   // digitalWrite(NJU72341_MUTE_PIN, LOW);
   _isMuted = false;
 }
 
 void NJU72341::setAVolume(uint8_t step) {
+  if (!_isInitialized) return;
+
   if (step > FADEOUT_STEPS - 1) {
     step = FADEOUT_STEPS - 1;
   }

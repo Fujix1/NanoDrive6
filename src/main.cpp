@@ -56,6 +56,21 @@
 static TaskHandle_t hPlaybackTask = nullptr;
 static void playbackTask(void* param);
 
+static bool isI2cDevicePresent(uint8_t address) {
+  Wire.beginTransmission(address);
+  return Wire.endTransmission() == 0;
+}
+
+static VolumeChip detectVolumeChip() {
+  if (isI2cDevicePresent(NJU72341_ADDR)) {
+    return VolumeChip::NJU72341;
+  }
+  if (isI2cDevicePresent(NJU72342_ADDR)) {
+    return VolumeChip::NJU72342;
+  }
+  return VolumeChip::None;
+}
+
 void setup() {
   disableCore0WDT();  // ウォッチドッグ0無効化
 
@@ -109,7 +124,22 @@ void setup() {
 
   // I2C機器初期化
   // NJU72341/NJU72342 初期化
-  nju72341.init(I2C_SDA, I2C_SCL, NJU72341_MUTE_PIN, ndConfig.get(CFG_FADEOUT), false);
+  ND::volumeChip = detectVolumeChip();
+  switch (ND::volumeChip) {
+    case VolumeChip::NJU72341:
+      lcd.println("NJU72341 detected.");
+      Serial.println("NJU72341 detected.");
+      break;
+    case VolumeChip::NJU72342:
+      lcd.println("NJU72342 detected.");
+      Serial.println("NJU72342 detected.");
+      break;
+    default:
+      lcd.println("Volume chip not detected.");
+      Serial.println("Volume chip not detected.");
+      break;
+  }
+  nju72341.init(I2C_SDA, I2C_SCL, NJU72341_MUTE_PIN, ndConfig.get(CFG_FADEOUT), ND::volumeChip);
   ndConfig.applyCfg();
 
   // SI5351 初期化
