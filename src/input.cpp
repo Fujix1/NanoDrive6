@@ -457,7 +457,7 @@ void Input::inputHandler() {
         if (releasePlayHold()) {
           break;
         }
-        sendEvent(event::Close);
+        sendEvent(ND::version == nd_v61 ? event::Option : event::Close);
         break;
       default:
         break;

@@ -1414,7 +1414,8 @@ void CFGWindow::close(bool restoreLastView) {
     ESP.restart();
     return;
   }
-  if (restoreLastView && disp.lastView == ViewMode::Player) {
+  const bool shouldRestoreLastView = restoreLastView || ND::version == nd_v61;
+  if (shouldRestoreLastView && disp.lastView == ViewMode::Player) {
     playerWindow.show();
   } else {
     visualWindow.show();
@@ -2044,7 +2045,11 @@ boolean VisualWindow::drawNote(uint8_t trackNo, uint8_t noteNo) {
 void VisualWindow::eventHandler(event ev) {
   switch (ev) {
     case event::Option:
-      draw();
+      if (ND::version == nd_v61) {
+        cfgWindow.show();
+      } else {
+        draw();
+      }
       break;
     case event::Close:
     case event::SwitchView:
