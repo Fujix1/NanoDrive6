@@ -6,7 +6,7 @@
 #define INPUT_REPEAT_DELAY 400     // ms リピート開始までの時間
 #define TCA8418_IRQ_PIN 1
 
-typedef enum { btnNONE, btnRIGHT, btnUP, btnDOWN, btnLEFT, btnSELECT, btnFUNC } Button;
+typedef enum { btnNONE, btnRIGHT, btnUP, btnDOWN, btnLEFT, btnSELECT, btnSW15, btnSW16 } Button;
 
 enum class event { None, Right, Up, Down, Left, Option, Close };
 

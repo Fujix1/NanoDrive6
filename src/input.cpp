@@ -3,6 +3,7 @@
 #include <Adafruit_TCA8418.h>
 #include <Arduino.h>
 
+#include "NJU72341.h"
 #include "disp.h"
 #include "file.h"
 #include "nd.h"
@@ -52,18 +53,33 @@ Button matrixKeyToButton(int key) {
     case 40:
       return btnSELECT;
     case 50:
-      return btnFUNC;
+      return btnSW15;
+    case 60:
+      return btnSW16;
     default:
       return btnNONE;
   }
 }
 
 bool isRepeatable(Button button) {
-  return button != btnNONE && button != btnSELECT && button != btnFUNC;
+  return button != btnNONE && button != btnSELECT && button != btnSW15 && button != btnSW16;
 }
 
 void onKeyDown(Button button) {
   if (button == btnNONE) return;
+
+  if (ND::version == nd_v61 && ND::volumeChip == VolumeChip::NJU72342) {
+    if (button == btnSW15) {
+      Serial.println("SW15 pressed.");
+      return;
+    }
+    if (button == btnSW16) {
+      Serial.println("SW16 pressed.");
+      return;
+    }
+  }
+
+  if (button == btnSW15 || button == btnSW16) return;
   if (activeButton == button && keyRepeatState != KeyRepeatState::Idle) return;
 
   activeButton = button;
@@ -78,6 +94,7 @@ void onKeyDown(Button button) {
 }
 
 void onKeyUp(Button button) {
+  if (button == btnSW15 || button == btnSW16) return;
   if (activeButton != button) return;
 
   if (keyRepeatTimer != nullptr) xTimerStop(keyRepeatTimer, 0);
