@@ -8,7 +8,7 @@
 
 typedef enum { btnNONE, btnRIGHT, btnUP, btnDOWN, btnLEFT, btnSELECT, btnSW15, btnSW16 } Button;
 
-enum class event { None, Right, Up, Down, Left, Option, Close };
+enum class event { None, Right, Up, Down, Left, Option, Close, SwitchView };
 
 void cancelPlayHoldCountdown();
 bool isPlayHoldCountdownActive();

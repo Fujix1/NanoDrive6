@@ -222,7 +222,7 @@ class CFGWindow {
 
   void init();
   void show();
-  void close();
+  void close(bool restoreLastView = false);
   void eventHandler(event ev);
   void drawItem(LGFX_Sprite& target, int index, int x, int y, int width, bool selected);
   void drawFooter(bool toFrameBuffer);

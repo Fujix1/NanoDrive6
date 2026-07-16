@@ -1175,7 +1175,11 @@ bool openPNG(String dirName, String fileName, bool AA = false, bool toSprite = t
 //---------------------------------------------------------------------------
 // Player / Config view management
 void PlayerWindow::eventHandler(event ev) {
-  if (ev == event::Option) cfgWindow.show();
+  if (ev == event::Option) {
+    cfgWindow.show();
+  } else if (ev == event::SwitchView) {
+    visualWindow.show();
+  }
 }
 
 void PlayerWindow::show() {
@@ -1395,7 +1399,7 @@ void CFGWindow::show() {
   drawPanelView();
 }
 
-void CFGWindow::close() {
+void CFGWindow::close(bool restoreLastView) {
   const bool modeChanged = (tMode)ndConfig.get(CFG_MODE) != ndConfig.currentMode;
   if (_isChanged) {
     if (modeChanged) {
@@ -1410,7 +1414,11 @@ void CFGWindow::close() {
     ESP.restart();
     return;
   }
-  visualWindow.show();
+  if (restoreLastView && disp.lastView == ViewMode::Player) {
+    playerWindow.show();
+  } else {
+    visualWindow.show();
+  }
 }
 
 void CFGWindow::eventHandler(event ev) {
@@ -1467,6 +1475,9 @@ void CFGWindow::eventHandler(event ev) {
       break;
     case event::Close:
       close();
+      break;
+    case event::SwitchView:
+      close(true);
       break;
     default:
       break;
@@ -2036,6 +2047,7 @@ void VisualWindow::eventHandler(event ev) {
       draw();
       break;
     case event::Close:
+    case event::SwitchView:
       close();
       playerWindow.show();
       break;

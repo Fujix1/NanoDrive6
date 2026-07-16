@@ -73,13 +73,9 @@ void onKeyDown(Button button) {
       Serial.println("SW15 pressed.");
       return;
     }
-    if (button == btnSW16) {
-      Serial.println("SW16 pressed.");
-      return;
-    }
   }
 
-  if (button == btnSW15 || button == btnSW16) return;
+  if (button == btnSW15) return;
   if (activeButton == button && keyRepeatState != KeyRepeatState::Idle) return;
 
   activeButton = button;
@@ -94,7 +90,7 @@ void onKeyDown(Button button) {
 }
 
 void onKeyUp(Button button) {
-  if (button == btnSW15 || button == btnSW16) return;
+  if (button == btnSW15) return;
   if (activeButton != button) return;
 
   if (keyRepeatTimer != nullptr) xTimerStop(keyRepeatTimer, 0);
@@ -416,6 +412,12 @@ void Input::inputHandler() {
   updateHoldCountdown();
 
   if (inputBuffer == btnNONE) return;
+
+  if (inputBuffer == btnSW16) {
+    sendEvent(event::SwitchView);
+    inputBuffer = btnNONE;
+    return;
+  }
 
   if (disp.currentView == ViewMode::Config) {
     switch (inputBuffer) {
