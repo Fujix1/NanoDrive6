@@ -193,14 +193,14 @@ static constexpr uint8_t kPeakLineYTop = 2;
 static constexpr uint8_t kPeakLineYBottom = 14;
 static constexpr uint16_t kNoteDrawX = 115;        // キー表示 X
 static constexpr uint16_t kNoteDrawBottomY = 263;  // キー表示 Y 下端
-static constexpr int kLevelDrawX = 67;         // レベルメータX
-static constexpr int kLevelDrawBottomY = 262;  // レベルメータY下端
+static constexpr int kLevelDrawX = 67;             // レベルメータX
+static constexpr int kLevelDrawBottomY = 262;      // レベルメータY下端
 static constexpr uint8_t kFmTrackCount = 6;
 static constexpr uint8_t kNoteTrackCount = 16;
-static constexpr uint8_t kPanTrackCount = 16;   // Track 1-6: FM, Track 7: PCM, 9-16: PSG
-static constexpr uint8_t kLevelTrackCount = 16;  // Track 1-6: FM, 7: PCM, 9-16: SN76489
-static constexpr uint8_t kPcmTrack = 6;          // UI Track 7
-static constexpr uint8_t kUnusedTrack = 7;       // UI Track 8
+static constexpr uint8_t kPanTrackCount = 16;      // Track 1-6: FM, Track 7: PCM, 9-16: PSG
+static constexpr uint8_t kLevelTrackCount = 16;    // Track 1-6: FM, 7: PCM, 9-16: SN76489
+static constexpr uint8_t kPcmTrack = 6;            // UI Track 7
+static constexpr uint8_t kUnusedTrack = 7;         // UI Track 8
 static constexpr uint8_t kSn0ToneTrackFirst = 8;   // UI Track 9
 static constexpr uint8_t kSn0NoiseTrack = 11;      // UI Track 12
 static constexpr uint8_t kSn1ToneTrackFirst = 12;  // UI Track 13
@@ -1584,7 +1584,7 @@ void CFGWindow::drawItem(LGFX_Sprite& target, int index, int x, int y, int width
 
   const uint16_t titleColor = selected ? TFT_WHITE : C_DARK;
   const uint16_t optionColor = selected ? C_YELLOW : C_MID;
-  const uint16_t background = selected ? C_LV_PEAK : TFT_WHITE;
+  const uint16_t background = selected ? C_ACCENT_DARK : TFT_WHITE;
 
   OpenFontRender ofr;
   ofr.setDrawer(_sprite);

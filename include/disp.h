@@ -15,28 +15,25 @@
 
 #define C_BASEBG TFT_BLACK
 #define C_BASEFG TFT_WHITE
-#define C_ORANGE 0xfdc7
-#define C_YELLOW 0xfee0
+#define C_ORANGE 0xfdc7        // #ffba3a
+#define C_YELLOW 0xfee0        // #ffdf00
+#define C_ACCENT_LIGHT 0x26df  // #21dbff
+#define C_ACCENT_DARK 0x1396   // #1071b5
+#define C_LIGHTGRAY 0xef7d     // #efefef
+#define C_HIGHGRAY 0xd6da      // #d6dbd6
+#define C_GRAY 0xad55          // #adaaad
+#define C_MID 0x73ae           // #737573
+#define C_DARK 0x10c4          // #101821
+#define C_LV_PEAK 0x52b5       // #5255ad
+#define C_MASKEDKEY 0x322f     // #324579
+#define C_MDX_ON 0x843f        // #8787ff
+#define C_MDX_OFF 0x212a       // #23234f
 
-#define C_ACCENT_LIGHT 0x26df
-#define C_ACCENT_DARK 0x1396
-
-#define C_LIGHTGRAY 0xef7d
-#define C_HIGHGRAY 0xd6da
-#define C_GRAY 0xad55
-#define C_MID 0x73ae
-#define C_DARK 0x10c4
-
-#define C_LV_PEAK 0x52b5    // #5255ad
-#define C_MASKEDKEY 0x322f  // #324579
-#define C_MDX_ON 0x843f     // #8787ff
-#define C_MDX_OFF 0x212a    // #23234f
-
-#define C_HEADER 0x4228  // 0x444444
-#define C_HEADERSUB 0x5aec
-#define C_BORDER 0xad55           // 0xadaaad
-#define C_FOOTER_ACTIVE 0x530c    // 0x506065
-#define C_FOOTER_INACTIVE 0xbe1a  // 0xbbc0d0
+#define C_HEADER 0x4228           // #424542
+#define C_HEADERSUB 0x5aec        // #5a5d63
+#define C_BORDER 0xad55           // #adaaad
+#define C_FOOTER_ACTIVE 0x530c    // #526163
+#define C_FOOTER_INACTIVE 0xbe1a  // #bdc2d6
 
 #define CFG_ITEM_HEIGHT 32
 
