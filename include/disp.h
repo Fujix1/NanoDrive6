@@ -13,6 +13,8 @@
 #include "keyinfo.h"
 #include "nd.h"
 
+struct Node;
+
 #define C_BASEBG TFT_BLACK
 #define C_BASEFG TFT_WHITE
 #define C_ORANGE 0xfdc7        // #ffba3a
@@ -34,8 +36,11 @@
 #define C_BORDER 0xad55           // #adaaad
 #define C_FOOTER_ACTIVE 0x530c    // #526163
 #define C_FOOTER_INACTIVE 0xbe1a  // #bdc2d6
+#define C_LISTBG 0xdf3d            // #e2e8ed
 
 #define CFG_ITEM_HEIGHT 32
+#define BROWSER_CURRENT_DIR_HEIGHT 28
+#define BROWSER_ITEM_HEIGHT 28
 
 // font icon
 // 丂 - random
@@ -60,12 +65,14 @@ extern LGFX lcd;
 
 enum class ViewMode { Player,
                       Config,
-                      Visual };
+                      Visual,
+                      Browser };
 
 class Disp {
  public:
   ViewMode currentView = ViewMode::Player;
   ViewMode lastView = currentView;
+  bool stopTimerDrawing = true;
 };
 
 extern Disp disp;
@@ -172,6 +179,25 @@ class ConfigPanelRenderer : public IPanelRenderer {
                   bool selected) override;
 };
 
+// ファイルブラウザ画面の描画クラス
+class BrowserPanelRenderer : public IPanelRenderer {
+ public:
+  void init();
+  void deinit();
+  void setBrowseDirNode(Node* browseDirNode);
+  bool hasParentEntry() const;
+  Node* getNodeByDisplayIndex(int itemIndex) const;
+  OpenFontRender& getRender() { return _render; }
+  void onDrawItem(LGFX_Sprite& target, int itemIndex, int x, int y, int width,
+                  bool selected) override;
+
+ private:
+  Node* _browseDirNode = nullptr;
+  int _dotsWidth = 0;
+  OpenFontRender _render;
+  bool _fontLoaded = false;
+};
+
 class Panel {
  public:
   Panel(uint16_t x,  // 座標
@@ -270,5 +296,37 @@ class VisualWindow {
 };
 
 extern VisualWindow visualWindow;
+
+// ファイルブラウザ画面クラス
+class BrowserWindow {
+ public:
+  void init();
+  void show();
+  void close();
+  void eventHandler(event ev);
+  void openDirectory(Node* dirNode, Node* selectedNode = nullptr);
+  bool openParentDirectory();
+  void onCurrentNodeChanged(Node* previousNode, Node* currentNode);
+  bool visible = false;
+
+ private:
+  LGFX_Sprite _sprHeaderJP;
+  LGFX_Sprite _sprHeaderEN;
+  LGFX_Sprite _sprCurrentDir;
+  Node* _lastCurrentDirNode = nullptr;
+  Node* _browseDirNode = nullptr;
+  Node* _selectedNode = nullptr;
+
+  void initHeaders();
+  void draw();
+  void drawCurrentDir();
+  int getItemCount() const;
+  void selectItem(int index);
+  void moveSelection(int delta);
+  void selectCurrentItem();
+  void openAdjacentDirectory(int delta);
+};
+
+extern BrowserWindow browserWindow;
 
 #endif

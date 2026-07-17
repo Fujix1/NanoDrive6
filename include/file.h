@@ -123,6 +123,7 @@ class NDFile {
   bool requestDirPlay(int count);
   bool requestAutoNextPlay();
   bool requestPlay(uint16_t d, uint16_t f, int8_t att = -1);
+  bool requestPlay(Node* node, int8_t att = -1);
   bool processPlaybackQueue();
   void clearPlaybackQueue();
   uint8_t getFolderAttenuation(String path);  // フォルダの音量減衰取得
@@ -176,6 +177,7 @@ class NDFile {
     DirRelative,
     AutoNext,
     PlayIndex,
+    PlayNode,
   };
 
   struct PlaybackCommand {
@@ -183,6 +185,7 @@ class NDFile {
     int32_t a;
     int32_t b;
     int8_t att;
+    Node* node;
   };
 
   enum RandomStateKind : u8_t {

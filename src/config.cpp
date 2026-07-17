@@ -58,6 +58,8 @@ static const char* configSlug(tConfig item) {
       return "snatt";
     case CFG_MODE:
       return "mode";
+    case CFG_CONTROL:
+      return "control";
     default:
       return "";
   }
@@ -185,6 +187,13 @@ void NDConfig::init() {
                    {"赤", "緑", "青"},
                    {"Red", "Green", "Blue"},
                    {KEYON_RED, KEYON_GREEN, KEYON_BLUE}});
+  items.push_back({"control",
+                   0,  // 初期値idx
+                   "キー割り当て",
+                   "Key Assign",
+                   {"セット1", "セット2"},
+                   {"Set 1", "Set 2"},
+                   {CTRL_1, CTRL_2}});
   items.push_back(
       {"mode", 0, "動作モード", "Mode", {"プレーヤー", "シリアル"}, {"Player", "Serial"}, {MODE_PLAYER, MODE_SERIAL}});
   preferences.begin("NanoDrive");
@@ -221,7 +230,7 @@ void NDConfig::applyItem(tConfig item) {
       FM.requestApplyYM2612OutputMode();
       break;
     default:
-      // LOOP/REPEAT/SCROLL/HISTORY/SHUFFLE/LANG/MODE は、変更時点でハードウェア反映不要。
+      // LOOP/REPEAT/SCROLL/HISTORY/SHUFFLE/LANG/MODE/CONTROL は、変更時点でハードウェア反映不要。
       break;
   }
 }

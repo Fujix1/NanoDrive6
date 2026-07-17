@@ -205,10 +205,13 @@ void setup() {
     serialMan.startSerialTask();
   }
 
-  // 入力有効化
-  input.setEnabled(true);
-
   cfgWindow.init();
+  if (ndConfig.currentMode == MODE_PLAYER) {
+    browserWindow.init();
+  }
+
+  // ウインドウ初期化後に入力を有効化する。
+  input.setEnabled(true);
 
   if (ndConfig.currentMode == MODE_PLAYER) {
     if (savedLastView == LAST_VIEW_VISUAL) {

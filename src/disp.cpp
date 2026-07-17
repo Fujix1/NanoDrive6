@@ -4,8 +4,6 @@
 #include "pics.h"
 #include "png_renderer.h"
 
-static bool _stopTimerDrawing = true;  // タイマーによる描画更新を止める
-
 const uint8_t* Panel_ST7789_ND::getInitCommands(uint8_t listno) const {
   // ND6.1以降の液晶では現行の明るめガンマ値が必要。
   // TCA8418が見つからない旧ND6だけ、LovyanGFX upstream相当の旧液晶向け初期値を使う。
@@ -883,7 +881,7 @@ void dispUpdateTask(void* param) {
     while (ulTaskNotifyTake(pdTRUE, 0) > 0) {
       // queue collapse: 最新状態だけ描画
     }
-    if (_stopTimerDrawing) {
+    if (disp.stopTimerDrawing) {
       continue;
     }
     dispUpdateWorker();
@@ -916,7 +914,7 @@ void PlayerWindow::redraw() {
   }
 
   xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
-  _stopTimerDrawing = true;
+  disp.stopTimerDrawing = true;
   playerWindow.drawBG();
   render.setUseRenderTask(false);
   render.setDrawer(frameBuffer);
@@ -1019,14 +1017,14 @@ void PlayerWindow::redraw() {
   }
 
   frameBuffer.pushSprite(0, 0);
-  _stopTimerDrawing = false;
+  disp.stopTimerDrawing = false;
   xSemaphoreGive(spFrameBuffer);
 }
 
 // シリアルモード描画
 void serialModeDraw() {
   xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
-  _stopTimerDrawing = true;
+  disp.stopTimerDrawing = true;
   playerWindow.drawBG();
   render.setUseRenderTask(false);
   render.setDrawer(frameBuffer);
@@ -1111,7 +1109,7 @@ bool initDisp() {
     return false;
   }
 
-  _stopTimerDrawing = true;
+  disp.stopTimerDrawing = true;
 
   hDispUpdateTask = NULL;
   BaseType_t taskCreated =
@@ -1395,7 +1393,7 @@ void CFGWindow::show() {
     _isChanged = false;
   }
   disp.currentView = ViewMode::Config;
-  _stopTimerDrawing = true;
+  disp.stopTimerDrawing = true;
   drawPanelView();
 }
 
@@ -1739,7 +1737,7 @@ void VisualWindow::drawTimestamp(int64_t sec, bool toFrameBuffer, bool visible) 
 
 void VisualWindow::draw() {
   xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
-  _stopTimerDrawing = true;
+  disp.stopTimerDrawing = true;
 
   frameBuffer.fillSprite(TFT_BLACK);
   pushVisualImage(frameBuffer, 0, 0, keyboardWidth, keyboardHeight, keyboard);
@@ -1802,7 +1800,7 @@ void VisualWindow::draw() {
     heldTrackNote[i] = 0xff;
   }
 
-  _stopTimerDrawing = false;
+  disp.stopTimerDrawing = false;
   xSemaphoreGive(spFrameBuffer);
 }
 
@@ -2063,7 +2061,7 @@ void VisualWindow::eventHandler(event ev) {
 
 void VisualWindow::show() {
   visible = true;
-  _stopTimerDrawing = true;
+  disp.stopTimerDrawing = true;
   disp.currentView = ViewMode::Visual;
   disp.lastView = ViewMode::Visual;
   ndConfig.saveLastView(LAST_VIEW_VISUAL);
@@ -2072,8 +2070,453 @@ void VisualWindow::show() {
 
 void VisualWindow::close() {
   visible = false;
-  _stopTimerDrawing = true;
+  disp.stopTimerDrawing = true;
   lblSongTitle.setEnabled(false);
 }
 
 CFGWindow cfgWindow;
+
+//---------------------------------------------------------------------------
+// ファイルブラウザ画面
+
+static BrowserPanelRenderer browserRenderer;
+static Panel pnlFiles(0, 26 + BROWSER_CURRENT_DIR_HEIGHT, LCD_W,
+                      LCD_H - 26 - BROWSER_CURRENT_DIR_HEIGHT, BROWSER_ITEM_HEIGHT,
+                      &browserRenderer);
+
+static void pushBrowserFrameBufferArea(int y, int height) {
+  if (height <= 0 || y >= LCD_H || y + height <= 0) return;
+  if (y < 0) {
+    height += y;
+    y = 0;
+  }
+  if (y + height > LCD_H) height = LCD_H - y;
+
+  uint16_t* buffer = static_cast<uint16_t*>(frameBuffer.getBuffer());
+  if (buffer == nullptr) return;
+  lcd.pushImage(0, y, LCD_W, height, buffer + y * LCD_W);
+}
+
+static void pushBrowserItemArea(int itemIndex) {
+  const int itemY =
+      pnlFiles.y + itemIndex * BROWSER_ITEM_HEIGHT - pnlFiles.scrollTop;
+  const int top = max(static_cast<int>(pnlFiles.y), itemY);
+  const int bottom = min(static_cast<int>(pnlFiles.y + pnlFiles.height),
+                         itemY + BROWSER_ITEM_HEIGHT);
+  pushBrowserFrameBufferArea(top, bottom - top);
+}
+
+static void drawFolderIcon(LGFX_Sprite& target, int x, int y, uint16_t color) {
+  target.fillRect(x + 2, y, 6, 3, color);
+  target.fillRect(x, y + 3, 16, 11, color);
+}
+
+static uint16_t getUtf8BytesForWidth(OpenFontRender& render, const char* text,
+                                     uint32_t limitWidth, uint32_t reserveWidth) {
+  if (text == nullptr || limitWidth < reserveWidth) return 0;
+
+  static constexpr uint16_t kMaxTextBytes = 255;
+  const size_t sourceLength = strlen(text);
+  const uint16_t length = min(static_cast<size_t>(kMaxTextBytes), sourceLength);
+  uint16_t boundaries[kMaxTextBytes + 1];
+  uint16_t boundaryCount = 1;
+  boundaries[0] = 0;
+
+  uint16_t index = 0;
+  while (index < length) {
+    const uint8_t lead = static_cast<uint8_t>(text[index]);
+    uint16_t charBytes = 1;
+    if ((lead & 0xe0) == 0xc0) {
+      charBytes = 2;
+    } else if ((lead & 0xf0) == 0xe0) {
+      charBytes = 3;
+    } else if ((lead & 0xf8) == 0xf0) {
+      charBytes = 4;
+    }
+    if (index + charBytes > length) break;
+    index += charBytes;
+    boundaries[boundaryCount++] = index;
+  }
+
+  char buffer[kMaxTextBytes + 1];
+  const uint16_t completeBytes = boundaries[boundaryCount - 1];
+  memcpy(buffer, text, completeBytes);
+  buffer[completeBytes] = '\0';
+  if (sourceLength == completeBytes && render.getTextWidth("%s", buffer) <= limitWidth) {
+    return completeBytes;
+  }
+
+  uint16_t low = 0;
+  uint16_t high = boundaryCount - 1;
+  while (low < high) {
+    const uint16_t mid = low + (high - low + 1) / 2;
+    const uint16_t bytes = boundaries[mid];
+    memcpy(buffer, text, bytes);
+    buffer[bytes] = '\0';
+    const uint32_t width = render.getTextWidth("%s", buffer);
+    if (width + reserveWidth <= limitWidth) {
+      low = mid;
+    } else {
+      high = mid - 1;
+    }
+  }
+  return boundaries[low];
+}
+
+static void printBrowserText(OpenFontRender& render, const char* text, int maxWidth,
+                             int dotsWidth) {
+  if (text == nullptr || maxWidth <= 0) return;
+  if (dotsWidth > maxWidth) return;
+
+  const uint16_t fitLength =
+      getUtf8BytesForWidth(render, text, static_cast<uint32_t>(maxWidth), dotsWidth);
+  if (text[fitLength] == '\0') {
+    render.printf("%s", text);
+    return;
+  }
+
+  if (fitLength == 0) {
+    render.printf("...");
+    return;
+  }
+
+  char buffer[256];
+  uint16_t copyLength = fitLength;
+  if (copyLength > sizeof(buffer) - 4) copyLength = sizeof(buffer) - 4;
+  memcpy(buffer, text, copyLength);
+  memcpy(buffer + copyLength, "...", 4);
+  render.printf("%s", buffer);
+}
+
+void BrowserPanelRenderer::init() {
+  deinit();
+  _render.setUseRenderTask(false);
+  _fontLoaded = _render.loadFont(fontMain, sizeof(fontMain)) == 0;
+  if (!_fontLoaded) return;
+  _render.setAlignment(Align::TopLeft);
+  _render.setFontSize(17);
+  _dotsWidth = _render.getTextWidth("...");
+}
+
+void BrowserPanelRenderer::deinit() {
+  if (!_fontLoaded) return;
+  _render.unloadFont();
+  _fontLoaded = false;
+}
+
+void BrowserPanelRenderer::setBrowseDirNode(Node* browseDirNode) {
+  _browseDirNode = browseDirNode;
+}
+
+bool BrowserPanelRenderer::hasParentEntry() const {
+  return _browseDirNode != nullptr && _browseDirNode != fileTree.getRoot() &&
+         _browseDirNode->parent != nullptr;
+}
+
+Node* BrowserPanelRenderer::getNodeByDisplayIndex(int itemIndex) const {
+  int nodeIndex = itemIndex;
+  if (hasParentEntry()) {
+    if (itemIndex == 0) return nullptr;
+    nodeIndex--;
+  }
+  if (_browseDirNode == nullptr || nodeIndex < 0) return nullptr;
+
+  Node* node = _browseDirNode->firstChild;
+  for (int i = 0; node != nullptr && i < nodeIndex; i++) node = node->next;
+  return node;
+}
+
+void BrowserPanelRenderer::onDrawItem(LGFX_Sprite& target, int itemIndex, int x, int y,
+                                      int width, bool selected) {
+  const bool parentEntry = hasParentEntry() && itemIndex == 0;
+  Node* node = parentEntry ? nullptr : getNodeByDisplayIndex(itemIndex);
+  if (!parentEntry && node == nullptr) return;
+
+  Node* playingNode = ndFile.currentNode;
+  Node* playingDir = playingNode != nullptr ? playingNode->parent : nullptr;
+  const bool playing = node == playingNode || node == playingDir;
+  uint16_t background = (itemIndex % 2 != 0) ? C_LISTBG : TFT_WHITE;
+  uint16_t foreground = C_DARK;
+  uint16_t folderColor = C_ORANGE;
+  if (selected) {
+    background = C_ACCENT_DARK;
+    foreground = playing ? C_YELLOW : TFT_WHITE;
+    folderColor = TFT_WHITE;
+  } else if (playing) {
+    background = C_MID;
+    foreground = C_YELLOW;
+    folderColor = C_LIGHTGRAY;
+  }
+
+  target.fillRect(x, y, width, BROWSER_ITEM_HEIGHT, background);
+  if (parentEntry || node->type == NODE_TYPE_DIR) {
+    drawFolderIcon(target, x + 2, y + 7, folderColor);
+  }
+
+  _render.setDrawer(target);
+  _render.setFontColor(foreground, background);
+  _render.setCursor(x + 20, y + 6);
+  if (parentEntry) {
+    _render.printf("../");
+  } else {
+    printBrowserText(_render, node->name, width - 23, _dotsWidth);
+  }
+}
+
+void BrowserWindow::init() {
+  initHeaders();
+  if (_sprCurrentDir.width() == 0) {
+    _sprCurrentDir.setPsram(true);
+    _sprCurrentDir.createSprite(LCD_W, BROWSER_CURRENT_DIR_HEIGHT);
+  }
+  _lastCurrentDirNode = nullptr;
+  _browseDirNode = nullptr;
+  _selectedNode = nullptr;
+}
+
+void BrowserWindow::initHeaders() {
+  if (_sprHeaderJP.width() > 0 && _sprHeaderEN.width() > 0) return;
+  if (spFrameBuffer == nullptr || xSemaphoreTake(spFrameBuffer, portMAX_DELAY) != pdTRUE) return;
+
+  _sprHeaderJP.setPsram(true);
+  _sprHeaderJP.createSprite(LCD_W, 26);
+  _sprHeaderJP.fillSprite(C_HEADER);
+  _sprHeaderEN.setPsram(true);
+  _sprHeaderEN.createSprite(LCD_W, 26);
+  _sprHeaderEN.fillSprite(C_HEADER);
+
+  OpenFontRender render;
+  render.setUseRenderTask(false);
+  render.loadFont(fontMain, sizeof(fontMain));
+  render.setAlignment(Align::TopLeft);
+  render.setFontColor(C_LIGHTGRAY, C_HEADER);
+  render.setFontSize(17);
+  render.setDrawer(_sprHeaderJP);
+  render.setCursor(6, 4);
+  render.printf("ファイルブラウザ");
+  render.setDrawer(_sprHeaderEN);
+  render.setFontSize(16);
+  render.setCursor(6, 4);
+  render.printf("File Browser");
+  render.unloadFont();
+
+  xSemaphoreGive(spFrameBuffer);
+}
+
+void BrowserWindow::draw() {
+  if (_browseDirNode == nullptr) return;
+  xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
+  // OpenFontRender/FreeTypeはBrowser内で単一インスタンスを共有し、描画ロック中に初期化する。
+  browserRenderer.init();
+  frameBuffer.fillSprite(TFT_WHITE);
+  if (ndConfig.get(CFG_LANG) == LANG_JA) {
+    _sprHeaderJP.pushSprite(&frameBuffer, 0, 0);
+  } else {
+    _sprHeaderEN.pushSprite(&frameBuffer, 0, 0);
+  }
+  drawCurrentDir();
+
+  pnlFiles.setItemCount(getItemCount());
+  Node* selectedNode = _selectedNode;
+  if (selectedNode == nullptr || selectedNode->parent != _browseDirNode) {
+    selectedNode = ndFile.currentNode != nullptr && ndFile.currentNode->parent == _browseDirNode
+                       ? ndFile.currentNode
+                       : nullptr;
+  }
+  pnlFiles.currentIndex = browserRenderer.hasParentEntry() && getItemCount() > 1 ? 1 : 0;
+  Node* node = _browseDirNode->firstChild;
+  int nodeIndex = 0;
+  while (node != nullptr) {
+    if (node == selectedNode) {
+      pnlFiles.currentIndex = nodeIndex + (browserRenderer.hasParentEntry() ? 1 : 0);
+      break;
+    }
+    node = node->next;
+    nodeIndex++;
+  }
+  pnlFiles.ensureVisible();
+  pnlFiles.invalidate();
+  pnlFiles.update(frameBuffer);
+  frameBuffer.pushSprite(0, 0);
+  xSemaphoreGive(spFrameBuffer);
+}
+
+void BrowserWindow::drawCurrentDir() {
+  if (_lastCurrentDirNode != _browseDirNode) {
+    _sprCurrentDir.fillSprite(C_HIGHGRAY);
+    drawFolderIcon(_sprCurrentDir, 2, 7, C_ACCENT_DARK);
+
+    OpenFontRender& render = browserRenderer.getRender();
+    render.setDrawer(_sprCurrentDir);
+    render.setAlignment(Align::TopLeft);
+    render.setFontSize(17);
+    render.setFontColor(C_DARK, C_HIGHGRAY);
+    render.setCursor(20, 6);
+    if (_browseDirNode == fileTree.getRoot()) {
+      render.printf("/");
+    } else if (_browseDirNode != nullptr) {
+      const int dotsWidth = render.getTextWidth("...");
+      printBrowserText(render, _browseDirNode->name, LCD_W - 23, dotsWidth);
+    }
+    _lastCurrentDirNode = _browseDirNode;
+  }
+  _sprCurrentDir.pushSprite(&frameBuffer, 0, 26);
+}
+
+int BrowserWindow::getItemCount() const {
+  if (_browseDirNode == nullptr) return 0;
+  return _browseDirNode->fileCount + _browseDirNode->dirCount +
+         (browserRenderer.hasParentEntry() ? 1 : 0);
+}
+
+void BrowserWindow::selectItem(int index) {
+  const int itemCount = getItemCount();
+  if (itemCount <= 0) return;
+  if (index < 0) index = itemCount - 1;
+  if (index >= itemCount) index = 0;
+  if (index == pnlFiles.currentIndex) return;
+
+  xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
+  const int previousIndex = pnlFiles.currentIndex;
+  const int previousScrollTop = pnlFiles.scrollTop;
+  pnlFiles.currentIndex = index;
+  pnlFiles.ensureVisible();
+  pnlFiles.update(frameBuffer);
+  if (pnlFiles.scrollTop == previousScrollTop) {
+    // 選択状態が変わった2項目だけLCDへ転送する。
+    pushBrowserItemArea(previousIndex);
+    pushBrowserItemArea(pnlFiles.currentIndex);
+  } else {
+    // スクロール時もヘッダーとカレントディレクトリは転送し直さない。
+    pushBrowserFrameBufferArea(pnlFiles.y, pnlFiles.height);
+  }
+  xSemaphoreGive(spFrameBuffer);
+}
+
+void BrowserWindow::moveSelection(int delta) {
+  selectItem(pnlFiles.currentIndex + delta);
+}
+
+void BrowserWindow::selectCurrentItem() {
+  if (browserRenderer.hasParentEntry() && pnlFiles.currentIndex == 0) {
+    openParentDirectory();
+    return;
+  }
+
+  Node* node = browserRenderer.getNodeByDisplayIndex(pnlFiles.currentIndex);
+  if (node == nullptr) return;
+  if (node->type == NODE_TYPE_DIR) {
+    openDirectory(node);
+  } else {
+    _selectedNode = node;
+    ndFile.requestPlay(node);
+  }
+}
+
+void BrowserWindow::openDirectory(Node* dirNode, Node* selectedNode) {
+  _browseDirNode = dirNode != nullptr ? dirNode : fileTree.getRoot();
+  if (_browseDirNode == nullptr) return;
+  _selectedNode = selectedNode;
+  _lastCurrentDirNode = nullptr;
+  browserRenderer.setBrowseDirNode(_browseDirNode);
+  pnlFiles.scrollTop = 0;
+  pnlFiles.currentIndex = 0;
+  pnlFiles.invalidate();
+  draw();
+}
+
+bool BrowserWindow::openParentDirectory() {
+  if (_browseDirNode == nullptr || _browseDirNode == fileTree.getRoot() ||
+      _browseDirNode->parent == nullptr) {
+    return false;
+  }
+  openDirectory(_browseDirNode->parent, _browseDirNode);
+  return true;
+}
+
+void BrowserWindow::openAdjacentDirectory(int delta) {
+  if (_browseDirNode == nullptr || delta == 0) return;
+  // _dirPlay()と同様、選択中のfileノードを探索基準にする。
+  // ルート直下のfile選択時も、getNextDirNode()内で親のルートへ戻ってから
+  // 最初の子dirノードを探索できる。
+  Node* traversalNode = browserRenderer.getNodeByDisplayIndex(pnlFiles.currentIndex);
+  if (traversalNode == nullptr || traversalNode->type != NODE_TYPE_FILE) {
+    traversalNode = _browseDirNode;
+  }
+  Node* targetDir = delta < 0 ? fileTree.getPrevDirNode(traversalNode)
+                              : fileTree.getNextDirNode(traversalNode);
+  if (targetDir == nullptr || targetDir == _browseDirNode) return;
+  openDirectory(targetDir);
+}
+
+void BrowserWindow::onCurrentNodeChanged(Node* previousNode, Node* currentNode) {
+  if (disp.currentView != ViewMode::Browser || _browseDirNode == nullptr) return;
+  Node* previousParent = previousNode != nullptr ? previousNode->parent : nullptr;
+  Node* currentParent = currentNode != nullptr ? currentNode->parent : nullptr;
+  const bool previousVisible =
+      previousParent == _browseDirNode ||
+      (previousParent != nullptr && previousParent->parent == _browseDirNode);
+  const bool currentVisible = currentParent == _browseDirNode ||
+                              (currentParent != nullptr && currentParent->parent == _browseDirNode);
+  if (!previousVisible && !currentVisible) return;
+  if (xSemaphoreTake(spFrameBuffer, 0) != pdTRUE) return;
+  pnlFiles.invalidate();
+  pnlFiles.update(frameBuffer);
+  pushBrowserFrameBufferArea(pnlFiles.y, pnlFiles.height);
+  xSemaphoreGive(spFrameBuffer);
+}
+
+void BrowserWindow::eventHandler(event ev) {
+  if (disp.currentView != ViewMode::Browser) return;
+  switch (ev) {
+    case event::Up:
+      openAdjacentDirectory(-1);
+      break;
+    case event::Down:
+      openAdjacentDirectory(1);
+      break;
+    case event::Left:
+      moveSelection(-1);
+      break;
+    case event::Right:
+      moveSelection(1);
+      break;
+    case event::Select:
+      selectCurrentItem();
+      break;
+    case event::UpDir:
+      openParentDirectory();
+      break;
+    case event::Close:
+      close();
+      if (disp.lastView == ViewMode::Visual) {
+        visualWindow.show();
+      } else {
+        playerWindow.show();
+      }
+      break;
+    default:
+      break;
+  }
+}
+
+void BrowserWindow::show() {
+  if (disp.currentView == ViewMode::Browser && visible) return;
+  visible = true;
+  disp.stopTimerDrawing = true;
+  disp.currentView = ViewMode::Browser;
+  Node* currentDir = ndFile.currentNode != nullptr && ndFile.currentNode->parent != nullptr
+                         ? ndFile.currentNode->parent
+                         : fileTree.getRoot();
+  openDirectory(currentDir, ndFile.currentNode);
+}
+
+void BrowserWindow::close() {
+  if (spFrameBuffer != nullptr && xSemaphoreTake(spFrameBuffer, portMAX_DELAY) == pdTRUE) {
+    browserRenderer.deinit();
+    xSemaphoreGive(spFrameBuffer);
+  }
+  visible = false;
+}
+
+BrowserWindow browserWindow;

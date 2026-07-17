@@ -67,15 +67,6 @@ bool isRepeatable(Button button) {
 
 void onKeyDown(Button button) {
   if (button == btnNONE) return;
-
-  if (ND::version == nd_v61 && ND::volumeChip == VolumeChip::NJU72342) {
-    if (button == btnSW15) {
-      Serial.println("SW15 pressed.");
-      return;
-    }
-  }
-
-  if (button == btnSW15) return;
   if (activeButton == button && keyRepeatState != KeyRepeatState::Idle) return;
 
   activeButton = button;
@@ -90,7 +81,6 @@ void onKeyDown(Button button) {
 }
 
 void onKeyUp(Button button) {
-  if (button == btnSW15) return;
   if (activeButton != button) return;
 
   if (keyRepeatTimer != nullptr) xTimerStop(keyRepeatTimer, 0);
@@ -209,8 +199,21 @@ void eventTask(void*) {
   while (true) {
     if (xQueueReceive(inputEventQueue, &ev, portMAX_DELAY) != pdTRUE) continue;
 
+    if (ev == event::Browser) {
+      if (ndConfig.currentMode == MODE_PLAYER) {
+        if (disp.currentView == ViewMode::Browser) {
+          browserWindow.eventHandler(event::Close);
+        } else {
+          browserWindow.show();
+        }
+      }
+      continue;
+    }
+
     // 表示中の画面にイベントを送信
-    if (disp.currentView == ViewMode::Config) {
+    if (disp.currentView == ViewMode::Browser) {
+      browserWindow.eventHandler(ev);
+    } else if (disp.currentView == ViewMode::Config) {
       cfgWindow.eventHandler(ev);
     } else if (disp.currentView == ViewMode::Visual) {
       visualWindow.eventHandler(ev);
@@ -413,13 +416,39 @@ void Input::inputHandler() {
 
   if (inputBuffer == btnNONE) return;
 
-  if (inputBuffer == btnSW16) {
-    sendEvent(event::SwitchView);
+  if (inputBuffer == btnSW15) {
+    sendEvent(disp.currentView == ViewMode::Browser ? event::UpDir : event::Browser);
     inputBuffer = btnNONE;
     return;
   }
 
-  if (disp.currentView == ViewMode::Config) {
+  if (inputBuffer == btnSW16) {
+    sendEvent(disp.currentView == ViewMode::Browser ? event::Close : event::SwitchView);
+    inputBuffer = btnNONE;
+    return;
+  }
+
+  if (disp.currentView == ViewMode::Browser) {
+    switch (inputBuffer) {
+      case btnUP:
+        sendEvent(event::Up);
+        break;
+      case btnDOWN:
+        sendEvent(event::Down);
+        break;
+      case btnLEFT:
+        sendEvent(event::Left);
+        break;
+      case btnRIGHT:
+        sendEvent(event::Right);
+        break;
+      case btnSELECT:
+        sendEvent(event::Select);
+        break;
+      default:
+        break;
+    }
+  } else if (disp.currentView == ViewMode::Config) {
     switch (inputBuffer) {
       case btnUP:
         sendEvent(event::Up);

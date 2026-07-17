@@ -682,22 +682,28 @@ bool NDFile::_sendPlaybackCommand(const PlaybackCommand& command) {
 // 入力/表示イベント側からはここだけを呼び、_openFile()/readFile()/vgm.ready()/XGMReady()
 // は再生ループ側の processPlaybackQueue() に集約する。
 bool NDFile::requestFilePlay(int count) {
-  PlaybackCommand command = {PlaybackCommandType::FileRelative, count, 0, -1};
+  PlaybackCommand command = {PlaybackCommandType::FileRelative, count, 0, -1, nullptr};
   return _sendPlaybackCommand(command);
 }
 
 bool NDFile::requestDirPlay(int count) {
-  PlaybackCommand command = {PlaybackCommandType::DirRelative, count, 0, -1};
+  PlaybackCommand command = {PlaybackCommandType::DirRelative, count, 0, -1, nullptr};
   return _sendPlaybackCommand(command);
 }
 
 bool NDFile::requestAutoNextPlay() {
-  PlaybackCommand command = {PlaybackCommandType::AutoNext, 0, 0, -1};
+  PlaybackCommand command = {PlaybackCommandType::AutoNext, 0, 0, -1, nullptr};
   return _sendPlaybackCommand(command);
 }
 
 bool NDFile::requestPlay(uint16_t d, uint16_t f, int8_t att) {
-  PlaybackCommand command = {PlaybackCommandType::PlayIndex, d, f, att};
+  PlaybackCommand command = {PlaybackCommandType::PlayIndex, d, f, att, nullptr};
+  return _sendPlaybackCommand(command);
+}
+
+bool NDFile::requestPlay(Node* node, int8_t att) {
+  if (node == nullptr || node->type != NODE_TYPE_FILE) return false;
+  PlaybackCommand command = {PlaybackCommandType::PlayNode, 0, 0, att, node};
   return _sendPlaybackCommand(command);
 }
 
@@ -714,9 +720,21 @@ bool NDFile::processPlaybackQueue() {
   Node* previousNode = currentNode;
   uint16_t previousDir = currentDir;
   uint16_t previousFile = currentFile;
+  ViewMode previousView = disp.currentView;
+  bool previousStopTimerDrawing = disp.stopTimerDrawing;
   RandomSequenceState previousFolderRandomState = _folderFileRandomState;
   RandomSequenceState previousAllRandomState = _allFileRandomState;
   bool result = false;
+
+  // ND8と同様に、Browserで選んだ曲の情報描画先を直前のPlayer/Visualへ先に戻す。
+  const bool browserSelection =
+      command.type == PlaybackCommandType::PlayNode && previousView == ViewMode::Browser;
+  if (browserSelection) {
+    // 別のOpenFontRenderが描画を始める前にBrowser側のFreeType状態を解放する。
+    browserWindow.close();
+    disp.stopTimerDrawing = true;
+    disp.currentView = disp.lastView == ViewMode::Visual ? ViewMode::Visual : ViewMode::Player;
+  }
 
   // _openFile()/readFile()/vgm.ready()/XGMReady() はここから呼ばれる既存経路に集約する。
   // 将来 PlaybackTask 化する場合も、この関数を再生側所有者に移すだけで済むようにする。
@@ -733,6 +751,9 @@ bool NDFile::processPlaybackQueue() {
     case PlaybackCommandType::PlayIndex:
       result = _playIndex((uint16_t)command.a, (uint16_t)command.b, command.att);
       break;
+    case PlaybackCommandType::PlayNode:
+      result = _playNode(command.node, command.att);
+      break;
   }
 
   if (!result) {
@@ -741,8 +762,15 @@ bool NDFile::processPlaybackQueue() {
     currentNode = previousNode;
     currentDir = previousDir;
     currentFile = previousFile;
+    disp.currentView = previousView;
+    disp.stopTimerDrawing = previousStopTimerDrawing;
     _folderFileRandomState = previousFolderRandomState;
     _allFileRandomState = previousAllRandomState;
+    if (browserSelection) browserWindow.show();
+  } else {
+    if (currentNode != previousNode) {
+      browserWindow.onCurrentNodeChanged(previousNode, currentNode);
+    }
   }
 
   return result;

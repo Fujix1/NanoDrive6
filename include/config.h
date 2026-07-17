@@ -63,6 +63,10 @@ typedef enum {
   KEYON_GREEN = 0x67e1,
   KEYON_BLUE = 0x843f,
 } tKeyon;  // キーオン色
+typedef enum {
+  CTRL_1,
+  CTRL_2,
+} tControl;  // 操作セット
 
 typedef enum {
   CFG_LANG,        // 言語
@@ -79,6 +83,7 @@ typedef enum {
   CFG_PAUSE,       // 再生時一時停止
   CFG_SNATT,       // SN76489 アッテネータ
   CFG_MODE,        // 動作モード
+  CFG_CONTROL,     // 操作セット
   CFG_UNKNOWN,
 } tConfig;
 
