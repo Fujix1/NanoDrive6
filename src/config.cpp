@@ -187,12 +187,13 @@ void NDConfig::init() {
                    {"赤", "緑", "青"},
                    {"Red", "Green", "Blue"},
                    {KEYON_RED, KEYON_GREEN, KEYON_BLUE}});
+  const u8_t controlDefault = (ND::version == nd_v60) ? 0 : 1;
   items.push_back({"control",
-                   0,  // 初期値idx
+                   controlDefault,  // ND6: Set 1, ND6.1: Set 2
                    "キー割り当て",
                    "Key Assign",
-                   {"セット1", "セット2"},
-                   {"Set 1", "Set 2"},
+                   {"ND6.0", "ND6.1"},
+                   {"ND6.0", "ND6.1"},
                    {CTRL_1, CTRL_2}});
   items.push_back(
       {"mode", 0, "動作モード", "Mode", {"プレーヤー", "シリアル"}, {"Player", "Serial"}, {MODE_PLAYER, MODE_SERIAL}});

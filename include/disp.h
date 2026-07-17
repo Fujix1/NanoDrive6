@@ -310,6 +310,7 @@ class BrowserWindow {
   bool visible = false;
 
  private:
+  LGFX_Sprite _sprFooter;
   LGFX_Sprite _sprHeaderJP;
   LGFX_Sprite _sprHeaderEN;
   LGFX_Sprite _sprCurrentDir;
@@ -318,8 +319,10 @@ class BrowserWindow {
   Node* _selectedNode = nullptr;
 
   void initHeaders();
+  void initFooter();
   void draw();
   void drawCurrentDir();
+  void drawFooter(bool toFrameBuffer);
   int getItemCount() const;
   void selectItem(int index);
   void moveSelection(int delta);

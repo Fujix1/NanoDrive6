@@ -157,8 +157,7 @@ Button checkAdcButton() {
   const Button button = readAdcButton();
 
   if (button == btnNONE) {
-    if (adcLastButton == btnUP || adcLastButton == btnDOWN || adcLastButton == btnLEFT ||
-        adcLastButton == btnRIGHT) {
+    if (adcLastButton == btnUP || adcLastButton == btnDOWN || adcLastButton == btnLEFT || adcLastButton == btnRIGHT) {
       ndFile.clearPlaybackQueue();
     }
     input.inputBuffer = btnNONE;
@@ -252,13 +251,9 @@ static void drawHoldTimestamp(int64_t sec) {
 }
 
 // 新しい再生リクエストや設定変更で、進行中の3秒カウントダウンだけを止める。
-void cancelPlayHoldCountdown() {
-  holdCountdownActive = false;
-}
+void cancelPlayHoldCountdown() { holdCountdownActive = false; }
 
-bool isPlayHoldCountdownActive() {
-  return holdCountdownActive;
-}
+bool isPlayHoldCountdownActive() { return holdCountdownActive; }
 
 // ホールドを解除し、0:00から実再生が始まるようにする。
 static void finishPlayHold() {
@@ -337,8 +332,7 @@ static bool releasePlayHold() {
 Input::Input() {}
 
 bool Input::init() {
-  keyRepeatTimer = xTimerCreate("keyRepeat", pdMS_TO_TICKS(INPUT_REPEAT_DELAY), pdTRUE,
-                                nullptr, keyRepeatTimerHandler);
+  keyRepeatTimer = xTimerCreate("keyRepeat", pdMS_TO_TICKS(INPUT_REPEAT_DELAY), pdTRUE, nullptr, keyRepeatTimerHandler);
   if (keyRepeatTimer == nullptr) {
     Serial.println("Failed: key repeat timer init.");
     return false;
@@ -350,15 +344,15 @@ bool Input::init() {
     return false;
   }
 
-  BaseType_t eventTaskCreated = xTaskCreatePinnedToCore(
-      eventTask, "inputEvent", 8192, nullptr, 1, &eventTaskHandle, PRO_CPU_NUM);
+  BaseType_t eventTaskCreated =
+      xTaskCreatePinnedToCore(eventTask, "inputEvent", 8192, nullptr, 1, &eventTaskHandle, PRO_CPU_NUM);
   if (eventTaskCreated != pdPASS) {
     Serial.println("Failed: input event task init.");
     return false;
   }
 
-  BaseType_t inputHandlerTaskCreated = xTaskCreatePinnedToCore(
-      inputHandlerTask, "inputHandler", 4096, nullptr, 1, &inputHandlerTaskHandle, PRO_CPU_NUM);
+  BaseType_t inputHandlerTaskCreated =
+      xTaskCreatePinnedToCore(inputHandlerTask, "inputHandler", 4096, nullptr, 1, &inputHandlerTaskHandle, PRO_CPU_NUM);
   if (inputHandlerTaskCreated != pdPASS) {
     Serial.println("Failed: input handler task init.");
     return false;
@@ -369,8 +363,8 @@ bool Input::init() {
   if (!keypad.begin(TCA8418_DEFAULT_ADDR, &Wire)) {
     Serial.println("Failed: TCA8418 init.");
     pinMode(ADC_INPUT_PIN, ANALOG);
-    BaseType_t adcTaskCreated = xTaskCreatePinnedToCore(adcTask, "adcInput", 4096, nullptr, 1,
-                                                       &adcTaskHandle, PRO_CPU_NUM);
+    BaseType_t adcTaskCreated =
+        xTaskCreatePinnedToCore(adcTask, "adcInput", 4096, nullptr, 1, &adcTaskHandle, PRO_CPU_NUM);
     if (adcTaskCreated != pdPASS) {
       Serial.println("Failed: ADC input task init.");
     } else {
@@ -397,8 +391,7 @@ bool Input::init() {
   config |= TCA8418_REG_CFG_KE_IEN;
   keypad.writeRegister(TCA8418_REG_CFG, config);
 
-  BaseType_t taskCreated = xTaskCreatePinnedToCore(tcaTask, "tcaTask", 4096, nullptr, 1,
-                                                   &tcaTaskHandle, PRO_CPU_NUM);
+  BaseType_t taskCreated = xTaskCreatePinnedToCore(tcaTask, "tcaTask", 4096, nullptr, 1, &tcaTaskHandle, PRO_CPU_NUM);
   if (taskCreated != pdPASS) {
     Serial.println("Failed: TCA8418 task init.");
     return false;
@@ -415,6 +408,8 @@ void Input::inputHandler() {
   updateHoldCountdown();
 
   if (inputBuffer == btnNONE) return;
+
+  const int playDirection = ndConfig.get(CFG_CONTROL) == CTRL_2 ? -1 : 1;
 
   if (inputBuffer == btnSW15) {
     sendEvent(disp.currentView == ViewMode::Browser ? event::UpDir : event::Browser);
@@ -471,16 +466,16 @@ void Input::inputHandler() {
   } else if (disp.currentView == ViewMode::Visual) {
     switch (inputBuffer) {
       case btnUP:
-        ndFile.requestDirPlay(1);
+        ndFile.requestDirPlay(playDirection);
         break;
       case btnDOWN:
-        ndFile.requestDirPlay(-1);
-        break;
-      case btnRIGHT:
-        ndFile.requestFilePlay(-1);
+        ndFile.requestDirPlay(-playDirection);
         break;
       case btnLEFT:
-        ndFile.requestFilePlay(1);
+        ndFile.requestFilePlay(playDirection);
+        break;
+      case btnRIGHT:
+        ndFile.requestFilePlay(-playDirection);
         break;
       case btnSELECT:
         if (releasePlayHold()) {
@@ -494,16 +489,16 @@ void Input::inputHandler() {
   } else if (ndConfig.currentMode == MODE_PLAYER) {
     switch (inputBuffer) {
       case btnUP:
-        ndFile.requestDirPlay(1);
+        ndFile.requestDirPlay(playDirection);
         break;
       case btnDOWN:
-        ndFile.requestDirPlay(-1);
-        break;
-      case btnRIGHT:
-        ndFile.requestFilePlay(-1);
+        ndFile.requestDirPlay(-playDirection);
         break;
       case btnLEFT:
-        ndFile.requestFilePlay(1);
+        ndFile.requestFilePlay(playDirection);
+        break;
+      case btnRIGHT:
+        ndFile.requestFilePlay(-playDirection);
         break;
       case btnSELECT:
         if (releasePlayHold()) {

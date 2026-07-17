@@ -2081,7 +2081,7 @@ CFGWindow cfgWindow;
 
 static BrowserPanelRenderer browserRenderer;
 static Panel pnlFiles(0, 26 + BROWSER_CURRENT_DIR_HEIGHT, LCD_W,
-                      LCD_H - 26 - BROWSER_CURRENT_DIR_HEIGHT, BROWSER_ITEM_HEIGHT,
+                      264 - BROWSER_CURRENT_DIR_HEIGHT, BROWSER_ITEM_HEIGHT,
                       &browserRenderer);
 
 static void pushBrowserFrameBufferArea(int y, int height) {
@@ -2265,6 +2265,7 @@ void BrowserPanelRenderer::onDrawItem(LGFX_Sprite& target, int itemIndex, int x,
 
 void BrowserWindow::init() {
   initHeaders();
+  initFooter();
   if (_sprCurrentDir.width() == 0) {
     _sprCurrentDir.setPsram(true);
     _sprCurrentDir.createSprite(LCD_W, BROWSER_CURRENT_DIR_HEIGHT);
@@ -2337,8 +2338,40 @@ void BrowserWindow::draw() {
   pnlFiles.ensureVisible();
   pnlFiles.invalidate();
   pnlFiles.update(frameBuffer);
+  drawFooter(true);
   frameBuffer.pushSprite(0, 0);
   xSemaphoreGive(spFrameBuffer);
+}
+
+void BrowserWindow::initFooter() {
+  if (_sprFooter.width() != 0) return;
+
+  _sprFooter.createSprite(LCD_W, 23);
+  _sprFooter.fillSprite(TFT_WHITE);
+  _sprFooter.fillRoundRect(64, 0, 27, 23, 2, C_FOOTER_ACTIVE);
+  _sprFooter.fillRoundRect(93, 0, 27, 23, 2, C_FOOTER_ACTIVE);
+  _sprFooter.fillRoundRect(124, 0, 42, 23, 2, C_FOOTER_ACTIVE);
+  _sprFooter.pushImage(72, 6, CFG_ICON_ARROR_WIDTH, CFG_ICON_ARROR_HEIGHT, cfgUP);
+  _sprFooter.pushImage(101, 6, CFG_ICON_ARROR_WIDTH, CFG_ICON_ARROR_HEIGHT, cfgDOWN);
+
+  OpenFontRender render;
+  render.setUseRenderTask(false);
+  render.setDrawer(_sprFooter);
+  render.loadFont(fontMain, sizeof(fontMain));
+  render.setFontSize(18);
+  render.setAlignment(Align::TopCenter);
+  render.setFontColor(C_LIGHTGRAY, C_FOOTER_ACTIVE);
+  render.setCursor(124 + 42 / 2, 4);
+  render.printf("OK");
+  render.unloadFont();
+}
+
+void BrowserWindow::drawFooter(bool toFrameBuffer) {
+  if (toFrameBuffer) {
+    _sprFooter.pushSprite(&frameBuffer, 0, 293);
+  } else {
+    _sprFooter.pushSprite(&lcd, 0, 293);
+  }
 }
 
 void BrowserWindow::drawCurrentDir() {
