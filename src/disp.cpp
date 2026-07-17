@@ -2348,29 +2348,48 @@ void BrowserWindow::initFooter() {
 
   _sprFooter.createSprite(LCD_W, 23);
   _sprFooter.fillSprite(TFT_WHITE);
-  _sprFooter.fillRoundRect(64, 0, 27, 23, 2, C_FOOTER_ACTIVE);
-  _sprFooter.fillRoundRect(93, 0, 27, 23, 2, C_FOOTER_ACTIVE);
-  _sprFooter.fillRoundRect(124, 0, 42, 23, 2, C_FOOTER_ACTIVE);
-  _sprFooter.pushImage(72, 6, CFG_ICON_ARROR_WIDTH, CFG_ICON_ARROR_HEIGHT, cfgUP);
-  _sprFooter.pushImage(101, 6, CFG_ICON_ARROR_WIDTH, CFG_ICON_ARROR_HEIGHT, cfgDOWN);
+  _sprFooter.fillRoundRect(2, 0, 29, 23, 2, C_FOOTER_ACTIVE);
+  _sprFooter.fillRoundRect(33, 0, 29, 23, 2, C_FOOTER_ACTIVE);
+  _sprFooter.fillRoundRect(64, 0, 29, 23, 2, C_FOOTER_ACTIVE);
+  _sprFooter.fillRoundRect(95, 0, 29, 23, 2, C_FOOTER_ACTIVE);
+  _sprFooter.fillRoundRect(126, 0, 42, 23, 2, C_FOOTER_ACTIVE);
+  _sprFooter.drawLine(12, 7, 21, 16, C_LIGHTGRAY);
+  _sprFooter.drawLine(13, 7, 22, 16, C_LIGHTGRAY);
+  _sprFooter.drawLine(21, 7, 12, 16, C_LIGHTGRAY);
+  _sprFooter.drawLine(22, 7, 13, 16, C_LIGHTGRAY);
+  _sprFooter.pushImage(73, 6, CFG_ICON_ARROR_WIDTH, CFG_ICON_ARROR_HEIGHT, cfgUP);
+  _sprFooter.pushImage(104, 6, CFG_ICON_ARROR_WIDTH, CFG_ICON_ARROR_HEIGHT, cfgDOWN);
 
   OpenFontRender render;
   render.setUseRenderTask(false);
   render.setDrawer(_sprFooter);
   render.loadFont(fontMain, sizeof(fontMain));
-  render.setFontSize(18);
   render.setAlignment(Align::TopCenter);
   render.setFontColor(C_LIGHTGRAY, C_FOOTER_ACTIVE);
-  render.setCursor(124 + 42 / 2, 4);
+  render.setFontSize(17);
+  render.setCursor(33 + 29 / 2, 4);
+  render.printf("../");
+  render.setFontSize(18);
+  render.setCursor(126 + 42 / 2, 4);
   render.printf("OK");
   render.unloadFont();
 }
 
 void BrowserWindow::drawFooter(bool toFrameBuffer) {
+  const bool upDirEnabled = _browseDirNode != nullptr &&
+                            _browseDirNode != fileTree.getRoot() &&
+                            _browseDirNode->parent != nullptr;
+
   if (toFrameBuffer) {
     _sprFooter.pushSprite(&frameBuffer, 0, 293);
+    if (!upDirEnabled) {
+      frameBuffer.fillRoundRect(33, 293, 29, 23, 2, C_FOOTER_INACTIVE);
+    }
   } else {
     _sprFooter.pushSprite(&lcd, 0, 293);
+    if (!upDirEnabled) {
+      lcd.fillRoundRect(33, 293, 29, 23, 2, C_FOOTER_INACTIVE);
+    }
   }
 }
 

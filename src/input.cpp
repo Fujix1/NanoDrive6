@@ -426,10 +426,10 @@ void Input::inputHandler() {
   if (disp.currentView == ViewMode::Browser) {
     switch (inputBuffer) {
       case btnUP:
-        sendEvent(event::Up);
+        sendEvent(event::Close);
         break;
       case btnDOWN:
-        sendEvent(event::Down);
+        sendEvent(event::UpDir);
         break;
       case btnLEFT:
         sendEvent(event::Left);
