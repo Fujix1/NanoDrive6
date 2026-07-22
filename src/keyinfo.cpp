@@ -27,7 +27,7 @@ void keyboard::reset() {
       trackLevel[i] = 0;
     }
     xSemaphoreGive(keyinfoMutex);
-    Serial.printf("Key Info Reset.\n");
+    // Serial.printf("Key Info Reset.\n");
   }
 }
 
