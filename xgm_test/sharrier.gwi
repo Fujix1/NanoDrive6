@@ -100,35 +100,35 @@
 
 
 
-'@ P 0,".\wavs\hihat.wav"     , 8000, 95, OPN2X  ; c
-'@ P 2,".\wavs\hihat+.wav"    , 8000, 95, OPN2X  ; c+
-'@ P 1,".\wavs\kick.wav"      , 8000, 90, OPN2X  ; e
-'@ P 3,".\wavs\tom-h.wav"     , 8000, 95, OPN2X  ; a
-'@ P 4,".\wavs\tom-m.wav"     , 8000, 95, OPN2X  ; g
-'@ P 5,".\wavs\tom-l.wav"     , 8000, 95, OPN2X  ; f
-'@ P 6,".\wavs\snare2.wav"    , 8000, 95, OPN2X  ; d
-'@ P 7,".\wavs\snare.wav"     , 8000, 95, OPN2X  ; d+
-'@ P 32,".\wavs\kick2.wav"    , 8000, 90, OPN2X  ; b
-'@ P 33,".\wavs\kick2+.wav"   , 8000, 90, OPN2X  ; a+
+'@ P 0,".\wavs\hihat.wav"     , 8000, 115, OPN2X  ; c
+'@ P 2,".\wavs\hihat+.wav"    , 8000, 115, OPN2X  ; c+
+'@ P 1,".\wavs\kick.wav"      , 8000, 100, OPN2X  ; e
+'@ P 3,".\wavs\tom-h.wav"     , 8000, 105, OPN2X  ; a
+'@ P 4,".\wavs\tom-m.wav"     , 8000, 105, OPN2X  ; g
+'@ P 5,".\wavs\tom-l.wav"     , 8000, 105, OPN2X  ; f
+'@ P 6,".\wavs\snare2.wav"    , 8000, 105, OPN2X  ; d
+'@ P 7,".\wavs\snare.wav"     , 8000, 105, OPN2X  ; d+
+'@ P 32,".\wavs\kick2.wav"    , 8000, 100, OPN2X  ; b
+'@ P 33,".\wavs\kick2+.wav"   , 8000, 100, OPN2X  ; a+
 
-'@ P 10,".\wavs\o2c.wav"      , 8000, 95, OPN2X  ; 
-'@ P 11,".\wavs\o2d.wav"      , 8000, 95, OPN2X  ; 
-'@ P 12,".\wavs\o2e.wav"      , 8000, 95, OPN2X  ; 
-'@ P 13,".\wavs\o2f.wav"      , 8000, 95, OPN2X  ; 
-'@ P 14,".\wavs\o2g.wav"      , 8000, 95, OPN2X  ; 
-'@ P 15,".\wavs\o2g#.wav"     , 8000, 95, OPN2X  ; 
-'@ P 16,".\wavs\o2a.wav"      , 8000, 95, OPN2X  ; 
-'@ P 17,".\wavs\o2a#.wav"     , 8000, 95, OPN2X  ; 
-'@ P 18,".\wavs\o2b.wav"      , 8000, 95, OPN2X  ; 
-'@ P 19,".\wavs\o3c.wav"      , 8000, 95, OPN2X  ; 
-'@ P 20,".\wavs\o3d.wav"      , 8000, 95, OPN2X  ; 
-'@ P 21,".\wavs\o3e.wav"      , 8000, 95, OPN2X  ; 
-'@ P 22,".\wavs\o3f.wav"      , 8000, 95, OPN2X  ; 
-'@ P 23,".\wavs\o3g.wav"      , 8000, 95, OPN2X  ; 
-'@ P 24,".\wavs\o3g#.wav"     , 8000, 95, OPN2X  ; 
-'@ P 25,".\wavs\o3a.wav"      , 8000, 95, OPN2X  ; 
-'@ P 26,".\wavs\o3a#.wav"     , 8000, 95, OPN2X  ; 
-'@ P 27,".\wavs\o3b.wav"      , 8000, 95, OPN2X  ; 
+'@ P 10,".\wavs\o2c.wav"      , 8000, 105, OPN2X  ; 
+'@ P 11,".\wavs\o2d.wav"      , 8000, 105, OPN2X  ; 
+'@ P 12,".\wavs\o2e.wav"      , 8000, 105, OPN2X  ; 
+'@ P 13,".\wavs\o2f.wav"      , 8000, 105, OPN2X  ; 
+'@ P 14,".\wavs\o2g.wav"      , 8000, 105, OPN2X  ; 
+'@ P 15,".\wavs\o2g#.wav"     , 8000, 105, OPN2X  ; 
+'@ P 16,".\wavs\o2a.wav"      , 8000, 105, OPN2X  ; 
+'@ P 17,".\wavs\o2a#.wav"     , 8000, 105, OPN2X  ; 
+'@ P 18,".\wavs\o2b.wav"      , 8000, 105, OPN2X  ; 
+'@ P 19,".\wavs\o3c.wav"      , 8000, 105, OPN2X  ; 
+'@ P 20,".\wavs\o3d.wav"      , 8000, 105, OPN2X  ; 
+'@ P 21,".\wavs\o3e.wav"      , 8000, 105, OPN2X  ; 
+'@ P 22,".\wavs\o3f.wav"      , 8000, 105, OPN2X  ; 
+'@ P 23,".\wavs\o3g.wav"      , 8000, 105, OPN2X  ; 
+'@ P 24,".\wavs\o3g#.wav"     , 8000, 105, OPN2X  ; 
+'@ P 25,".\wavs\o3a.wav"      , 8000, 105, OPN2X  ; 
+'@ P 26,".\wavs\o3a#.wav"     , 8000, 105, OPN2X  ; 
+'@ P 27,".\wavs\o3b.wav"      , 8000, 105, OPN2X  ; 
 
 '@ P 30,".\wavs\o2a#+hihat+.wav", 8000, 95, OPN2X
 '@ P 31,".\wavs\o2d+hihat+.wav", 8000, 95, OPN2X

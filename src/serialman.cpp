@@ -10,6 +10,10 @@
 
 #define SERIAL_SIZE_RX 65535
 
+namespace {
+constexpr uint32_t PCM_BURST_SPREAD_US = 4;
+}  // namespace
+
 constexpr std::array<si5351Freq_t, 5> YM2612ClockOptions = {
     SI5351_7670,  // 7.670453 MHz
     SI5351_8000,  // 8 MHz
@@ -38,9 +42,8 @@ u32_t getSerial32() { return getSerial() + (getSerial() << 8) + (getSerial() << 
 
 // シリアル受信用タスク
 void serialCheckerTask(void* param) {
-  u8_t command, reg, dat, samples;
+  u8_t command, reg, dat;
   u32_t clock0 = SI5351_3579, clock1 = SI5351_2000;
-  int32_t wait = 0;
   lcd.setCursor(5, 77);
   // lcd.printf("%02x %02x %02x", 0x53, reg, dat);
 
@@ -75,15 +78,17 @@ void serialCheckerTask(void* param) {
         FM.setRegister(reg, dat, 0);
         break;
       }
-      case 0x80 ... 0x8f:
+      case 0x80 ... 0x8f: {
         dat = getSerial();
         FM.setYM2612DAC(dat, 0);
-        // samples = command & 15;
-        // wait = samples * 22.675 - 16;
-        // if (wait > 0) {
-        //   ets_delay_us(wait);
-        // }
+
+        // PC側がイベント時刻を管理しているため、ND6側ではPCM周波数を作らない。
+        // USB CDCの受信FIFOに後続データがある場合だけ、ごく短い間隔でバーストを広げる。
+        if (Serial.available() > 0) {
+          ets_delay_us(PCM_BURST_SPREAD_US);
+        }
         break;
+      }
 
         // Additional Commands
 
