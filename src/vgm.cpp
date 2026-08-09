@@ -68,6 +68,13 @@ bool VGM::ready() {
   _vgmRealSamples = 0;
   _vgmWaitUntil = 0;
   _vgmTimingStarted = false;
+  _vgmAtInitialTimestamp = true;
+  _vgmInitialKeyWriteSequence = 0;
+  for (int i = 0; i < 8; i++) {
+    _vgmInitialKeyWriteValid[i] = false;
+    _vgmInitialKeyWriteData[i] = 0;
+    _vgmInitialKeyWriteOrder[i] = 0;
+  }
   _pcmpos = 0;
   for (int i = 0; i < 0x40; i++) {
     _vgmDataBlocks[i].clear();
@@ -678,6 +685,13 @@ void VGM::vgmProcess() {
       // 終端後のデータを読み続けると範囲外参照になる。
       return;
     }
+    if (_vgmAtInitialTimestamp && _vgmSamples > 0) {
+      // VGM上で時刻0のキー操作はソフトウェア再生では無時間で処理されるが、
+      // 実チップでは書き込み待ちの間に中間キーオンが発音してしまう。
+      // 最初の正ウェイト直前に、各チャンネルの最終キー状態だけを反映する。
+      _vgmFlushInitialKeyWrites();
+      _vgmAtInitialTimestamp = false;
+    }
     if (++processedCommands >= kVgmCommandBudgetPerLoop && _vgmSamples <= _vgmRealSamples) {
       taskYIELD();
       return;
@@ -686,6 +700,33 @@ void VGM::vgmProcess() {
 
   _vgmRealSamples = _vgmSamples;
   _vgmWaitUntil = _vgmStart + (_vgmRealSamples * 1000000ULL * VGM_TIME_SCALE) / 44100;
+}
+
+void VGM::_vgmBufferInitialKeyWrite(u8_t data) {
+  const u8_t channel = data & 0x07;
+  _vgmInitialKeyWriteValid[channel] = true;
+  _vgmInitialKeyWriteData[channel] = data;
+  _vgmInitialKeyWriteOrder[channel] = ++_vgmInitialKeyWriteSequence;
+}
+
+void VGM::_vgmFlushInitialKeyWrites() {
+  u32_t previousOrder = 0;
+  while (true) {
+    int nextChannel = -1;
+    u32_t nextOrder = UINT32_MAX;
+    for (int channel = 0; channel < 8; channel++) {
+      if (_vgmInitialKeyWriteValid[channel] && _vgmInitialKeyWriteOrder[channel] > previousOrder &&
+          _vgmInitialKeyWriteOrder[channel] < nextOrder) {
+        nextChannel = channel;
+        nextOrder = _vgmInitialKeyWriteOrder[channel];
+      }
+    }
+    if (nextChannel < 0) {
+      break;
+    }
+    FM.setYM2612(0, 0x28, _vgmInitialKeyWriteData[nextChannel], 0);
+    previousOrder = nextOrder;
+  }
 }
 
 void VGM::_vgmStopStream(u8_t streamID) {
@@ -941,7 +982,11 @@ void VGM::vgmProcessMain() {
       dat = ndFile.get_ui8();
       if ((reg >= 0x30 && reg <= 0xB6) || reg == 0x22 || reg == 0x27 || reg == 0x28 || reg == 0x2A ||
           reg == 0x2B || reg == 0x2C) {  // 未ドキュメント命令
-        FM.setYM2612(0, reg, dat, 0);
+        if (_vgmAtInitialTimestamp && reg == 0x28) {
+          _vgmBufferInitialKeyWrite(dat);
+        } else {
+          FM.setYM2612(0, reg, dat, 0);
+        }
       }
       break;
 
