@@ -98,6 +98,7 @@ class PlayerWindow {
   void drawBG();
   void redraw();
   void updateDisp(tDispData data);
+  void showHeaderMessage(const char* message);
   void updateHeader(int64_t sec, bool visible = true, uint32_t ticksToWait = portMAX_DELAY);
   void updateHeaderBlocking(int64_t sec);
   void eventHandler(event ev);
@@ -277,6 +278,7 @@ class VisualWindow {
   void updateLabels();
   void drawTimestamp(int64_t sec);
   void drawTimestamp(int64_t sec, bool visible);
+  void showTimestampMessage(const char* message);
   void show();
   void close();
   void eventHandler(event ev);

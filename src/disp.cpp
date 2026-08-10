@@ -780,6 +780,23 @@ static void drawHeaderTime(LGFX_Sprite& target, int64_t sec, int x, int y, bool 
   render.unloadFont();
 }
 
+void PlayerWindow::showHeaderMessage(const char* message) {
+  xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
+  sprHeader.createSprite(LCD_W, 19);
+  sprHeader.fillSprite(C_HEADER);
+  render.setDrawer(sprHeader);
+  render.setAlignment(Align::TopCenter);
+  render.loadFont(nimbusBold, sizeof(nimbusBold));
+  render.setFontSize(14);
+  render.setFontColor(TFT_WHITE, C_HEADER);
+  render.setCursor(LCD_W / 2, HEADER_TIME_Y);
+  render.printf("%s", message);
+  render.unloadFont();
+  sprHeader.pushSprite(0, 0);
+  sprHeader.deleteSprite();
+  xSemaphoreGive(spFrameBuffer);
+}
+
 void PlayerWindow::updateHeader(int64_t sec, bool visible, uint32_t ticksToWait) {
   if (xSemaphoreTake(spFrameBuffer, ticksToWait) == pdTRUE) {
     sprHeader.createSprite(HEADER_TIME_W, HEADER_TIME_H);
@@ -1683,6 +1700,46 @@ void VisualWindow::drawTimestamp(int64_t sec) {
 void VisualWindow::drawTimestamp(int64_t sec, bool visible) {
   lockDrawing();
   drawTimestamp(sec, false, visible);
+  unlockDrawing();
+}
+
+void VisualWindow::showTimestampMessage(const char* message) {
+  static constexpr int kMessageSourceW = 80;
+  static constexpr int kMessageSourceH = 14;
+
+  lockDrawing();
+
+  LGFX_Sprite source(&lcd);
+  LGFX_Sprite rotated(&lcd);
+  source.setPsram(false);
+  rotated.setPsram(false);
+  source.createSprite(kMessageSourceW, kMessageSourceH);
+  rotated.createSprite(kMessageSourceH, kMessageSourceW);
+
+  if (source.width() != 0 && rotated.width() != 0) {
+    source.fillSprite(TFT_BLACK);
+    rotated.fillSprite(TFT_BLACK);
+    render.setDrawer(source);
+    render.setAlignment(Align::TopCenter);
+    render.loadFont(nimbusBold, sizeof(nimbusBold));
+    render.setFontSize(14);
+    render.setFontColor(C_MDX_ON, TFT_BLACK);
+    render.setCursor(source.width() / 2, 0);
+    render.printf("%s", message);
+    render.unloadFont();
+
+    source.setPivot(source.width() / 2.0f, source.height() / 2.0f);
+    const float angle = kVisualRotate180 ? 90.0f : -90.0f;
+    source.pushRotateZoom(&rotated, rotated.width() / 2.0f, rotated.height() / 2.0f,
+                          angle, 1.0f, 1.0f, TFT_BLACK);
+
+    const int x = LCD_W - rotated.width() - 2;
+    pushVisualSpriteToLcd(rotated, x, 0);
+    _lastTimestampSec = INT64_MAX;
+  }
+
+  source.deleteSprite();
+  rotated.deleteSprite();
   unlockDrawing();
 }
 

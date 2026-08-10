@@ -14,6 +14,15 @@ static u16_t scanProgressY = 0;
 
 #define ND_SD_MOUNTPOINT "/sd"
 #define ND_FILETREE_SCAN_PROGRESS_INTERVAL 20
+#define ND_LOADING_FILE_SIZE (512 * 1024)  // LOADING... 出すファイルの閾値
+
+static void showFileOpenMessage(const char* message) {
+  if (disp.currentView == ViewMode::Visual) {
+    visualWindow.showTimestampMessage(message);
+  } else {
+    playerWindow.showHeaderMessage(message);
+  }
+}
 
 void showError(String message) {
   lcd.setCursor(0, 75);
@@ -275,6 +284,12 @@ FileFormat NDFile::readFile(String path) {
     return FileFormat::Unknown;
   }
 
+  vgm.size = hFile.size();
+  Serial.printf("file size: %u Bytes.\n", vgm.size);
+  if (vgm.size >= ND_LOADING_FILE_SIZE) {
+    showFileOpenMessage("Loading...");
+  }
+
   // ヘッダチェック
   uint8_t header[4] = {0};
   if (hFile.read(header, sizeof(header)) != sizeof(header)) {
@@ -287,9 +302,6 @@ FileFormat NDFile::readFile(String path) {
   bool isGz = (header[0] == 0x1F && header[1] == 0x8B);
   bool isXGM1 = (header[0] == 'X' && header[1] == 'G' && header[2] == 'M' && header[3] == ' ');
   bool isXGM2 = (header[0] == 'X' && header[1] == 'G' && header[2] == 'M' && header[3] == '2');
-
-  vgm.size = hFile.size();
-  Serial.printf("file size: %u Bytes.\n", vgm.size);
 
   if (isXGM1) {  // XGM1 のとき
     accessMode = ACCESS_PSRAM;
@@ -866,6 +878,10 @@ bool NDFile::_openFile(String path, int8_t att) {
     default:
       ND::canPlay = false;
       break;
+  }
+
+  if (!ND::canPlay) {
+    showFileOpenMessage("ERROR");
   }
 
   if (ND::canPlay && ndConfig.get(CFG_PAUSE) != HOLD_NONE) {
