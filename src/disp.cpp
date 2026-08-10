@@ -1202,6 +1202,7 @@ void PlayerWindow::show() {
   disp.lastView = ViewMode::Player;
   ndConfig.saveLastView(LAST_VIEW_PLAYER);
   redraw();
+  disp.playbackViewInitialized = true;
 }
 
 //---------------------------------------------------------------------------
@@ -2123,6 +2124,7 @@ void VisualWindow::show() {
   disp.lastView = ViewMode::Visual;
   ndConfig.saveLastView(LAST_VIEW_VISUAL);
   draw();
+  disp.playbackViewInitialized = true;
 }
 
 void VisualWindow::close() {

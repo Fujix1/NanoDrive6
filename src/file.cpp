@@ -17,6 +17,10 @@ static u16_t scanProgressY = 0;
 #define ND_LOADING_FILE_SIZE (512 * 1024)  // LOADING... 出すファイルの閾値
 
 static void showFileOpenMessage(const char* message) {
+  if (!disp.playbackViewInitialized) {
+    return;
+  }
+
   if (disp.currentView == ViewMode::Visual) {
     visualWindow.showTimestampMessage(message);
   } else {

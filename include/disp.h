@@ -73,6 +73,7 @@ class Disp {
   ViewMode currentView = ViewMode::Player;
   ViewMode lastView = currentView;
   bool stopTimerDrawing = true;
+  bool playbackViewInitialized = false;
 };
 
 extern Disp disp;
