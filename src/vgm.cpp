@@ -15,6 +15,10 @@
 
 namespace {
 constexpr u8_t kVgmCommandBudgetPerLoop = 64;
+// VGM時刻0のキー書き込みは、チャンネルごとの最終状態だけを反映する。
+constexpr bool kCoalesceInitialKeyWrites = true;
+// VGM時刻0のゼロウェイトDAC列は、ソフトウェア再生と同じく最終値だけを反映する。
+constexpr bool kCoalesceInitialDacWrites = true;
 
 static bool isYM2203FmRegister(u8_t reg) {
   return reg == 0x28 || (reg >= 0x30 && reg <= 0x9E) || (reg >= 0xA0 && reg <= 0xB6);
@@ -68,13 +72,16 @@ bool VGM::ready() {
   _vgmRealSamples = 0;
   _vgmWaitUntil = 0;
   _vgmTimingStarted = false;
-  _vgmAtInitialTimestamp = true;
+  _vgmAtInitialTimestamp = kCoalesceInitialKeyWrites;
   _vgmInitialKeyWriteSequence = 0;
   for (int i = 0; i < 8; i++) {
     _vgmInitialKeyWriteValid[i] = false;
     _vgmInitialKeyWriteData[i] = 0;
     _vgmInitialKeyWriteOrder[i] = 0;
   }
+  _vgmAtInitialDacTimestamp = kCoalesceInitialDacWrites;
+  _vgmInitialDacWritePending = false;
+  _vgmInitialDacWriteData = 0x80;
   _pcmpos = 0;
   for (int i = 0; i < 0x40; i++) {
     _vgmDataBlocks[i].clear();
@@ -667,7 +674,8 @@ void VGM::vgmProcess() {
   }
 
   // VGMのウェイト中も入力処理へ制御を返す。
-  if (_vgmWaitUntil > _micros10()) {
+  const u64_t processStartTick = _micros10();
+  if (_vgmWaitUntil > processStartTick) {
     if (_vgmHasPlayingStream) {
       _vgmProcessStreams();
     }
@@ -675,8 +683,9 @@ void VGM::vgmProcess() {
     return;
   }
 
-  u8_t processedCommands = 0;
+  u16_t processedCommands = 0;
   while (_vgmSamples <= _vgmRealSamples) {
+    const u64_t samplesBeforeCommand = _vgmSamples;
     vgmProcessMain();
     if (!ND::canPlay) {
       // 0x66終端などで endProcedure() が次曲要求をキューへ積んだら、
@@ -692,7 +701,17 @@ void VGM::vgmProcess() {
       _vgmFlushInitialKeyWrites();
       _vgmAtInitialTimestamp = false;
     }
-    if (++processedCommands >= kVgmCommandBudgetPerLoop && _vgmSamples <= _vgmRealSamples) {
+    if (_vgmAtInitialDacTimestamp && _vgmSamples > 0) {
+      // 時刻0にゼロウェイトで並ぶDAC値は実チップでは不要な実時間を持つため、
+      // 最初の正ウェイト直前の最終値だけを反映する。
+      _vgmFlushInitialDacWrite();
+      _vgmAtInitialDacTimestamp = false;
+    }
+    const bool timestampAdvanced = _vgmSamples > samplesBeforeCommand;
+    // 同一VGM時刻の途中で中断すると、後方にあるPCM書き込みだけがタスク切替分遅れる。
+    // コマンド予算を超えても、次の正ウェイトへ到達するまでは命令順のまま処理する。
+    if (++processedCommands >= kVgmCommandBudgetPerLoop && timestampAdvanced &&
+        _vgmSamples <= _vgmRealSamples) {
       taskYIELD();
       return;
     }
@@ -727,6 +746,19 @@ void VGM::_vgmFlushInitialKeyWrites() {
     FM.setYM2612(0, 0x28, _vgmInitialKeyWriteData[nextChannel], 0);
     previousOrder = nextOrder;
   }
+}
+
+void VGM::_vgmBufferInitialDacWrite(u8_t data) {
+  _vgmInitialDacWriteData = data;
+  _vgmInitialDacWritePending = true;
+}
+
+void VGM::_vgmFlushInitialDacWrite() {
+  if (!_vgmInitialDacWritePending) {
+    return;
+  }
+  FM.setYM2612DAC(_vgmInitialDacWriteData, 0);
+  _vgmInitialDacWritePending = false;
 }
 
 void VGM::_vgmStopStream(u8_t streamID) {
@@ -984,6 +1016,12 @@ void VGM::vgmProcessMain() {
           reg == 0x2B || reg == 0x2C) {  // 未ドキュメント命令
         if (_vgmAtInitialTimestamp && reg == 0x28) {
           _vgmBufferInitialKeyWrite(dat);
+        } else if (reg == 0x2A) {
+          if (_vgmAtInitialDacTimestamp) {
+            _vgmBufferInitialDacWrite(dat);
+          } else {
+            FM.setYM2612DAC(dat, 0);
+          }
         } else {
           FM.setYM2612(0, reg, dat, 0);
         }
@@ -1111,7 +1149,11 @@ void VGM::vgmProcessMain() {
       break;
 
     case 0x80 ... 0x8f:
-      FM.setYM2612DAC(ndFile.data[_pcmpos++], 0);
+      if (_vgmAtInitialDacTimestamp) {
+        _vgmBufferInitialDacWrite(ndFile.data[_pcmpos++]);
+      } else {
+        FM.setYM2612DAC(ndFile.data[_pcmpos++], 0);
+      }
 
       _vgmSamples += (command & 15);
       break;
