@@ -107,7 +107,7 @@ void setup() {
   lcd.setFont(&fonts::Font2);
   lcd.printf("NANO DRIVE %s\n", ND::versionLabel());
   lcd.println("2024-2026 fujix@e2j.net");
-  lcd.printf("Firmware ver 3.0b6\n\n");
+  lcd.printf("Firmware ver 3.0b7\n\n");
 
   // PSRAM 初期化確認
   if (psramInit()) {
@@ -226,6 +226,7 @@ void setup() {
     if (playbackTaskCreated != pdPASS || hPlaybackTask == nullptr) {
       Serial.println("ERROR: playback task init failed.");
     }
+    serialMan.startTrackMaskTask();
   }
 
   Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
@@ -250,6 +251,7 @@ void loop() {
 // 再生制御要求処理
 static void playbackTask(void* param) {
   while (1) {
+    FM.applyPendingChannelMask();
     FM.applyPendingYM2612OutputMode();
 
     if (ND::canPlay && !ND::isPaused) {

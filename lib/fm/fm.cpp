@@ -8,6 +8,14 @@
 #include "../../include/nd.h"
 
 dedic_gpio_bundle_handle_t dataBus = NULL;  // GPIOバンドル用ハンドラ
+static portMUX_TYPE ym2612ChmaskMux = portMUX_INITIALIZER_UNLOCKED;
+static volatile uint8_t ym2612PanMode = TPAN_NORMAL;
+static volatile uint8_t sn76489AttenuationMode = SN_ATT_0;
+// YM2612 のアドレスラッチは port 0/1 で共有されるため、chip ごとに管理する。
+// bank ごとに分けると port 1 の FM 書き込み後も DAC の 0x2A 再選択を
+// 省略してしまい、DAC データが別レジスタへ送られる。
+static byte ym2612LastAddr[3] = {};
+static bool ym2612LastAddrValid[3] = {};
 
 // ------------------------------------------------------------------------------
 // FM音源クラス
@@ -71,6 +79,8 @@ void FMChip::reset(void) {
   }
 
   for (uint8_t chip = 0; chip < 3; chip++) {
+    ym2612LastAddr[chip] = 0;
+    ym2612LastAddrValid[chip] = false;
     for (uint8_t bank = 0; bank < 2; bank++) {
       for (uint8_t reg = 0; reg < 16; reg++) {
         _ym2612TlReg[chip][bank][reg] = 0;
@@ -133,7 +143,7 @@ static byte applySN76489Attenuation(byte data) {
   }
 
   uint8_t attenuation = data & 0x0f;
-  switch (ndConfig.get(CFG_SNATT)) {
+  switch (sn76489AttenuationMode) {
     case SN_ATT_2:
       if (attenuation <= 7) {
         attenuation++;
@@ -215,8 +225,6 @@ void FMChip::writeRaw(byte data, byte chipno, si5351Freq_t freq) {
   _updateSN76489VisualState(visualData, chipno, freq);
 }
 
-byte lastAddr = 0;
-
 static NoteInfo freqToNote(double freq) {
   if (freq <= 0) {
     return {0, 0};
@@ -262,7 +270,7 @@ void FMChip::_updateSN76489ChannelNote(uint8_t chipno, uint8_t ch, si5351Freq_t 
 
   uint8_t trackNo = 0xff;
   if (chipno == 1) {
-    trackNo = (uint8_t)(8 + ch);   // Track 9-12: SN76489 (1)
+    trackNo = (uint8_t)(8 + ch);  // Track 9-12: SN76489 (1)
   } else if (chipno == 2) {
     trackNo = (uint8_t)(12 + ch);  // Track 13-16: SN76489 (2)
   }
@@ -569,7 +577,7 @@ void FMChip::_updateYM2612VisualState(byte bank, byte addr, byte data, uint8_t c
 }
 
 void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
-  if (ndConfig.get(CFG_FMPCM) == FMPCM_FM && addr == 0x2A) {
+  if (_ym2612OutputMode == FMPCM_FM && addr == 0x2A) {
     return;  // DAC data off (FM only)
   }
 
@@ -581,7 +589,7 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
     _ym2612TlRegValid[chipno][bank][reg] = true;
   }
 
-  bool invertPan = ndConfig.get(CFG_YM2612_PAN) == TPAN_INVERT;
+  bool invertPan = ym2612PanMode == TPAN_INVERT;
   if (ND::version == nd_v60) {
     invertPan = !invertPan;
   }
@@ -589,7 +597,7 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
     data = (data & 0x3F) | ((data & 0x80) >> 1) | ((data & 0x40) << 1);
   }
 
-  data = _applyYM2612OutputMode(bank, addr, data, chipno);
+  data = _applyYM2612ChannelMask(bank, addr, data, chipno);
   _updateYM2612VisualState(bank, addr, data, chipno);
 
   switch (chipno) {
@@ -609,7 +617,8 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
     A1_LOW;
   }
 
-  lastAddr = addr;
+  ym2612LastAddr[chipno] = addr;
+  ym2612LastAddrValid[chipno] = true;
 
   // Address
   A0_LOW;
@@ -647,9 +656,9 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
   if (addr == 0x2a) {
     _updateYM2612DacLevel(data, chipno);
   } else if (addr >= 0x21 && addr <= 0x9e) {
-    ets_delay_us(12);  // 83 cycles = 10.79us,
+    ets_delay_us(11);  // 83 cycles = 10.79us,
   } else if (addr >= 0xa0 && addr <= 0xb6) {
-    ets_delay_us(8);  // 47 cycles = 6.11us
+    ets_delay_us(7);  // 47 cycles = 6.11us
   }
 
   // YM3438 Twww マニュアルより
@@ -660,15 +669,24 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
   // データ-アドレスライト間  データデータ間 ($A0 - $B6) 47サイクル = 6.11 us
 }
 
-byte FMChip::_applyYM2612OutputMode(byte bank, byte addr, byte data, uint8_t chipno) const {
-  (void)bank;
-  (void)chipno;
-
-  if (ndConfig.get(CFG_FMPCM) != FMPCM_PCM || addr < 0x40 || addr > 0x4F) {
+byte FMChip::_applyYM2612ChannelMask(byte bank, byte addr, byte data, uint8_t chipno) const {
+  if (chipno != 0 || bank >= 2 || addr < 0x40 || addr > 0x4F) {
     return data;
   }
 
-  return 0x7F;  // 全FMオペレータを最大減衰。DAC出力には影響しない。
+  const uint8_t bankCh = (addr - 0x40) & 0x03;
+  if (bankCh >= 3) {
+    return data;
+  }
+
+  const uint8_t ch = bank * 3 + bankCh;
+  const u8_t outputModeMask = _ym2612OutputMode == FMPCM_PCM ? 0x3f : 0x00;
+  const u8_t effectiveMask = ym2612_chmask | outputModeMask;
+  if (effectiveMask & (u8_t)(1u << ch)) {
+    return 0x7F;  // 対象chの全FMオペレータを最大減衰。DAC出力には影響しない。
+  }
+
+  return data;
 }
 
 void FMChip::_writeCachedYM2612Tl(uint8_t chipno) {
@@ -683,7 +701,35 @@ void FMChip::_writeCachedYM2612Tl(uint8_t chipno) {
   }
 }
 
-void FMChip::requestApplyYM2612OutputMode() { _ym2612OutputModeApplyPending = true; }
+void FMChip::_writeCachedYM2612ChannelTl(uint8_t chipno, uint8_t ch) {
+  if (chipno >= 3 || ch >= 6) return;
+
+  const uint8_t bank = ch / 3;
+  const uint8_t bankCh = ch % 3;
+  for (uint8_t reg = bankCh; reg < 16; reg += 4) {
+    if (_ym2612TlRegValid[chipno][bank][reg]) {
+      setYM2612(bank, 0x40 + reg, _ym2612TlReg[chipno][bank][reg], chipno);
+    }
+  }
+}
+
+void FMChip::requestApplyYM2612OutputMode() {
+  const int outputMode = ndConfig.get(CFG_FMPCM);
+  if (outputMode >= FMPCM_BOTH && outputMode <= FMPCM_PCM) {
+    _ym2612OutputMode = (u8_t)outputMode;
+  }
+
+  const int panMode = ndConfig.get(CFG_YM2612_PAN);
+  if (panMode >= TPAN_NORMAL && panMode <= TPAN_INVERT) {
+    ym2612PanMode = (u8_t)panMode;
+  }
+
+  const int snAttenuation = ndConfig.get(CFG_SNATT);
+  if (snAttenuation >= SN_ATT_0 && snAttenuation <= SN_ATT_4) {
+    sn76489AttenuationMode = (u8_t)snAttenuation;
+  }
+  _ym2612OutputModeApplyPending = true;
+}
 
 void FMChip::applyPendingYM2612OutputMode() {
   if (!_ym2612OutputModeApplyPending) return;
@@ -694,11 +740,54 @@ void FMChip::applyPendingYM2612OutputMode() {
   }
 }
 
+void FMChip::requestToggleChannelMask(u8_t ch) {
+  if (ch >= 6) return;
+
+  portENTER_CRITICAL(&ym2612ChmaskMux);
+  _pendingYm2612ChToggle ^= (u8_t)(1u << ch);
+  portEXIT_CRITICAL(&ym2612ChmaskMux);
+}
+
+void FMChip::requestResetChannelMask() {
+  portENTER_CRITICAL(&ym2612ChmaskMux);
+  _pendingYm2612ChMaskReset = true;
+  portEXIT_CRITICAL(&ym2612ChmaskMux);
+}
+
+void FMChip::applyPendingChannelMask() {
+  u8_t pending = 0x00;
+  bool reset = false;
+
+  portENTER_CRITICAL(&ym2612ChmaskMux);
+  pending = _pendingYm2612ChToggle;
+  _pendingYm2612ChToggle = 0x00;
+  reset = _pendingYm2612ChMaskReset;
+  _pendingYm2612ChMaskReset = false;
+  portEXIT_CRITICAL(&ym2612ChmaskMux);
+
+  if (reset) {
+    if (ym2612_chmask != 0x00) {
+      ym2612_chmask = 0x00;
+      _writeCachedYM2612Tl(0);
+    }
+    return;
+  }
+
+  for (u8_t ch = 0; ch < 6; ch++) {
+    if (pending & (u8_t)(1u << ch)) {
+      ym2612_chmask ^= (u8_t)(1u << ch);
+      _writeCachedYM2612ChannelTl(0, ch);
+    }
+  }
+}
+
 // YM2612 の DAC データ送信専用
 void FMChip::setYM2612DAC(byte data, uint8_t chipno) {
-  if (ndConfig.get(CFG_FMPCM) == FMPCM_FM) {
+  if (_ym2612OutputMode == FMPCM_FM) {
     return;  // DAC data off (FM only)
   }
+
+  if (chipno >= 3) return;
 
   switch (chipno) {
     case 0:
@@ -707,10 +796,17 @@ void FMChip::setYM2612DAC(byte data, uint8_t chipno) {
     case 1:
       CS1_LOW;
       break;
+    case 2:
+      CS2_LOW;
+      break;
   }
 
-  if (lastAddr != 0x2a) {
-    lastAddr = 0x2a;
+  // DAC data register は port 0。直前にどちらかの port で別アドレスを
+  // 選択していた場合だけ、共有アドレスラッチを 0x2A に戻す。
+  A1_LOW;
+  if (!ym2612LastAddrValid[chipno] || ym2612LastAddr[chipno] != 0x2a) {
+    ym2612LastAddr[chipno] = 0x2a;
+    ym2612LastAddrValid[chipno] = true;
     // Address
     A0_LOW;
     dedic_gpio_bundle_write(dataBus, 0xff, 0x2a);
@@ -719,7 +815,7 @@ void FMChip::setYM2612DAC(byte data, uint8_t chipno) {
     A0_HIGH;
     // アドレスライト後の待ちサイクル
     // アドレス＄21-＄B6 待ちサイクル 17 = 2.21us
-    ets_delay_us(4);
+    ets_delay_us(3);
   }
 
   // data
@@ -732,6 +828,9 @@ void FMChip::setYM2612DAC(byte data, uint8_t chipno) {
       break;
     case 1:
       CS1_HIGH;
+      break;
+    case 2:
+      CS2_HIGH;
       break;
   }
 

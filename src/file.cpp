@@ -290,7 +290,7 @@ FileFormat NDFile::readFile(String path) {
 
   vgm.size = hFile.size();
   Serial.printf("file size: %u Bytes.\n", vgm.size);
-  if (vgm.size >= ND_LOADING_FILE_SIZE) {
+  if (vgm.size >= ND_LOADING_FILE_SIZE && disp.currentView == ViewMode::Player) {
     showFileOpenMessage("Loading...");
   }
 

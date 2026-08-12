@@ -9,6 +9,7 @@ class SerialMan {
   SerialMan();
   void init();
   void startSerialTask();
+  void startTrackMaskTask();
   void changeYM2612Clock();
   void changeSN76489Clock();
 

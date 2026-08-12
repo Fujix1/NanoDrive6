@@ -208,6 +208,8 @@ void NDConfig::applyCfg() {
   nju72341.setFadeoutDuration(get(CFG_FADEOUT));
   const tNJU72341_GAIN inputGain = amplifyToInputGain(get(CFG_AMPLIFY));
   nju72341.setMainInputGain(inputGain);
+  // 音源への書き込みホットパスでは設定検索を行わず、ここで数値モードを同期する。
+  FM.requestApplyYM2612OutputMode();
   // Play Hold設定だけは、現在ホールド中の再生にも即時反映する。
   syncPlayHoldConfig();
 }
@@ -228,6 +230,7 @@ void NDConfig::applyItem(tConfig item) {
       break;
     case CFG_FMPCM:
     case CFG_YM2612_PAN:
+    case CFG_SNATT:
       FM.requestApplyYM2612OutputMode();
       break;
     default:

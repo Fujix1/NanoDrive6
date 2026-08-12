@@ -48,8 +48,14 @@ class FMChip {
   void setYM2612DAC(byte data, uint8_t chipno);
   void requestApplyYM2612OutputMode();
   void applyPendingYM2612OutputMode();
+  void requestToggleChannelMask(u8_t ch);
+  void requestResetChannelMask();
+  void applyPendingChannelMask();
   void write(byte data, byte chipno, si5351Freq_t freq);
   void writeRaw(byte data, byte chipno, si5351Freq_t freq);
+
+  // YM2612 FM channel mask (bit 0-5 = CH1-6). PCM/PSG are not included.
+  u8_t ym2612_chmask = 0x00;
 
  private:
   u8_t _psgFrqLowByte = 0;
@@ -65,9 +71,12 @@ class FMChip {
   u8_t _ym2612KeyOnSlots[3][6] = {};
   u8_t _ym2612DacLevelDecimator = 0;
   u8_t _ym2612DacLevelPeak = 0;
+  volatile u8_t _ym2612OutputMode = 0;  // FMPCM_BOTH。設定変更時だけ同期する。
   volatile bool _ym2612OutputModeApplyPending = false;
+  volatile u8_t _pendingYm2612ChToggle = 0x00;
+  volatile bool _pendingYm2612ChMaskReset = false;
 
-  byte _applyYM2612OutputMode(byte bank, byte addr, byte data, uint8_t chipno) const;
+  byte _applyYM2612ChannelMask(byte bank, byte addr, byte data, uint8_t chipno) const;
   void _updateSN76489VisualState(byte data, uint8_t chipno, si5351Freq_t freq);
   void _updateSN76489ChannelNote(uint8_t chipno, uint8_t ch, si5351Freq_t freq);
   void _updateYM2612VisualState(byte bank, byte addr, byte data, uint8_t chipno);
@@ -76,6 +85,7 @@ class FMChip {
   void _updateYM2612DacLevel(byte data, uint8_t chipno);
   uint8_t _getYM2612DisplayLevel(uint8_t chipno, uint8_t ch) const;
   void _updateYM2612TrackLevel(uint8_t chipno, uint8_t ch);
+  void _writeCachedYM2612ChannelTl(uint8_t chipno, uint8_t ch);
   void _writeCachedYM2612Tl(uint8_t chipno);
 };
 

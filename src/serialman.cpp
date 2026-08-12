@@ -12,6 +12,7 @@
 
 namespace {
 constexpr uint32_t PCM_BURST_SPREAD_US = 4;
+constexpr TickType_t TRACK_MASK_POLL_INTERVAL = pdMS_TO_TICKS(20);
 }  // namespace
 
 constexpr std::array<si5351Freq_t, 5> YM2612ClockOptions = {
@@ -125,6 +126,23 @@ void serialCheckerTask(void* param) {
   }
 }
 
+// プレイヤーモード用トラックマスク入力タスク
+void trackMaskSerialTask(void* param) {
+  (void)param;
+
+  while (1) {
+    while (Serial.available() > 0) {
+      const int key = Serial.read();
+      if (key == '0') {
+        FM.requestResetChannelMask();
+      } else if (key >= '1' && key <= '6') {
+        FM.requestToggleChannelMask((u8_t)(key - '1'));
+      }
+    }
+    vTaskDelay(TRACK_MASK_POLL_INTERVAL);
+  }
+}
+
 // コンストラクタ
 SerialMan::SerialMan() {}
 
@@ -149,6 +167,10 @@ void SerialMan::init() {
 // シリアル受信用タスク開始
 void SerialMan::startSerialTask() {
   xTaskCreateUniversal(serialCheckerTask, "serialTask", 10000, NULL, 1, NULL, APP_CPU_NUM);
+}
+
+void SerialMan::startTrackMaskTask() {
+  xTaskCreatePinnedToCore(trackMaskSerialTask, "trackMaskSerial", 2048, NULL, tskIDLE_PRIORITY, NULL, PRO_CPU_NUM);
 }
 
 // YM2612クロック変更

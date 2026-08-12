@@ -133,11 +133,14 @@ class VGM {
   u64_t _vgmStart;
   u64_t _vgmWaitUntil;
   bool _vgmTimingStarted = false;
-  bool _vgmAtInitialTimestamp = true;
+  bool _vgmAtInitialTimestamp = false;
   bool _vgmInitialKeyWriteValid[8] = {};
   u8_t _vgmInitialKeyWriteData[8] = {};
   u32_t _vgmInitialKeyWriteOrder[8] = {};
   u32_t _vgmInitialKeyWriteSequence = 0;
+  bool _vgmAtInitialDacTimestamp = true;
+  bool _vgmInitialDacWritePending = false;
+  u8_t _vgmInitialDacWriteData = 0x80;
   u32_t _pcmpos = 0;
   std::vector<t_vgmDataBlock> _vgmDataBlocks[0x40];
   t_vgmStreamState _vgmStreams[VGM_STREAM_MAX];
@@ -152,6 +155,8 @@ class VGM {
   void _vgmStopStream(u8_t streamID);
   void _vgmBufferInitialKeyWrite(u8_t data);
   void _vgmFlushInitialKeyWrites();
+  void _vgmBufferInitialDacWrite(u8_t data);
+  void _vgmFlushInitialDacWrite();
 
   u32_t _xgmSamplePos[XGM1_MAX_PCM_CH];
   u8_t _xgmSampleId[XGM1_MAX_PCM_CH];
