@@ -229,13 +229,9 @@ static RotatedLabel lblSongTitle =
 
 static SemaphoreHandle_t spFrameBuffer;  // 描画用セマフォ
 
-static int visualX(int x, int w) {
-  return kVisualRotate180 ? LCD_W - x - w : x;
-}
+static int visualX(int x, int w) { return kVisualRotate180 ? LCD_W - x - w : x; }
 
-static int visualY(int y, int h) {
-  return kVisualRotate180 ? LCD_H - y - h : y;
-}
+static int visualY(int y, int h) { return kVisualRotate180 ? LCD_H - y - h : y; }
 
 static void copyVisualImage(uint16_t* dst, const uint16_t* src, int w, int h) {
   if (!kVisualRotate180) {
@@ -254,8 +250,7 @@ static void pushVisualImage(LGFX_Sprite& target, int x, int y, int w, int h, con
   target.pushImage(visualX(x, w), visualY(y, h), w, h, src);
 }
 
-static void pushPreparedVisualImage(LGFX_Sprite& target, int x, int y, int w, int h,
-                                    const uint16_t* src) {
+static void pushPreparedVisualImage(LGFX_Sprite& target, int x, int y, int w, int h, const uint16_t* src) {
   if (!kVisualRotate180) {
     target.pushImage(x, y, w, h, src);
     return;
@@ -308,8 +303,7 @@ static void createVisualShuffleIconSprite(LGFX_Sprite& target, uint16_t color) {
   target.fillSprite(TFT_BLACK);
   source.setPivot(kShuffleIconSize / 2.0f, kShuffleIconSize / 2.0f);
   const float angle = kVisualRotate180 ? 90.0f : -90.0f;
-  source.pushRotateZoom(&target, kShuffleIconSize / 2.0f, kShuffleIconSize / 2.0f, angle,
-                        1.0f, 1.0f, TFT_BLACK);
+  source.pushRotateZoom(&target, kShuffleIconSize / 2.0f, kShuffleIconSize / 2.0f, angle, 1.0f, 1.0f, TFT_BLACK);
   source.deleteSprite();
 }
 
@@ -360,8 +354,7 @@ static void cutLevelSprite(uint8_t levelIndex) {
     for (uint16_t y = 0; y < kLevelSpriteHeight; y++) {
       for (uint16_t x = 0; x < kLevelSpriteWidth; x++) {
         dst[y * kLevelSpriteWidth + x] =
-            levels[(srcY + (kLevelSpriteHeight - 1 - y)) * levelsWidth +
-                   (kLevelSpriteWidth - 1 - x)];
+            levels[(srcY + (kLevelSpriteHeight - 1 - y)) * levelsWidth + (kLevelSpriteWidth - 1 - x)];
       }
     }
   } else {
@@ -385,8 +378,7 @@ static void cutNumberSprite(uint8_t glyphIndex) {
     for (uint16_t y = 0; y < kNumberSpriteHeight; y++) {
       for (uint16_t x = 0; x < kNumberSpriteWidth; x++) {
         dst[y * kNumberSpriteWidth + x] =
-            numbers[(srcY + (kNumberSpriteHeight - 1 - y)) * numbersWidth +
-                    (kNumberSpriteWidth - 1 - x)];
+            numbers[(srcY + (kNumberSpriteHeight - 1 - y)) * numbersWidth + (kNumberSpriteWidth - 1 - x)];
       }
     }
   } else {
@@ -413,8 +405,8 @@ static void drawLabelClip(LGFX_Sprite& target, uint8_t labelIndex, int x, int y)
     return;
   }
 
-  target.pushImage(visualX(x, kLabelSpriteWidth), visualY(y, kLabelSpriteHeight), kLabelSpriteWidth,
-                   kLabelSpriteHeight, labelSprite[labelIndex]);
+  target.pushImage(visualX(x, kLabelSpriteWidth), visualY(y, kLabelSpriteHeight), kLabelSpriteWidth, kLabelSpriteHeight,
+                   labelSprite[labelIndex]);
 }
 
 static uint8_t getNumberGlyphIndex(char c) {
@@ -428,8 +420,7 @@ static uint8_t getNumberGlyphIndex(char c) {
 }
 
 static bool isNoteDisplayTrack(uint8_t trackNo) {
-  return trackNo != kPcmTrack && trackNo != kUnusedTrack && trackNo != kSn0NoiseTrack &&
-         trackNo != kSn1NoiseTrack;
+  return trackNo != kPcmTrack && trackNo != kUnusedTrack && trackNo != kSn0NoiseTrack && trackNo != kSn1NoiseTrack;
 }
 
 static uint8_t noteInfoToDisplayNoteNo(t_device device, const NoteInfo& ni) {
@@ -616,9 +607,8 @@ void Label::setEnabled(bool state) { _enabled = state; }
 
 //---------------------------------------------------------------------------
 // Rotated scrolling label class
-RotatedLabel::RotatedLabel(const int16_t x, const int16_t y, const int16_t h,
-                           const uint16_t fontColor, const uint16_t bgColor,
-                           const uint16_t fontSize, const float scrollSpeed,
+RotatedLabel::RotatedLabel(const int16_t x, const int16_t y, const int16_t h, const uint16_t fontColor,
+                           const uint16_t bgColor, const uint16_t fontSize, const float scrollSpeed,
                            const Align textAlign) {
   _x = x;
   _y = y;
@@ -679,8 +669,7 @@ void RotatedLabel::setCaption(String newCaption) {
       for (int32_t srcX = 0; srcX < source.width(); srcX++) {
         const int32_t dstX = srcY;
         const int32_t dstYPos = dstY + source.width() - 1 - srcX;
-        if (dstX >= 0 && dstX < _sprite.width() && dstYPos >= 0 &&
-            dstYPos < _sprite.height()) {
+        if (dstX >= 0 && dstX < _sprite.width() && dstYPos >= 0 && dstYPos < _sprite.height()) {
           const uint16_t color = source.readPixel(srcX, srcY);
           if (kVisualRotate180) {
             _sprite.drawPixel(_sprite.width() - 1 - dstX, _sprite.height() - 1 - dstYPos, color);
@@ -694,9 +683,8 @@ void RotatedLabel::setCaption(String newCaption) {
     source.deleteSprite();
   }
 
-  const int32_t initialY = kVisualRotate180
-                               ? visualY(_y, _labelHeight)
-                               : (int32_t)_y + (int32_t)_labelHeight - _sprite.height();
+  const int32_t initialY =
+      kVisualRotate180 ? visualY(_y, _labelHeight) : (int32_t)_y + (int32_t)_labelHeight - _sprite.height();
   const int32_t drawX = visualX(_x, _sprite.width());
   const int32_t clipY = visualY(_y, _labelHeight);
   frameBuffer.setClipRect(drawX, clipY, _sprite.width(), _labelHeight);
@@ -720,8 +708,8 @@ void RotatedLabel::update() {
 
   const int32_t loopHeight = _sprite.height();
   const int32_t drawOffset = (int32_t)_n;
-  const int32_t baseY = kVisualRotate180 ? visualY(_y, _labelHeight)
-                                         : (int32_t)_y + (int32_t)_labelHeight - _sprite.height();
+  const int32_t baseY =
+      kVisualRotate180 ? visualY(_y, _labelHeight) : (int32_t)_y + (int32_t)_labelHeight - _sprite.height();
   const int32_t drawX = visualX(_x, _sprite.width());
   const int32_t clipY = visualY(_y, _labelHeight);
   if (drawOffset != _lastDrawOffset) {
@@ -730,8 +718,7 @@ void RotatedLabel::update() {
     _sprite.pushSprite(&lcd, drawX, firstY);
 
     if (drawOffset > loopHeight - (int32_t)_labelHeight) {
-      const int32_t secondY =
-          kVisualRotate180 ? firstY + loopHeight : baseY + drawOffset - loopHeight;
+      const int32_t secondY = kVisualRotate180 ? firstY + loopHeight : baseY + drawOffset - loopHeight;
       _sprite.pushSprite(&lcd, drawX, secondY);
     }
     lcd.clearClipRect();
@@ -808,21 +795,13 @@ void PlayerWindow::updateHeader(int64_t sec, bool visible, uint32_t ticksToWait)
   }
 }
 
-void PlayerWindow::updateHeaderBlocking(int64_t sec) {
-  updateHeader(sec, true, portMAX_DELAY);
-}
+void PlayerWindow::updateHeaderBlocking(int64_t sec) { updateHeader(sec, true, portMAX_DELAY); }
 //---------------------------------------------------------------------------
-static bool tryLockDrawing() {
-  return xSemaphoreTake(spFrameBuffer, 0) == pdTRUE;
-}
+static bool tryLockDrawing() { return xSemaphoreTake(spFrameBuffer, 0) == pdTRUE; }
 
-static void lockDrawing() {
-  xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
-}
+static void lockDrawing() { xSemaphoreTake(spFrameBuffer, portMAX_DELAY); }
 
-static void unlockDrawing() {
-  xSemaphoreGive(spFrameBuffer);
-}
+static void unlockDrawing() { xSemaphoreGive(spFrameBuffer); }
 
 static void setSerialModeLabels() {
   if (ndConfig.get(CFG_LANG) == LANG_JA) {
@@ -1118,7 +1097,7 @@ bool initDisp() {
   xSemaphoreGive(spFrameBuffer);
 
   // フレームバッファスプライト作成
-  frameBuffer.setPsram(true);
+  frameBuffer.setPsram(false);
   frameBuffer.createSprite(LCD_W, LCD_H);
   visualWindow.init();
 
@@ -1129,9 +1108,8 @@ bool initDisp() {
   disp.stopTimerDrawing = true;
 
   hDispUpdateTask = NULL;
-  BaseType_t taskCreated =
-      xTaskCreatePinnedToCore(dispUpdateTask, "dispUpdate", DISP_UPDATE_TASK_STACK, NULL,
-                              DISP_UPDATE_TASK_PRIORITY, &hDispUpdateTask, DISP_UPDATE_TASK_CORE);
+  BaseType_t taskCreated = xTaskCreatePinnedToCore(dispUpdateTask, "dispUpdate", DISP_UPDATE_TASK_STACK, NULL,
+                                                   DISP_UPDATE_TASK_PRIORITY, &hDispUpdateTask, DISP_UPDATE_TASK_CORE);
   if (taskCreated != pdPASS || hDispUpdateTask == NULL) {
     Serial.println("ERROR: dispUpdateTask create failed.");
     return false;
@@ -1208,17 +1186,15 @@ void PlayerWindow::show() {
 //---------------------------------------------------------------------------
 // Panel class
 
-Panel::Panel(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint8_t itemHeight,
-             IPanelRenderer* renderer)
+Panel::Panel(uint16_t x, uint16_t y, uint16_t width, uint16_t height, uint8_t itemHeight, IPanelRenderer* renderer)
     : x(x), y(y), width(width), height(height), _itemHeight(itemHeight), _renderer(renderer) {
   _scrollbarBackground.createSprite(SCROLLBAR_WIDTH, height);
   _scrollbar.createSprite(SCROLLBAR_WIDTH, height);
   _scrollbarBackground.fillSprite(C_HIGHGRAY);
-  _scrollbarBackground.fillTriangle(SCROLLBAR_WIDTH / 2, 3, SCROLLBAR_WIDTH - 2,
-                                    SCROLLBAR_WIDTH - 3, 2, SCROLLBAR_WIDTH - 3, C_MID);
-  _scrollbarBackground.fillTriangle(SCROLLBAR_WIDTH / 2, height - 3, SCROLLBAR_WIDTH - 2,
-                                    height - SCROLLBAR_WIDTH + 3, 2,
-                                    height - SCROLLBAR_WIDTH + 3, C_MID);
+  _scrollbarBackground.fillTriangle(SCROLLBAR_WIDTH / 2, 3, SCROLLBAR_WIDTH - 2, SCROLLBAR_WIDTH - 3, 2,
+                                    SCROLLBAR_WIDTH - 3, C_MID);
+  _scrollbarBackground.fillTriangle(SCROLLBAR_WIDTH / 2, height - 3, SCROLLBAR_WIDTH - 2, height - SCROLLBAR_WIDTH + 3,
+                                    2, height - SCROLLBAR_WIDTH + 3, C_MID);
 }
 
 uint16_t Panel::itemWidth() const { return width - SCROLLBAR_WIDTH; }
@@ -1255,8 +1231,7 @@ void Panel::drawScrollbar() {
     const uint16_t maxBarHeight = height - INDICATOR_HEIGHT * 2;
     const uint16_t barHeight = maxBarHeight * height / _innerHeight;
     const uint16_t barTop = maxBarHeight * scrollTop / _innerHeight;
-    _scrollbar.fillRoundRect(PADDING, INDICATOR_HEIGHT + barTop,
-                             SCROLLBAR_WIDTH - PADDING * 2, barHeight,
+    _scrollbar.fillRoundRect(PADDING, INDICATOR_HEIGHT + barTop, SCROLLBAR_WIDTH - PADDING * 2, barHeight,
                              (SCROLLBAR_WIDTH - PADDING * 2) / 2, C_MID);
   }
 }
@@ -1303,10 +1278,10 @@ void Panel::drawVisibleItems(LGFX_Sprite& targetBuffer) {
 // フレームバッファに内容を描画
 void Panel::update(LGFX_Sprite& targetBuffer) {
   const int scrollDelta = scrollTop - _prevScrollTop;
-  const bool reuseScrolledContent = !_needsFullRedraw && _itemCount == _prevItemCount &&
-                                    scrollDelta != 0 && abs(scrollDelta) < height;
-  const bool fullRedraw = _needsFullRedraw || _itemCount != _prevItemCount ||
-                          (scrollTop != _prevScrollTop && !reuseScrolledContent);
+  const bool reuseScrolledContent =
+      !_needsFullRedraw && _itemCount == _prevItemCount && scrollDelta != 0 && abs(scrollDelta) < height;
+  const bool fullRedraw =
+      _needsFullRedraw || _itemCount != _prevItemCount || (scrollTop != _prevScrollTop && !reuseScrolledContent);
   const int contentWidth = itemWidth();
 
   targetBuffer.setClipRect(x, y, contentWidth, height);
@@ -1351,8 +1326,7 @@ void Panel::update(LGFX_Sprite& targetBuffer) {
 ConfigPanelRenderer configRenderer;
 static Panel pnlConfig(0, 26, LCD_W, 264, CFG_ITEM_HEIGHT, &configRenderer);
 
-void ConfigPanelRenderer::onDrawItem(LGFX_Sprite& target, int itemIndex, int x, int y,
-                                     int width, bool selected) {
+void ConfigPanelRenderer::onDrawItem(LGFX_Sprite& target, int itemIndex, int x, int y, int width, bool selected) {
   cfgWindow.drawItem(target, itemIndex, x, y, width, selected);
 }
 
@@ -1469,8 +1443,7 @@ void CFGWindow::eventHandler(event ev) {
       }
       break;
     case event::Right:
-      if (ndConfig.items[currentItemIndex].index + 1 <
-          ndConfig.items[currentItemIndex].optionValues.size()) {
+      if (ndConfig.items[currentItemIndex].index + 1 < ndConfig.items[currentItemIndex].optionValues.size()) {
         int prevRandom = ndConfig.get(CFG_SHUFFLE);
         ndConfig.items[currentItemIndex].index++;
         const tConfig changedItem = ndConfig.configAt(currentItemIndex);
@@ -1573,8 +1546,7 @@ void CFGWindow::refreshCurrentItem() {
   currentItemIndex = pnlConfig.currentIndex;
 
   const int itemY = pnlConfig.y + currentItemIndex * CFG_ITEM_HEIGHT - pnlConfig.scrollTop;
-  const bool fullyVisible =
-      itemY >= pnlConfig.y && itemY + CFG_ITEM_HEIGHT <= pnlConfig.y + pnlConfig.height;
+  const bool fullyVisible = itemY >= pnlConfig.y && itemY + CFG_ITEM_HEIGHT <= pnlConfig.y + pnlConfig.height;
   if (fullyVisible) {
     drawItem(frameBuffer, currentItemIndex, pnlConfig.x, itemY, pnlConfig.itemWidth(), true);
     _sprite.pushSprite(&lcd, pnlConfig.x, itemY);
@@ -1591,8 +1563,7 @@ void CFGWindow::refreshCurrentItem() {
 
 void CFGWindow::moveSelection(int delta) { selectItem(currentItemIndex + delta); }
 
-void CFGWindow::drawItem(LGFX_Sprite& target, int index, int x, int y, int width,
-                         bool selected) {
+void CFGWindow::drawItem(LGFX_Sprite& target, int index, int x, int y, int width, bool selected) {
   if (index < 0 || index >= ndConfig.items.size() || width <= 0) return;
   if (_sprite.width() != width || _sprite.height() != CFG_ITEM_HEIGHT) {
     _sprite.createSprite(width, CFG_ITEM_HEIGHT);
@@ -1606,8 +1577,8 @@ void CFGWindow::drawItem(LGFX_Sprite& target, int index, int x, int y, int width
   ofr.setDrawer(_sprite);
   ofr.loadFont(fontMain, sizeof(fontMain));
   const int fontSize = ndConfig.get(CFG_LANG) == LANG_JA ? 17 : 16;
-  const String label = ndConfig.get(CFG_LANG) == LANG_JA ? ndConfig.items[index].labelJp
-                                                         : ndConfig.items[index].labelEn;
+  const String label =
+      ndConfig.get(CFG_LANG) == LANG_JA ? ndConfig.items[index].labelJp : ndConfig.items[index].labelEn;
   const String option = ndConfig.get(CFG_LANG) == LANG_JA
                             ? ndConfig.items[index].optionsJp[ndConfig.items[index].index]
                             : ndConfig.items[index].optionsEn[ndConfig.items[index].index];
@@ -1631,8 +1602,7 @@ void CFGWindow::drawFooter(bool toFrameBuffer) {
   const bool up = currentItemIndex > 0;
   const bool down = currentItemIndex + 1 < ndConfig.items.size();
   const bool left = ndConfig.items[currentItemIndex].index > 0;
-  const bool right = ndConfig.items[currentItemIndex].index + 1 <
-                     ndConfig.items[currentItemIndex].optionValues.size();
+  const bool right = ndConfig.items[currentItemIndex].index + 1 < ndConfig.items[currentItemIndex].optionValues.size();
 
   _sprFooter.fillSprite(TFT_WHITE);
   _sprFooter.fillRoundRect(4, 0, 27, 23, 2, up ? C_FOOTER_ACTIVE : C_FOOTER_INACTIVE);
@@ -1731,8 +1701,7 @@ void VisualWindow::showTimestampMessage(const char* message) {
 
     source.setPivot(source.width() / 2.0f, source.height() / 2.0f);
     const float angle = kVisualRotate180 ? 90.0f : -90.0f;
-    source.pushRotateZoom(&rotated, rotated.width() / 2.0f, rotated.height() / 2.0f,
-                          angle, 1.0f, 1.0f, TFT_BLACK);
+    source.pushRotateZoom(&rotated, rotated.width() / 2.0f, rotated.height() / 2.0f, angle, 1.0f, 1.0f, TFT_BLACK);
 
     const int x = LCD_W - rotated.width() - 2;
     pushVisualSpriteToLcd(rotated, x, 0);
@@ -1778,8 +1747,7 @@ void VisualWindow::drawTimestamp(int64_t sec, bool toFrameBuffer, bool visible) 
   _sprTime.fillSprite(TFT_BLACK);
   source.setPivot(source.width() / 2.0f, source.height() / 2.0f);
   const float angle = kVisualRotate180 ? 90.0f : -90.0f;
-  source.pushRotateZoom(&_sprTime, _sprTime.width() / 2.0f, _sprTime.height() / 2.0f,
-                        angle, 1.0f, 1.0f, TFT_BLACK);
+  source.pushRotateZoom(&_sprTime, _sprTime.width() / 2.0f, _sprTime.height() / 2.0f, angle, 1.0f, 1.0f, TFT_BLACK);
   source.deleteSprite();
 
   const int x = LCD_W - _sprTime.width() - 2;
@@ -2088,13 +2056,11 @@ boolean VisualWindow::drawNote(uint8_t trackNo, uint8_t noteNo) {
   const int y = kNoteDrawBottomY - trackNo * kLevelSpriteHeight;
 
   // numbers.png は横書きの数字列を左90度回転しているため、一の位を上、十の位を下に積む。
-  memcpy(&numberWorkBuffer[0], numberSprite[lowerIndex],
-         sizeof(uint16_t) * kNumberSpriteWidth * kNumberSpriteHeight);
+  memcpy(&numberWorkBuffer[0], numberSprite[lowerIndex], sizeof(uint16_t) * kNumberSpriteWidth * kNumberSpriteHeight);
   memcpy(&numberWorkBuffer[kNumberSpriteWidth * kNumberSpriteHeight], numberSprite[upperIndex],
          sizeof(uint16_t) * kNumberSpriteWidth * kNumberSpriteHeight);
 
-  pushVisualBufferToLcd(kNoteDrawX, y, kNumberSpriteWidth, kNumberSpriteHeight * 2,
-                        numberWorkBuffer);
+  pushVisualBufferToLcd(kNoteDrawX, y, kNumberSpriteWidth, kNumberSpriteHeight * 2, numberWorkBuffer);
   return true;
 }
 
@@ -2139,8 +2105,7 @@ CFGWindow cfgWindow;
 // ファイルブラウザ画面
 
 static BrowserPanelRenderer browserRenderer;
-static Panel pnlFiles(0, 26 + BROWSER_CURRENT_DIR_HEIGHT, LCD_W,
-                      264 - BROWSER_CURRENT_DIR_HEIGHT, BROWSER_ITEM_HEIGHT,
+static Panel pnlFiles(0, 26 + BROWSER_CURRENT_DIR_HEIGHT, LCD_W, 264 - BROWSER_CURRENT_DIR_HEIGHT, BROWSER_ITEM_HEIGHT,
                       &browserRenderer);
 
 static void pushBrowserFrameBufferArea(int y, int height) {
@@ -2157,11 +2122,9 @@ static void pushBrowserFrameBufferArea(int y, int height) {
 }
 
 static void pushBrowserItemArea(int itemIndex) {
-  const int itemY =
-      pnlFiles.y + itemIndex * BROWSER_ITEM_HEIGHT - pnlFiles.scrollTop;
+  const int itemY = pnlFiles.y + itemIndex * BROWSER_ITEM_HEIGHT - pnlFiles.scrollTop;
   const int top = max(static_cast<int>(pnlFiles.y), itemY);
-  const int bottom = min(static_cast<int>(pnlFiles.y + pnlFiles.height),
-                         itemY + BROWSER_ITEM_HEIGHT);
+  const int bottom = min(static_cast<int>(pnlFiles.y + pnlFiles.height), itemY + BROWSER_ITEM_HEIGHT);
   pushBrowserFrameBufferArea(top, bottom - top);
 }
 
@@ -2170,72 +2133,22 @@ static void drawFolderIcon(LGFX_Sprite& target, int x, int y, uint16_t color) {
   target.fillRect(x, y + 3, 16, 11, color);
 }
 
-static uint16_t getUtf8BytesForWidth(OpenFontRender& render, const char* text,
-                                     uint32_t limitWidth, uint32_t reserveWidth) {
-  if (text == nullptr || limitWidth < reserveWidth) return 0;
-
-  static constexpr uint16_t kMaxTextBytes = 255;
-  const size_t sourceLength = strlen(text);
-  const uint16_t length = min(static_cast<size_t>(kMaxTextBytes), sourceLength);
-  uint16_t boundaries[kMaxTextBytes + 1];
-  uint16_t boundaryCount = 1;
-  boundaries[0] = 0;
-
-  uint16_t index = 0;
-  while (index < length) {
-    const uint8_t lead = static_cast<uint8_t>(text[index]);
-    uint16_t charBytes = 1;
-    if ((lead & 0xe0) == 0xc0) {
-      charBytes = 2;
-    } else if ((lead & 0xf0) == 0xe0) {
-      charBytes = 3;
-    } else if ((lead & 0xf8) == 0xf0) {
-      charBytes = 4;
-    }
-    if (index + charBytes > length) break;
-    index += charBytes;
-    boundaries[boundaryCount++] = index;
-  }
-
-  char buffer[kMaxTextBytes + 1];
-  const uint16_t completeBytes = boundaries[boundaryCount - 1];
-  memcpy(buffer, text, completeBytes);
-  buffer[completeBytes] = '\0';
-  if (sourceLength == completeBytes && render.getTextWidth("%s", buffer) <= limitWidth) {
-    return completeBytes;
-  }
-
-  uint16_t low = 0;
-  uint16_t high = boundaryCount - 1;
-  while (low < high) {
-    const uint16_t mid = low + (high - low + 1) / 2;
-    const uint16_t bytes = boundaries[mid];
-    memcpy(buffer, text, bytes);
-    buffer[bytes] = '\0';
-    const uint32_t width = render.getTextWidth("%s", buffer);
-    if (width + reserveWidth <= limitWidth) {
-      low = mid;
-    } else {
-      high = mid - 1;
-    }
-  }
-  return boundaries[low];
-}
-
-static void printBrowserText(OpenFontRender& render, const char* text, int maxWidth,
+static void printBrowserText(OpenFontRender& render, const char* text, int x, int y, int maxWidth,
                              int dotsWidth) {
   if (text == nullptr || maxWidth <= 0) return;
   if (dotsWidth > maxWidth) return;
 
   const uint16_t fitLength =
-      getUtf8BytesForWidth(render, text, static_cast<uint32_t>(maxWidth), dotsWidth);
+      render.getUtf8BytesForWidth(text, static_cast<uint32_t>(maxWidth), dotsWidth);
   if (text[fitLength] == '\0') {
-    render.printf("%s", text);
+    render.drawString(text, x, y, render.getFontColor(), render.getBackgroundColor(),
+                      render.getLayout());
     return;
   }
 
   if (fitLength == 0) {
-    render.printf("...");
+    render.drawString("...", x, y, render.getFontColor(), render.getBackgroundColor(),
+                      render.getLayout());
     return;
   }
 
@@ -2244,7 +2157,8 @@ static void printBrowserText(OpenFontRender& render, const char* text, int maxWi
   if (copyLength > sizeof(buffer) - 4) copyLength = sizeof(buffer) - 4;
   memcpy(buffer, text, copyLength);
   memcpy(buffer + copyLength, "...", 4);
-  render.printf("%s", buffer);
+  render.drawString(buffer, x, y, render.getFontColor(), render.getBackgroundColor(),
+                    render.getLayout());
 }
 
 void BrowserPanelRenderer::init() {
@@ -2263,13 +2177,10 @@ void BrowserPanelRenderer::deinit() {
   _fontLoaded = false;
 }
 
-void BrowserPanelRenderer::setBrowseDirNode(Node* browseDirNode) {
-  _browseDirNode = browseDirNode;
-}
+void BrowserPanelRenderer::setBrowseDirNode(Node* browseDirNode) { _browseDirNode = browseDirNode; }
 
 bool BrowserPanelRenderer::hasParentEntry() const {
-  return _browseDirNode != nullptr && _browseDirNode != fileTree.getRoot() &&
-         _browseDirNode->parent != nullptr;
+  return _browseDirNode != nullptr && _browseDirNode != fileTree.getRoot() && _browseDirNode->parent != nullptr;
 }
 
 Node* BrowserPanelRenderer::getNodeByDisplayIndex(int itemIndex) const {
@@ -2285,8 +2196,7 @@ Node* BrowserPanelRenderer::getNodeByDisplayIndex(int itemIndex) const {
   return node;
 }
 
-void BrowserPanelRenderer::onDrawItem(LGFX_Sprite& target, int itemIndex, int x, int y,
-                                      int width, bool selected) {
+void BrowserPanelRenderer::onDrawItem(LGFX_Sprite& target, int itemIndex, int x, int y, int width, bool selected) {
   const bool parentEntry = hasParentEntry() && itemIndex == 0;
   Node* node = parentEntry ? nullptr : getNodeByDisplayIndex(itemIndex);
   if (!parentEntry && node == nullptr) return;
@@ -2318,7 +2228,7 @@ void BrowserPanelRenderer::onDrawItem(LGFX_Sprite& target, int itemIndex, int x,
   if (parentEntry) {
     _render.printf("../");
   } else {
-    printBrowserText(_render, node->name, width - 23, _dotsWidth);
+    printBrowserText(_render, node->name, x + 20, y + 6, width - 23, _dotsWidth);
   }
 }
 
@@ -2379,9 +2289,8 @@ void BrowserWindow::draw() {
   pnlFiles.setItemCount(getItemCount());
   Node* selectedNode = _selectedNode;
   if (selectedNode == nullptr || selectedNode->parent != _browseDirNode) {
-    selectedNode = ndFile.currentNode != nullptr && ndFile.currentNode->parent == _browseDirNode
-                       ? ndFile.currentNode
-                       : nullptr;
+    selectedNode =
+        ndFile.currentNode != nullptr && ndFile.currentNode->parent == _browseDirNode ? ndFile.currentNode : nullptr;
   }
   pnlFiles.currentIndex = browserRenderer.hasParentEntry() && getItemCount() > 1 ? 1 : 0;
   Node* node = _browseDirNode->firstChild;
@@ -2435,9 +2344,8 @@ void BrowserWindow::initFooter() {
 }
 
 void BrowserWindow::drawFooter(bool toFrameBuffer) {
-  const bool upDirEnabled = _browseDirNode != nullptr &&
-                            _browseDirNode != fileTree.getRoot() &&
-                            _browseDirNode->parent != nullptr;
+  const bool upDirEnabled =
+      _browseDirNode != nullptr && _browseDirNode != fileTree.getRoot() && _browseDirNode->parent != nullptr;
 
   if (toFrameBuffer) {
     _sprFooter.pushSprite(&frameBuffer, 0, 293);
@@ -2467,7 +2375,7 @@ void BrowserWindow::drawCurrentDir() {
       render.printf("/");
     } else if (_browseDirNode != nullptr) {
       const int dotsWidth = render.getTextWidth("...");
-      printBrowserText(render, _browseDirNode->name, LCD_W - 23, dotsWidth);
+      printBrowserText(render, _browseDirNode->name, 20, 6, LCD_W - 23, dotsWidth);
     }
     _lastCurrentDirNode = _browseDirNode;
   }
@@ -2476,8 +2384,7 @@ void BrowserWindow::drawCurrentDir() {
 
 int BrowserWindow::getItemCount() const {
   if (_browseDirNode == nullptr) return 0;
-  return _browseDirNode->fileCount + _browseDirNode->dirCount +
-         (browserRenderer.hasParentEntry() ? 1 : 0);
+  return _browseDirNode->fileCount + _browseDirNode->dirCount + (browserRenderer.hasParentEntry() ? 1 : 0);
 }
 
 void BrowserWindow::selectItem(int index) {
@@ -2504,9 +2411,7 @@ void BrowserWindow::selectItem(int index) {
   xSemaphoreGive(spFrameBuffer);
 }
 
-void BrowserWindow::moveSelection(int delta) {
-  selectItem(pnlFiles.currentIndex + delta);
-}
+void BrowserWindow::moveSelection(int delta) { selectItem(pnlFiles.currentIndex + delta); }
 
 void BrowserWindow::selectCurrentItem() {
   if (browserRenderer.hasParentEntry() && pnlFiles.currentIndex == 0) {
@@ -2537,8 +2442,7 @@ void BrowserWindow::openDirectory(Node* dirNode, Node* selectedNode) {
 }
 
 bool BrowserWindow::openParentDirectory() {
-  if (_browseDirNode == nullptr || _browseDirNode == fileTree.getRoot() ||
-      _browseDirNode->parent == nullptr) {
+  if (_browseDirNode == nullptr || _browseDirNode == fileTree.getRoot() || _browseDirNode->parent == nullptr) {
     return false;
   }
   openDirectory(_browseDirNode->parent, _browseDirNode);
@@ -2554,8 +2458,7 @@ void BrowserWindow::openAdjacentDirectory(int delta) {
   if (traversalNode == nullptr || traversalNode->type != NODE_TYPE_FILE) {
     traversalNode = _browseDirNode;
   }
-  Node* targetDir = delta < 0 ? fileTree.getPrevDirNode(traversalNode)
-                              : fileTree.getNextDirNode(traversalNode);
+  Node* targetDir = delta < 0 ? fileTree.getPrevDirNode(traversalNode) : fileTree.getNextDirNode(traversalNode);
   if (targetDir == nullptr || targetDir == _browseDirNode) return;
   openDirectory(targetDir);
 }
@@ -2565,10 +2468,9 @@ void BrowserWindow::onCurrentNodeChanged(Node* previousNode, Node* currentNode) 
   Node* previousParent = previousNode != nullptr ? previousNode->parent : nullptr;
   Node* currentParent = currentNode != nullptr ? currentNode->parent : nullptr;
   const bool previousVisible =
-      previousParent == _browseDirNode ||
-      (previousParent != nullptr && previousParent->parent == _browseDirNode);
-  const bool currentVisible = currentParent == _browseDirNode ||
-                              (currentParent != nullptr && currentParent->parent == _browseDirNode);
+      previousParent == _browseDirNode || (previousParent != nullptr && previousParent->parent == _browseDirNode);
+  const bool currentVisible =
+      currentParent == _browseDirNode || (currentParent != nullptr && currentParent->parent == _browseDirNode);
   if (!previousVisible && !currentVisible) return;
   if (xSemaphoreTake(spFrameBuffer, 0) != pdTRUE) return;
   pnlFiles.invalidate();
@@ -2616,9 +2518,8 @@ void BrowserWindow::show() {
   visible = true;
   disp.stopTimerDrawing = true;
   disp.currentView = ViewMode::Browser;
-  Node* currentDir = ndFile.currentNode != nullptr && ndFile.currentNode->parent != nullptr
-                         ? ndFile.currentNode->parent
-                         : fileTree.getRoot();
+  Node* currentDir = ndFile.currentNode != nullptr && ndFile.currentNode->parent != nullptr ? ndFile.currentNode->parent
+                                                                                            : fileTree.getRoot();
   openDirectory(currentDir, ndFile.currentNode);
 }
 

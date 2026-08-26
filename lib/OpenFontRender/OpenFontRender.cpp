@@ -1068,6 +1068,88 @@ FT_BBox OpenFontRender::calculateBoundingBox(int32_t x,
 	return bbox;
 }
 
+uint16_t OpenFontRender::getUtf8BytesForWidth(const char *str,
+                                              uint32_t limit_width,
+                                              uint32_t reserve_width) {
+	if (str == nullptr) {
+		return 0;
+	}
+
+	uint16_t len = (uint16_t)strlen(str);
+	if (len == 0) {
+		return 0;
+	}
+
+	FTC_ImageTypeRec image_type;
+	image_type.face_id = &_face_id;
+	image_type.width   = 0;
+	image_type.height  = _text.size;
+	image_type.flags   = FT_LOAD_DEFAULT;
+
+	FT_Size asize = NULL;
+	FTC_ScalerRec scaler;
+	scaler.face_id = &_face_id;
+	scaler.width   = 0;
+	scaler.height  = _text.size;
+	scaler.pixel   = true;
+	scaler.x_res   = 0;
+	scaler.y_res   = 0;
+
+	FT_Error error = FTC_Manager_LookupSize(_ftc_manager, &scaler, &asize);
+	if (error) {
+		return 0;
+	}
+
+	int cmap_index = FT_Get_Charmap_Index(asize->face->charmap);
+	int32_t cursor_x = 0;
+	FT_BBox bbox;
+	bbox.xMin = bbox.yMin = LONG_MAX;
+	bbox.xMax = bbox.yMax = LONG_MIN;
+
+	uint16_t fit_bytes = 0;
+	uint16_t n = 0;
+	while (n < len) {
+		uint16_t unicode = decodeUTF8((uint8_t *)str, &n, len - n);
+		if (unicode == '\r' || unicode == '\n') {
+			break;
+		}
+
+		FT_UInt glyph_index = FTC_CMapCache_Lookup(_ftc_cmap_cache,
+		                                           &_face_id,
+		                                           cmap_index,
+		                                           unicode);
+		FT_Glyph aglyph;
+		error = FTC_ImageCache_Lookup(_ftc_image_cache, &image_type, glyph_index, &aglyph, NULL);
+		if (error) {
+			break;
+		}
+
+		FT_BBox glyph_bbox;
+		FT_Glyph_Get_CBox(aglyph, FT_GLYPH_BBOX_PIXELS, &glyph_bbox);
+		glyph_bbox.xMin += cursor_x;
+		glyph_bbox.xMax += cursor_x;
+
+		bbox.xMin = std::min(bbox.xMin, glyph_bbox.xMin);
+		bbox.xMax = std::max(bbox.xMax, glyph_bbox.xMax);
+		cursor_x += (aglyph->advance.x >> 16);
+
+		uint32_t current_width = (bbox.xMin > bbox.xMax) ? 0 : (bbox.xMax - bbox.xMin);
+		if (current_width + reserve_width <= limit_width) {
+			fit_bytes = n;
+		}
+		if (current_width > limit_width) {
+			break;
+		}
+	}
+
+	uint32_t total_width = (bbox.xMin > bbox.xMax) ? 0 : (bbox.xMax - bbox.xMin);
+	if (total_width <= limit_width) {
+		return len;
+	}
+
+	return fit_bytes;
+}
+
 /*!
  * @brief Calculate text width.
  * @param[in] (*fmt) Format specifier.

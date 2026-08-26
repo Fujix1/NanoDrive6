@@ -270,6 +270,7 @@ public:
 	FT_BBox calculateBoundingBoxFmt(int32_t x, int32_t y, unsigned int font_size, Align align, Layout layout, const char *fmt, ...);
 	FT_BBox calculateBoundingBox(int32_t x, int32_t y, unsigned int font_size, Align align, Layout layout, const char *str);
 
+	uint16_t getUtf8BytesForWidth(const char *str, uint32_t limit_width, uint32_t reserve_width = 0);
 	uint32_t getTextWidth(const char *fmt, ...);
 	uint32_t getTextHeight(const char *fmt, ...);
 

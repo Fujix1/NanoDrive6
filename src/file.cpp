@@ -2,6 +2,7 @@
 
 #include <PNGdec.h>  // VGZ展開でPNGdec同梱のzlib型を使用
 #include <dirent.h>
+#include <esp_heap_caps.h>
 
 #include "input.h"
 #include "keyinfo.h"
@@ -15,6 +16,21 @@ static u16_t scanProgressY = 0;
 #define ND_SD_MOUNTPOINT "/sd"
 #define ND_FILETREE_SCAN_PROGRESS_INTERVAL 20
 #define ND_LOADING_FILE_SIZE (512 * 1024)  // LOADING... 出すファイルの閾値
+
+static void logMainMemory(const char* stage) {
+  const uint32_t internalCaps = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+  const uint32_t dmaCaps = MALLOC_CAP_DMA | MALLOC_CAP_8BIT;
+
+  Serial.printf(
+      "[RAM][%s] Internal free=%u, largest=%u, minimum=%u; DMA free=%u, largest=%u, "
+      "minimum=%u\n",
+      stage, (unsigned int)heap_caps_get_free_size(internalCaps),
+      (unsigned int)heap_caps_get_largest_free_block(internalCaps),
+      (unsigned int)heap_caps_get_minimum_free_size(internalCaps),
+      (unsigned int)heap_caps_get_free_size(dmaCaps),
+      (unsigned int)heap_caps_get_largest_free_block(dmaCaps),
+      (unsigned int)heap_caps_get_minimum_free_size(dmaCaps));
+}
 
 static void showFileOpenMessage(const char* message) {
   if (!disp.playbackViewInitialized) {
@@ -453,10 +469,17 @@ FileFormat NDFile::readFile(String path) {
       }
     }
 
-    static uint8_t zlib_buf[sizeof(inflate_state) + 32768];
+    const size_t zlibBufSize = sizeof(inflate_state) + 32768;
+    uint8_t* zlib_buf = static_cast<uint8_t*>(
+        heap_caps_malloc(zlibBufSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (zlib_buf == nullptr) {
+      showError("ERROR: Failed to allocate PSRAM for gzip.\n" + path);
+      hFile.close();
+      return FileFormat::Unknown;
+    }
     z_stream stream;
     memset(&stream, 0, sizeof(stream));
-    memset(zlib_buf, 0, sizeof(zlib_buf));
+    memset(zlib_buf, 0, zlibBufSize);
     stream.zalloc = (alloc_func)0;
     stream.zfree = (free_func)0;
     stream.opaque = (voidpf)0;
@@ -466,6 +489,7 @@ FileFormat NDFile::readFile(String path) {
     state->window = &zlib_buf[sizeof(inflate_state)];
     if (inflateInit2(&stream, -15) != Z_OK) {
       showError("ERROR: gzip init failed.\n" + path);
+      heap_caps_free(zlib_buf);
       hFile.close();
       return FileFormat::Unknown;
     }
@@ -518,6 +542,7 @@ FileFormat NDFile::readFile(String path) {
     }
 
     inflateEnd(&stream);
+    heap_caps_free(zlib_buf);
 
     if (status != Z_STREAM_END) {
       if (status == Z_BUF_ERROR) {
@@ -838,6 +863,8 @@ bool NDFile::_openFile(String path, int8_t att) {
     return false;
   }
 
+  logMainMemory("song load begin");
+
   // 再生ループは loop() 側で継続しているため、ファイル/音源状態を差し替える前に
   // 必ず停止扱いへ落とす。ND8 と同じく _openFile() の入口で再生可能状態を閉じる。
   ND::canPlay = false;
@@ -861,6 +888,7 @@ bool NDFile::_openFile(String path, int8_t att) {
   nju72341.reset(att);
 
   ND::fileFormat = readFile(path);
+  logMainMemory("file read complete");
 
   switch (ND::fileFormat) {
     case FileFormat::VGM: {
@@ -883,6 +911,8 @@ bool NDFile::_openFile(String path, int8_t att) {
       ND::canPlay = false;
       break;
   }
+
+  logMainMemory("song ready complete");
 
   if (!ND::canPlay) {
     showFileOpenMessage("ERROR");
