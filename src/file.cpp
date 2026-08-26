@@ -17,21 +17,6 @@ static u16_t scanProgressY = 0;
 #define ND_FILETREE_SCAN_PROGRESS_INTERVAL 20
 #define ND_LOADING_FILE_SIZE (512 * 1024)  // LOADING... 出すファイルの閾値
 
-static void logMainMemory(const char* stage) {
-  const uint32_t internalCaps = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
-  const uint32_t dmaCaps = MALLOC_CAP_DMA | MALLOC_CAP_8BIT;
-
-  Serial.printf(
-      "[RAM][%s] Internal free=%u, largest=%u, minimum=%u; DMA free=%u, largest=%u, "
-      "minimum=%u\n",
-      stage, (unsigned int)heap_caps_get_free_size(internalCaps),
-      (unsigned int)heap_caps_get_largest_free_block(internalCaps),
-      (unsigned int)heap_caps_get_minimum_free_size(internalCaps),
-      (unsigned int)heap_caps_get_free_size(dmaCaps),
-      (unsigned int)heap_caps_get_largest_free_block(dmaCaps),
-      (unsigned int)heap_caps_get_minimum_free_size(dmaCaps));
-}
-
 static void showFileOpenMessage(const char* message) {
   if (!disp.playbackViewInitialized) {
     return;
@@ -863,8 +848,6 @@ bool NDFile::_openFile(String path, int8_t att) {
     return false;
   }
 
-  logMainMemory("song load begin");
-
   // 再生ループは loop() 側で継続しているため、ファイル/音源状態を差し替える前に
   // 必ず停止扱いへ落とす。ND8 と同じく _openFile() の入口で再生可能状態を閉じる。
   ND::canPlay = false;
@@ -888,7 +871,6 @@ bool NDFile::_openFile(String path, int8_t att) {
   nju72341.reset(att);
 
   ND::fileFormat = readFile(path);
-  logMainMemory("file read complete");
 
   switch (ND::fileFormat) {
     case FileFormat::VGM: {
@@ -911,8 +893,6 @@ bool NDFile::_openFile(String path, int8_t att) {
       ND::canPlay = false;
       break;
   }
-
-  logMainMemory("song ready complete");
 
   if (!ND::canPlay) {
     showFileOpenMessage("ERROR");
