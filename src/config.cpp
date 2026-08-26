@@ -18,13 +18,14 @@ static tNJU72341_GAIN amplifyToInputGain(int amplify) {
   switch (amplify) {
     case AMP_0:
       return GAIN0;
+    case AMP_3:
+      return GAIN3;
     case AMP_6:
       return GAIN6;
     case AMP_9:
       return GAIN9;
-    case AMP_3:
     default:
-      return GAIN3;
+      return GAIN6;
   }
 }
 
