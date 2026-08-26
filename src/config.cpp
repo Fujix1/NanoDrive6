@@ -116,7 +116,7 @@ void NDConfig::init() {
                    {HOLD_NONE, HOLD_YES, HOLD_3SEC}});
   items.push_back({
       "loop",
-      LOOP_1,  // 初期値
+      0,  // 初期値idx
       "曲ループ",
       "Song Loop",
       {"1回", "2回", "3回", "4回", "5回", "無限"},
@@ -125,7 +125,7 @@ void NDConfig::init() {
   });
 
   items.push_back({"repeat",
-                   0,  // 初期値
+                   0,  // 初期値idx
                    "リピート",
                    "Repeat",
                    {"全曲", "フォルダ", "1曲"},
