@@ -24,6 +24,7 @@ enum class event {
 
 void cancelPlayHoldCountdown();
 bool isPlayHoldCountdownActive();
+void requestPlayHoldRelease();
 void syncPlayHoldConfig();
 
 class Input {

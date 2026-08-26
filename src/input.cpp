@@ -19,6 +19,7 @@ TaskHandle_t inputHandlerTaskHandle = nullptr;
 TimerHandle_t keyRepeatTimer = nullptr;
 QueueHandle_t inputEventQueue = nullptr;
 bool holdCountdownActive = false;
+volatile bool playHoldReleaseRequested = false;
 int8_t holdCountdownSec = 0;
 uint32_t holdCountdownNextTick = 0;
 int lastPauseConfig = -1;
@@ -255,6 +256,9 @@ void cancelPlayHoldCountdown() { holdCountdownActive = false; }
 
 bool isPlayHoldCountdownActive() { return holdCountdownActive; }
 
+// 小さいシリアル受信タスクでは描画せず、入力処理タスクへ解除要求だけ渡す。
+void requestPlayHoldRelease() { playHoldReleaseRequested = true; }
+
 // ホールドを解除し、0:00から実再生が始まるようにする。
 static void finishPlayHold() {
   holdCountdownActive = false;
@@ -404,6 +408,11 @@ bool Input::init() {
 
 void Input::inputHandler() {
   if (!_enabled) return;
+
+  if (playHoldReleaseRequested) {
+    playHoldReleaseRequested = false;
+    releasePlayHold();
+  }
 
   updateHoldCountdown();
 

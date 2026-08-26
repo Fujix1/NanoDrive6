@@ -5,7 +5,9 @@
 #include "NJU72341.h"
 #include "SI5351.hpp"
 #include "disp.h"
+#include "file.h"
 #include "fm.h"
+#include "input.h"
 #include "nd.h"
 
 #define SERIAL_SIZE_RX 65535
@@ -137,6 +139,29 @@ void trackMaskSerialTask(void* param) {
         FM.requestResetChannelMask();
       } else if (key >= '1' && key <= '6') {
         FM.requestToggleChannelMask((u8_t)(key - '1'));
+      } else if (key == ' ') {
+        requestPlayHoldRelease();
+      } else {
+        switch (key) {
+          case 'w':
+          case 'W':
+            ndFile.requestDirPlayIfIdle(-1);
+            break;
+          case 's':
+          case 'S':
+            ndFile.requestDirPlayIfIdle(1);
+            break;
+          case 'a':
+          case 'A':
+            ndFile.requestFilePlayIfIdle(-1);
+            break;
+          case 'd':
+          case 'D':
+            ndFile.requestFilePlayIfIdle(1);
+            break;
+          default:
+            break;
+        }
       }
     }
     vTaskDelay(TRACK_MASK_POLL_INTERVAL);

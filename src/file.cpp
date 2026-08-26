@@ -10,6 +10,7 @@
 static SPIClass SPI_SD;
 static File hFile;
 static SemaphoreHandle_t spFileOpen;  // ファイル開く処理用セマフォ
+static SemaphoreHandle_t playbackStateMutex;
 static u16_t scanProgressX = 0;
 static u16_t scanProgressY = 0;
 
@@ -163,6 +164,11 @@ bool NDFile::init() {
   // セマフォ作成
   spFileOpen = xSemaphoreCreateBinary();
   xSemaphoreGive(spFileOpen);
+  playbackStateMutex = xSemaphoreCreateMutex();
+  if (!playbackStateMutex) {
+    Serial.println("ERROR: playback state mutex create failed!");
+    return false;
+  }
 
   // SD用 SPI開始
   SPI_SD.begin(SD_CLK, SD_MISO, SD_MOSI, SD_CS);
@@ -694,14 +700,19 @@ bool NDFile::_dirPlay(int count) {
   return _playNode(targetFile);
 }
 
-bool NDFile::_sendPlaybackCommand(const PlaybackCommand& command) {
-  if (_playbackQueue == nullptr) {
+bool NDFile::_sendPlaybackCommand(const PlaybackCommand& command, bool discardIfBusy) {
+  if (_playbackQueue == nullptr || playbackStateMutex == nullptr) {
     return false;
   }
 
   // 再生要求はバッファリングしない。キーリピートや連打時に古い要求が残ると、
   // 入力を離した後も曲移動が続くため、常に最新の1件だけを保持する。
-  return xQueueOverwrite(_playbackQueue, &command) == pdTRUE;
+  const TickType_t wait = discardIfBusy ? 0 : portMAX_DELAY;
+  if (xSemaphoreTake(playbackStateMutex, wait) != pdTRUE) return false;
+  const bool sent = !discardIfBusy || !_playbackBusy;
+  const bool result = sent && xQueueOverwrite(_playbackQueue, &command) == pdTRUE;
+  xSemaphoreGive(playbackStateMutex);
+  return result;
 }
 
 // 再生操作リクエスト。
@@ -715,6 +726,16 @@ bool NDFile::requestFilePlay(int count) {
 bool NDFile::requestDirPlay(int count) {
   PlaybackCommand command = {PlaybackCommandType::DirRelative, count, 0, -1, nullptr};
   return _sendPlaybackCommand(command);
+}
+
+bool NDFile::requestFilePlayIfIdle(int count) {
+  PlaybackCommand command = {PlaybackCommandType::FileRelative, count, 0, -1, nullptr};
+  return _sendPlaybackCommand(command, true);
+}
+
+bool NDFile::requestDirPlayIfIdle(int count) {
+  PlaybackCommand command = {PlaybackCommandType::DirRelative, count, 0, -1, nullptr};
+  return _sendPlaybackCommand(command, true);
 }
 
 bool NDFile::requestAutoNextPlay() {
@@ -739,7 +760,11 @@ bool NDFile::processPlaybackQueue() {
   }
 
   PlaybackCommand command;
-  if (xQueueReceive(_playbackQueue, &command, 0) != pdTRUE) {
+  xSemaphoreTake(playbackStateMutex, portMAX_DELAY);
+  const bool hasCommand = xQueueReceive(_playbackQueue, &command, 0) == pdTRUE;
+  if (hasCommand) _playbackBusy = true;
+  xSemaphoreGive(playbackStateMutex);
+  if (!hasCommand) {
     return false;
   }
 
@@ -799,6 +824,9 @@ bool NDFile::processPlaybackQueue() {
     }
   }
 
+  xSemaphoreTake(playbackStateMutex, portMAX_DELAY);
+  _playbackBusy = false;
+  xSemaphoreGive(playbackStateMutex);
   return result;
 }
 

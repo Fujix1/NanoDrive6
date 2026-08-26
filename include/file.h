@@ -121,6 +121,9 @@ class NDFile {
   // 要求はバッファリングせず最新1件だけ保持し、processPlaybackQueue() が再生ループ側で処理する。
   bool requestFilePlay(int count);
   bool requestDirPlay(int count);
+  // シリアル操作用。別の再生要求を処理中ならキューへ入れず破棄する。
+  bool requestFilePlayIfIdle(int count);
+  bool requestDirPlayIfIdle(int count);
   bool requestAutoNextPlay();
   bool requestPlay(uint16_t d, uint16_t f, int8_t att = -1);
   bool requestPlay(Node* node, int8_t att = -1);
@@ -219,6 +222,7 @@ class NDFile {
   RandomSequenceState _folderFileRandomState;
   RandomSequenceState _allFileRandomState;
   QueueHandle_t _playbackQueue = nullptr;
+  bool _playbackBusy = false;
 
   // 再生所有者側の実行API。
   // 外部からは直接呼ばず、request*() -> processPlaybackQueue() 経由で実行する。
@@ -229,7 +233,7 @@ class NDFile {
   bool _fileOpen(uint16_t d, uint16_t f, int8_t att = -1);
   bool _openFile(String path, int8_t att = -1);
 
-  bool _sendPlaybackCommand(const PlaybackCommand& command);
+  bool _sendPlaybackCommand(const PlaybackCommand& command, bool discardIfBusy = false);
   bool _playNode(Node* node, int8_t att = -1);
   bool _playRandomFile(int count);
   bool _playRandomAll(int count);
