@@ -161,7 +161,7 @@ void setup() {
       Serial.printf("SD init.\n");
       ndFile.listDir("/");
     } else {
-      exit;
+      ESP.restart();
     }
 
     // ファイル数確認
