@@ -126,6 +126,11 @@ void FMChip::reset(void) {
   FM.write(0xdf, 2, SI5351_1500);
   FM.write(0xff, 2, SI5351_1500);
 
+  // 上の消音書き込みは最後が 0xff なので、そのままだと曲の切り替え中も
+  // D0-D7 が全て HIGH のままになる。全チップの CS は解除済みのため、
+  // 音源へ書き込まずにデータバスだけ LOW に戻しておく。
+  dedic_gpio_bundle_write(dataBus, 0xff, 0x00);
+
   _psgFrqLowByte = 0;
 
   delay(16);
