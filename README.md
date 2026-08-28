@@ -6,14 +6,14 @@ Also in version 2, I added a support for sound data transfer via USB serial conn
 
 VGZ files are supported in version 2.2. The max file size of the original VGM (ungzipped) is 7MB. You have to expand any files more larger than 7MB VGM.
 
+Version 3 is hybrid firmware compatible with both NanoDrive 6 and 6.1. Most of the software features introduced for 6.1 are also available on NanoDrive 6.
+<br><br>
+
 Nano Drive 6 / 6.1 は、YM2612/YM3438 + SN76489 x 2 を搭載した VGM プレーヤーです。サポートするフォーマットは VGM、XGM 1.1、XGM 2 で、SD カードから再生します。また、シリアルモードに切り替えることで、[Itoken](https://github.com/110-kenichi/mame) さん制作の MAmidiMEmo と Real chip VGM/XGM/MGS player を使用して、Windows からデータ送信を行うこともできます。
 
 バージョン2.2 から gzip 圧縮された vgz ファイルをサポートします。圧縮元の vgm ファイルサイズ 7MB まで動作します。7MB を超えるサイズの VGM についてはあらかじめ解凍して配置してください。
 
 バージョン3 は 6/6.1 両対応のハイブリッドファームウェアです。6.1のソフトウェア側の新機能が6でもほとんど利用できます。
-
-Version 3 is hybrid firmware compatible with both NanoDrive 6 and 6.1. Most of the software features introduced for 6.1 are also available on NanoDrive 6.
-<br><br>
 
 <figure><img src="https://github.com/user-attachments/assets/a15e7b2c-7026-4bf4-94d2-e90b153d7c28" width="800"></figure>
 <br>
