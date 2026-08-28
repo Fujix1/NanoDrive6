@@ -6,19 +6,26 @@ Also in version 2, I added a support for sound data transfer via USB serial conn
 
 VGZ files are supported in version 2.2. The max file size of the original VGM (ungzipped) is 7MB. You have to expand any files more larger than 7MB VGM.
 
-Nano Drive 6 は、YM2612/YM3438 + SN76489 x 2 を搭載した VGM プレーヤーです。サポートするフォーマットは VGM、XGM 1.1、XGM 2 で、SD カードから再生します。また、シリアルモードに切り替えることで、[Itoken](https://github.com/110-kenichi/mame) さん制作の MAmidiMEmo と Real chip VGM/XGM/MGS player を使用して、Windows からデータ送信を行うこともできます。
+Nano Drive 6 / 6.1 は、YM2612/YM3438 + SN76489 x 2 を搭載した VGM プレーヤーです。サポートするフォーマットは VGM、XGM 1.1、XGM 2 で、SD カードから再生します。また、シリアルモードに切り替えることで、[Itoken](https://github.com/110-kenichi/mame) さん制作の MAmidiMEmo と Real chip VGM/XGM/MGS player を使用して、Windows からデータ送信を行うこともできます。
 
 バージョン2.2 から gzip 圧縮された vgz ファイルをサポートします。圧縮元の vgm ファイルサイズ 7MB まで動作します。7MB を超えるサイズの VGM についてはあらかじめ解凍して配置してください。
 
+バージョン3 は 6/6.1 両対応のハイブリッドファームウェアです。6.1のソフトウェア側の新機能が6でもほとんど利用できます。
 <br><br>
 
 <figure><img src="https://github.com/user-attachments/assets/a15e7b2c-7026-4bf4-94d2-e90b153d7c28" width="800"></figure>
 <br>
 <br>
 
-## NanoDrive 6.1 について / Regarding NanoDrive 6.1
+## NanoDrive 6.1 について / About NanoDrive 6.1
 
-NanoDrive 6.1 は現在開発中です。ノイズ低減、動作安定化などのハードウェア的更新を行っています。
+NanoDrive 6.1 は 6 の問題点の解消を図ったものです。6 との違いはイカの通り:
+
+- **電源回路の改善とデジタルノイズの低減**<br>後継の ND7, ND8 世代の電源回路を使い、SDカードアクセス、液晶更新などのデジタル側の電源ゆらぎによるノイズの影響を低減。不安定だったり低電圧な USB 電源での動作安定度向上
+- **音源、ミキシング回路の改良**<br>FM音源チップ、PSGチップ、ミキシング部分などのVCC、GNDの配線をがんばりました
+- **コンデンサの変更**<br> 音響用DIPコンデンサの生産終了をうけ、主要コンデンサをニチコンUCQチップ電解コンデンサに変更し容量アップ。PSGラインにあったセラコンもUCQに置き換え。
+- **ファイルシステムの改善**<br> SDカードの入れ子ファイル構造に対応。ファイルブラウザ実装。
+- **ケースサイズの拡大**<br> 100mm x 100mm から 120mm x 120mm に拡大。自作ケース作成の自由度向上。
 
 
 ## ファームウェアのアップデート方法 / How to update the firmware.
@@ -36,11 +43,11 @@ NanoDrive 6.1 は現在開発中です。ノイズ低減、動作安定化など
 
 ## Manual PDF / マニュアル PDF
 
-You can get the manual at [nd6_manual_r3.pdf](https://github.com/user-attachments/files/18299302/nd6_manual_r3.pdf)
+You can get the NanoDrive 6 manual at [nd6_manual_r3.pdf](https://github.com/user-attachments/files/18299302/nd6_manual_r3.pdf)
 <br>
 <br><br>
 
-## PCB
+## PCB (ND6)
 
 ![pcb](https://github.com/user-attachments/assets/ec0ef72e-edaa-413a-92b3-2d8dc88f904d)
 
@@ -51,8 +58,8 @@ You can get the manual at [nd6_manual_r3.pdf](https://github.com/user-attachment
 
 ## File structure / ファイル構成
 
-microSD カードのルート直下にあるフォルダが再生対象となります。それ以外の場所に配置したファイルは無視されます。「\_\_MACOSX」フォルダは消してください。
-拡張子が「.vgm」のものをvgmファイルとして、「.xgm」のものをxgmファイルとして認識します。大文字小文字は区別しません。スクリーンショットは最大サイズ640x320 までのPNG ファイルです。同じフォルダ内にある、任意のPNG ファイルが使用されます。
+microSD カードに保存した、拡張子が「.vgm」「.vgz」のものをvgmファイルとして、「.xgm」のものをxgmファイルとして認識します。大文字小文字は区別しません。スクリーンショットは最大サイズ640x320 までのPNG ファイルです。同じフォルダ内にある、任意のPNG ファイルが使用されます。
+GZip圧縮された VGZ ファイルの展開時サイズが 7MBを超えるとエラーになるので、あらかじめ解凍して .vgm 拡張子に変更してください。XGM サイズの最大サイズは 7MB までです。
 <br>
 <br>
 Folders located directly under the root of the microSD card are the target for playback. Files in other locations will be ignored. Files with the extension ".vgm" (case insensitive) are recognized as vgm files, and those with the extension ".xgm" (case insensitive) as xgm files. Make sure to remove "\_\_MAXOSX" folders.
@@ -94,13 +101,6 @@ Select the "Serial mode" via the option menu and reboot to enter the USB serial 
   <br>
   <br>
 
-## Firmware Update 手順
-
-[ファームウェアのアップデート手順PDF](https://github.com/user-attachments/files/23695653/nd6_fimwareupdate.pdf)
-
-<br>
-<br>
-<br>
 
 ## Credits and licenses
 
