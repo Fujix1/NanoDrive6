@@ -2,9 +2,9 @@
 
 This is a repository for NanoDrive 6 and 6.1 VGM player with YM2612/YM3438 + SN76489 x 2, which plays back VGM, VGZ, XGM 1.1 and XGM 2 format files. It supports MegaDrive/Genesis, Sega System 1 and some SN76489 compatible systems.
 
-Also in version 2, I added a support for sound data transfer via USB serial connection and playback with "MAmidiMEmo" and "Real chip VGM/XGM/MGS player" created by [Itoken](https://github.com/110-kenichi/mame).
+Also in version 2, I added support for sound data transfer via USB serial connection and playback with "MAmidiMEmo" and "Real chip VGM/XGM/MGS player" created by [Itoken](https://github.com/110-kenichi/mame).
 
-VGZ files are supported in version 2.2. The max file size of the original VGM (ungzipped) is 7MB. You have to expand any files more larger than 7MB VGM.
+VGZ files are supported in version 2.2. The max file size of the original VGM (ungzipped) is 7MB. You have to expand files larger than 7MB in advance.
 
 Version 3 is hybrid firmware compatible with both NanoDrive 6 and 6.1. Most of the software features introduced for 6.1 are also available on NanoDrive 6.
 <br><br>
@@ -102,7 +102,7 @@ If neither file is found, any PNG file in the parent folder will be used.
 メニューからシリアルモードを選択し再起動すると、USB 経由のシリアル受信モードになります。MAmidiMEmo と Real chip VGM/XGM/MGS player がサポートしています。MIDI 制御や Windows からのデータ送信に対応します。ただし、性能的に PCM はノイズが乗ります。
 Dir+ と Dir- キーで YM2612 と SN76489 の周波数を4種類切り替えできます。
 
-Select the "Serial mode" via the option menu and reboot to enter the USB serial mode. "MAmidiMEmo" and "Real chip VGM/XGM/MGS player" support this function. You can control ND6 by the MIDI interface or send music data from Windows. Note that the PCM sound is noisy because of technical restriction. To change the frequency of YM2612 or SN76489 by pressing Dir+ or Dir- key respectively.
+Select the "Serial mode" via the option menu and reboot to enter the USB serial mode. "MAmidiMEmo" and "Real chip VGM/XGM/MGS player" support this function. You can control ND6 by the MIDI interface or send music data from Windows. Note that the PCM sound is noisy because of technical limitation. To change the frequency of YM2612 or SN76489, press the Dir+ or Dir- key.
 <br>
 <br>
 <br>
