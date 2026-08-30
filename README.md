@@ -7,19 +7,18 @@ Also in version 2, I added support for sound data transfer via USB serial connec
 VGZ files are supported in version 2.2. The max file size of the original VGM (ungzipped) is 7MB. You have to expand files larger than 7MB in advance.
 
 Version 3 is hybrid firmware compatible with both NanoDrive 6 and 6.1. Most of the software features introduced for 6.1 are also available on NanoDrive 6.
-<br><br>
+<br><br><br>
 
 Nano Drive 6 / 6.1 は、YM2612/YM3438 + SN76489 x 2 を搭載した VGM プレーヤーです。サポートするフォーマットは VGM、XGM 1.1、XGM 2 で、SD カードから再生します。また、シリアルモードに切り替えることで、[Itoken](https://github.com/110-kenichi/mame) さん制作の MAmidiMEmo と Real chip VGM/XGM/MGS player を使用して、Windows からデータ送信を行うこともできます。
 
 バージョン2.2 から gzip 圧縮された vgz ファイルをサポートします。圧縮元の vgm ファイルサイズ 7MB まで動作します。7MB を超えるサイズの VGM についてはあらかじめ解凍して配置してください。
 
 バージョン3 は 6/6.1 両対応のハイブリッドファームウェアです。6.1のソフトウェア側の新機能が6でもほとんど利用できます。
+<br><br>
+<img width="6016" height="4016" alt="ND61" src="https://github.com/user-attachments/assets/222cf56d-1cc6-4abc-88bf-68b984ca4bbe" style="max-width: 100%;">
+<br><br>
 
-<figure><img src="https://github.com/user-attachments/assets/a15e7b2c-7026-4bf4-94d2-e90b153d7c28" width="800"></figure>
-<br>
-<br>
-
-## NanoDrive 6.1 について / About NanoDrive 6.1
+## NanoDrive 6.1 について / What's new in NanoDrive 6.1
 
 NanoDrive 6.1 は 6 の問題点の解消を図ったものです。6 との違いは以下の通り:
 
@@ -103,8 +102,7 @@ If neither file is found, any PNG file in the parent folder will be used.
 Dir+ と Dir- キーで YM2612 と SN76489 の周波数を4種類切り替えできます。
 
 Select the "Serial mode" via the option menu and reboot to enter the USB serial mode. "MAmidiMEmo" and "Real chip VGM/XGM/MGS player" support this function. You can control ND6 by the MIDI interface or send music data from Windows. Note that the PCM sound is noisy because of technical limitation. To change the frequency of YM2612 or SN76489, press the Dir+ or Dir- key.
-<br>
-<br>
+<br><br>
 <br>
 
 ## Thanks to
@@ -137,3 +135,5 @@ Select the "Serial mode" via the option menu and reboot to enter the USB serial 
   https://fonts.google.com/specimen/BIZ+UDPGothic/license
 
 - Portions of this software are copyright © The FreeTypeProject (www.freetype.org). All rights reserved.
+<br><br>
+<figure><img src="https://github.com/user-attachments/assets/a15e7b2c-7026-4bf4-94d2-e90b153d7c28" width="800"></figure>
