@@ -68,7 +68,10 @@ You can get the NanoDrive 6 manual at [nd6_manual_r3.pdf](https://github.com/use
 
 ![pcb](https://github.com/user-attachments/assets/ec0ef72e-edaa-413a-92b3-2d8dc88f904d)
 
-![Schematics](https://github.com/user-attachments/assets/1caab077-61fb-4a6f-99a3-fba038a5c54c)
+![ND6 Schematics](https://github.com/user-attachments/assets/1caab077-61fb-4a6f-99a3-fba038a5c54c)
+
+## Schematics (ND6.1)
+<img width="4760" height="3314" alt="schematic61" src="https://github.com/user-attachments/assets/bdda9ad4-52c8-48bc-8df0-fc791ed0fa86" />
 
 <br>
 <br>
