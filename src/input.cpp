@@ -316,6 +316,10 @@ static void updateHoldCountdown() {
 }
 
 static bool releasePlayHold() {
+  // 曲切り替え中は isPaused がまだ確定していない。
+  // ホールドONなら入力を消費し、設定画面への遷移や読み込み途中の解除を防ぐ。
+  if (ndConfig.get(CFG_PAUSE) != HOLD_NONE && ndFile.isPlaybackPending()) return true;
+
   if (!ND::isPaused) return false;
 
   if (ndConfig.get(CFG_PAUSE) == HOLD_3SEC) {

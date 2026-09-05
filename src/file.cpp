@@ -830,6 +830,16 @@ bool NDFile::processPlaybackQueue() {
   return result;
 }
 
+bool NDFile::isPlaybackPending() {
+  if (_playbackQueue == nullptr || playbackStateMutex == nullptr) return false;
+
+  // キュー受信から処理中への移行と同じロックで、読み込み開始前の隙間も含めて判定する。
+  xSemaphoreTake(playbackStateMutex, portMAX_DELAY);
+  const bool pending = _playbackBusy || uxQueueMessagesWaiting(_playbackQueue) != 0;
+  xSemaphoreGive(playbackStateMutex);
+  return pending;
+}
+
 void NDFile::clearPlaybackQueue() {
   if (_playbackQueue == nullptr) {
     return;

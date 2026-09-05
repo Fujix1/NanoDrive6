@@ -128,6 +128,7 @@ class NDFile {
   bool requestPlay(uint16_t d, uint16_t f, int8_t att = -1);
   bool requestPlay(Node* node, int8_t att = -1);
   bool processPlaybackQueue();
+  bool isPlaybackPending();
   void clearPlaybackQueue();
   uint8_t getFolderAttenuation(String path);  // フォルダの音量減衰取得
   Node* findFileNodeByHistory(const String& dir, const String& file);
