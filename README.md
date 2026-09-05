@@ -60,7 +60,9 @@ To compile and upload the firmware yourself:
 
 ## Manual PDF / マニュアル PDF
 
-You can get the NanoDrive 6 manual at [nd6_manual_r3.pdf](https://github.com/user-attachments/files/18299302/nd6_manual_r3.pdf)
+NanoDrive 6 manual: [nd6_manual_r3.pdf](https://github.com/user-attachments/files/18299302/nd6_manual_r3.pdf)
+
+NanoDrive 6.1 manual: [nd6_manual_r1.pdf](https://github.com/user-attachments/files/31862051/nd6_manual_r1.pdf)
 <br>
 <br><br>
 
