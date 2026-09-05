@@ -3,6 +3,14 @@
 #include "input.h"
 #include "pics.h"
 #include "png_renderer.h"
+#include "serialman.h"
+
+DisplayMetadata displayMetadata(const tDispData& data) {
+  if (ndConfig.get(CFG_LANG) == LANG_JA) {
+    return {data.trackJp, data.gameJp, data.systemJp, data.authorJp};
+  }
+  return {data.trackEn, data.gameEn, data.systemEn, data.authorEn};
+}
 
 const uint8_t* Panel_ST7789_ND::getInitCommands(uint8_t listno) const {
   // ND6.1以降の液晶では現行の明るめガンマ値が必要。
@@ -979,16 +987,12 @@ void PlayerWindow::redraw() {
 
   if (serialMode) {
     setSerialModeLabels();
-  } else if (ndConfig.get(CFG_LANG) == LANG_JA) {
-    lblTitle.setCaption(dispData.trackJp);
-    lblGame.setCaption(dispData.gameJp);
-    lblAuthor.setCaption(dispData.authorJp);
-    lblSystem.setCaption(dispData.systemJp);
   } else {
-    lblTitle.setCaption(dispData.trackEn);
-    lblGame.setCaption(dispData.gameEn);
-    lblAuthor.setCaption(dispData.authorEn);
-    lblSystem.setCaption(dispData.systemEn);
+    const auto metadata = displayMetadata(dispData);
+    lblTitle.setCaption(metadata.title);
+    lblGame.setCaption(metadata.game);
+    lblAuthor.setCaption(metadata.composer);
+    lblSystem.setCaption(metadata.system);
   }
 
   // Snapshot
@@ -1074,9 +1078,16 @@ void serialModeDraw() {
   xSemaphoreGive(spFrameBuffer);
 }
 
+void PlayerWindow::publishMetadata() {
+  const auto metadata = displayMetadata(dispData);
+  serialMan.setTrackMetadata(metadata.title, metadata.system, metadata.composer, dispData.date,
+                            ndFile.getCurrentFilePath(), dispData.type);
+}
+
 void PlayerWindow::updateDisp(tDispData data) {
   dispData = data;
   dispData.time = 0;
+  publishMetadata();
 
   // setup() の初回曲ロード中は表示データだけ保持する。
   // ウィンドウ初期化前に描画タイマーを再開せず、show() で初めて描画する。
@@ -1439,6 +1450,7 @@ void CFGWindow::eventHandler(event ev) {
 
         // 言語はすぐ再描画
         if (changedItem == CFG_LANG) {
+          playerWindow.publishMetadata();
           drawPanelView();
         } else {
           refreshCurrentItem();
@@ -1460,6 +1472,7 @@ void CFGWindow::eventHandler(event ev) {
 
         // 言語はすぐ再描画
         if (changedItem == CFG_LANG) {
+          playerWindow.publishMetadata();
           drawPanelView();
         } else {
           refreshCurrentItem();

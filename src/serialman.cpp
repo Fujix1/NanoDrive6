@@ -15,7 +15,72 @@
 namespace {
 constexpr uint32_t PCM_BURST_SPREAD_US = 4;
 constexpr TickType_t TRACK_MASK_POLL_INTERVAL = pdMS_TO_TICKS(20);
+
+SemaphoreHandle_t metadataMutex() {
+  static SemaphoreHandle_t mutex = xSemaphoreCreateMutex();
+  return mutex;
+}
+String latestTrack;
+bool trackPending = false;
+
+String jsonString(const String& value) {
+  String result = "\"";
+  for (size_t i = 0; i < value.length(); ++i) {
+    const unsigned char c = value[i];
+    if (c == '"' || c == '\\') {
+      result += '\\';
+      result += (char)c;
+    } else if (c < 0x20) {
+      char escaped[7];
+      snprintf(escaped, sizeof(escaped), "\\u%04x", (unsigned int)c);
+      result += escaped;
+    } else {
+      result += (char)c;
+    }
+  }
+  return result + '"';
+}
+
+void sendAppFrame(const String& json) {
+  // A single write keeps our frame together; the leading newline terminates any diagnostic text.
+  const String frame = "\n@ND6 " + json + "\n";
+  Serial.write((const uint8_t*)frame.c_str(), frame.length());
+}
+
+void sendIdentity() {
+  sendAppFrame(String("{\"event\":\"identity\",\"model\":\"ND6\",\"hardware\":") +
+               jsonString(ND::versionLabel()) + ",\"firmware\":" + jsonString(ND_FIRMWARE_VERSION) +
+               ",\"protocol\":1}");
+}
+
+void sendPendingTrack(bool force) {
+  const auto mutex = metadataMutex();
+  if (!mutex) return;
+  String snapshot;
+  xSemaphoreTake(mutex, portMAX_DELAY);
+  if (force || trackPending) {
+    snapshot = latestTrack;
+    trackPending = false;
+  }
+  xSemaphoreGive(mutex);
+  if (!snapshot.isEmpty()) sendAppFrame(snapshot);
+}
 }  // namespace
+
+void SerialMan::setTrackMetadata(const String& title, const String& system, const String& composer,
+                                 const String& date, const String& path, String type) {
+  type.toLowerCase();
+  const String json = String("{\"event\":\"track\",\"title\":") + jsonString(title) +
+      ",\"system\":" + jsonString(system) + ",\"composer\":" + jsonString(composer) +
+      ",\"date\":" + jsonString(date) + ",\"path\":" + jsonString(path) +
+      ",\"type\":" + jsonString(type) + "}";
+  const auto mutex = metadataMutex();
+  if (!mutex) return;
+  xSemaphoreTake(mutex, portMAX_DELAY);
+  latestTrack = json;
+  trackPending = true;
+  xSemaphoreGive(mutex);
+}
 
 constexpr std::array<si5351Freq_t, 5> YM2612ClockOptions = {
     SI5351_7670,  // 7.670453 MHz
@@ -135,7 +200,10 @@ void trackMaskSerialTask(void* param) {
   while (1) {
     while (Serial.available() > 0) {
       const int key = Serial.read();
-      if (key == '0') {
+      if (key == '?') {
+        sendIdentity();
+        sendPendingTrack(true);
+      } else if (key == '0') {
         FM.requestResetChannelMask();
       } else if (key >= '1' && key <= '6') {
         FM.requestToggleChannelMask((u8_t)(key - '1'));
@@ -164,6 +232,7 @@ void trackMaskSerialTask(void* param) {
         }
       }
     }
+    if (Serial) sendPendingTrack(false);
     vTaskDelay(TRACK_MASK_POLL_INTERVAL);
   }
 }
@@ -195,7 +264,7 @@ void SerialMan::startSerialTask() {
 }
 
 void SerialMan::startTrackMaskTask() {
-  xTaskCreatePinnedToCore(trackMaskSerialTask, "trackMaskSerial", 2048, NULL, tskIDLE_PRIORITY, NULL, PRO_CPU_NUM);
+  xTaskCreatePinnedToCore(trackMaskSerialTask, "trackMaskSerial", 4096, NULL, tskIDLE_PRIORITY, NULL, PRO_CPU_NUM);
 }
 
 // YM2612クロック変更

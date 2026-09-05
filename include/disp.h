@@ -85,6 +85,11 @@ typedef struct {
   uint32_t no, maxFiles;
 } tDispData;
 
+struct DisplayMetadata {
+  String title, game, system, composer;
+};
+DisplayMetadata displayMetadata(const tDispData& data);
+
 bool initDisp();
 void redrawOnCore0();
 void serialModeDraw();
@@ -99,6 +104,7 @@ class PlayerWindow {
   void drawBG();
   void redraw();
   void updateDisp(tDispData data);
+  void publishMetadata();
   void showHeaderMessage(const char* message);
   void updateHeader(int64_t sec, bool visible = true, uint32_t ticksToWait = portMAX_DELAY);
   void updateHeaderBlocking(int64_t sec);

@@ -4,6 +4,8 @@
 #ifndef ND_H
 #define ND_H
 
+#define ND_FIRMWARE_VERSION "3.0"
+
 #include <Arduino.h>
 
 #include <array>

@@ -12,6 +12,8 @@ class SerialMan {
   void startTrackMaskTask();
   void changeYM2612Clock();
   void changeSN76489Clock();
+  void setTrackMetadata(const String& title, const String& system, const String& composer,
+                        const String& date, const String& path, String type);
 
  private:
   int YM2612Clock = 0, SN76489Clock = 0;

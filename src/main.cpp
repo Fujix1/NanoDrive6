@@ -107,7 +107,7 @@ void setup() {
   lcd.setFont(&fonts::Font2);
   lcd.printf("NANO DRIVE %s\n", ND::versionLabel());
   lcd.println("2024-2026 fujix@e2j.net");
-  lcd.printf("Firmware ver 3.0\n\n");
+  lcd.printf("Firmware ver %s\n\n", ND_FIRMWARE_VERSION);
 
   // PSRAM 初期化確認
   if (psramInit()) {
