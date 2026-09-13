@@ -816,6 +816,7 @@ void FMChip::setYM2612DAC(byte data, uint8_t chipno) {
     A0_LOW;
     dedic_gpio_bundle_write(dataBus, 0xff, 0x2a);
     WR_LOW;
+    ets_delay_us(3);
     WR_HIGH;
     A0_HIGH;
     // アドレスライト後の待ちサイクル
