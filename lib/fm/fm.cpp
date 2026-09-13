@@ -8,7 +8,7 @@
 #include "../../include/nd.h"
 
 dedic_gpio_bundle_handle_t dataBus = NULL;  // GPIOバンドル用ハンドラ
-static portMUX_TYPE ym2612ChmaskMux = portMUX_INITIALIZER_UNLOCKED;
+static portMUX_TYPE channelMaskMux = portMUX_INITIALIZER_UNLOCKED;
 static volatile uint8_t ym2612PanMode = TPAN_NORMAL;
 static volatile uint8_t sn76489AttenuationMode = SN_ATT_0;
 // YM2612 のアドレスラッチは port 0/1 で共有されるため、chip ごとに管理する。
@@ -190,7 +190,11 @@ void FMChip::write(byte data, byte chipno, si5351Freq_t freq) {
 
 void FMChip::writeRaw(byte data, byte chipno, si5351Freq_t freq) {
   const byte visualData = data;
+  if (chipno < 3 && freq != SI5351_UNDEFINED) {
+    _snClock[chipno] = freq;
+  }
   data = applySN76489Attenuation(data);
+  data = _applySN76489ChannelMask(data, chipno);
 
   switch (chipno) {
     case 0:
@@ -228,6 +232,20 @@ void FMChip::writeRaw(byte data, byte chipno, si5351Freq_t freq) {
   }
 
   _updateSN76489VisualState(visualData, chipno, freq);
+}
+
+byte FMChip::_applySN76489ChannelMask(byte data, uint8_t chipno) const {
+  // SN76489 (1) の音量ラッチだけを書き換える。周波数とノイズ設定は流し続け、
+  // マスク解除時には最新の音量で即座に再開できるようにする。
+  if (chipno != 1 || (data & 0x90) != 0x90) {
+    return data;
+  }
+
+  const uint8_t ch = (data >> 5) & 0x03;
+  if (_sn76489ChMask & (u8_t)(1u << ch)) {
+    return data | 0x0f;
+  }
+  return data;
 }
 
 static NoteInfo freqToNote(double freq) {
@@ -718,6 +736,13 @@ void FMChip::_writeCachedYM2612ChannelTl(uint8_t chipno, uint8_t ch) {
   }
 }
 
+void FMChip::_writeCachedSN76489Volume(uint8_t ch) {
+  if (ch >= 4) return;
+
+  const byte data = (byte)(0x90 | (ch << 5) | (_snVolume[1][ch] & 0x0f));
+  writeRaw(data, 1, _snClock[1]);
+}
+
 void FMChip::requestApplyYM2612OutputMode() {
   const int outputMode = ndConfig.get(CFG_FMPCM);
   if (outputMode >= FMPCM_BOTH && outputMode <= FMPCM_PCM) {
@@ -746,42 +771,62 @@ void FMChip::applyPendingYM2612OutputMode() {
 }
 
 void FMChip::requestToggleChannelMask(u8_t ch) {
-  if (ch >= 6) return;
+  if (ch >= 10) return;
 
-  portENTER_CRITICAL(&ym2612ChmaskMux);
-  _pendingYm2612ChToggle ^= (u8_t)(1u << ch);
-  portEXIT_CRITICAL(&ym2612ChmaskMux);
+  portENTER_CRITICAL(&channelMaskMux);
+  if (ch < 6) {
+    _pendingYm2612ChToggle ^= (u8_t)(1u << ch);
+  } else {
+    _pendingSn76489ChToggle ^= (u8_t)(1u << (ch - 6));
+  }
+  portEXIT_CRITICAL(&channelMaskMux);
 }
 
 void FMChip::requestResetChannelMask() {
-  portENTER_CRITICAL(&ym2612ChmaskMux);
-  _pendingYm2612ChMaskReset = true;
-  portEXIT_CRITICAL(&ym2612ChmaskMux);
+  portENTER_CRITICAL(&channelMaskMux);
+  _pendingChannelMaskReset = true;
+  portEXIT_CRITICAL(&channelMaskMux);
 }
 
 void FMChip::applyPendingChannelMask() {
-  u8_t pending = 0x00;
+  u8_t pendingYm2612 = 0x00;
+  u8_t pendingSn76489 = 0x00;
   bool reset = false;
 
-  portENTER_CRITICAL(&ym2612ChmaskMux);
-  pending = _pendingYm2612ChToggle;
+  portENTER_CRITICAL(&channelMaskMux);
+  pendingYm2612 = _pendingYm2612ChToggle;
   _pendingYm2612ChToggle = 0x00;
-  reset = _pendingYm2612ChMaskReset;
-  _pendingYm2612ChMaskReset = false;
-  portEXIT_CRITICAL(&ym2612ChmaskMux);
+  pendingSn76489 = _pendingSn76489ChToggle;
+  _pendingSn76489ChToggle = 0x00;
+  reset = _pendingChannelMaskReset;
+  _pendingChannelMaskReset = false;
+  portEXIT_CRITICAL(&channelMaskMux);
 
   if (reset) {
     if (ym2612_chmask != 0x00) {
       ym2612_chmask = 0x00;
       _writeCachedYM2612Tl(0);
     }
+    if (_sn76489ChMask != 0x00) {
+      _sn76489ChMask = 0x00;
+      for (u8_t ch = 0; ch < 4; ch++) {
+        _writeCachedSN76489Volume(ch);
+      }
+    }
     return;
   }
 
   for (u8_t ch = 0; ch < 6; ch++) {
-    if (pending & (u8_t)(1u << ch)) {
+    if (pendingYm2612 & (u8_t)(1u << ch)) {
       ym2612_chmask ^= (u8_t)(1u << ch);
       _writeCachedYM2612ChannelTl(0, ch);
+    }
+  }
+
+  for (u8_t ch = 0; ch < 4; ch++) {
+    if (pendingSn76489 & (u8_t)(1u << ch)) {
+      _sn76489ChMask ^= (u8_t)(1u << ch);
+      _writeCachedSN76489Volume(ch);
     }
   }
 }

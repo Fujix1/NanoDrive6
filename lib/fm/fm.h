@@ -48,13 +48,14 @@ class FMChip {
   void setYM2612DAC(byte data, uint8_t chipno);
   void requestApplyYM2612OutputMode();
   void applyPendingYM2612OutputMode();
+  // ch 0-5: YM2612 CH1-6, ch 6-9: SN76489 (1) tone CH1-3/noise
   void requestToggleChannelMask(u8_t ch);
   void requestResetChannelMask();
   void applyPendingChannelMask();
   void write(byte data, byte chipno, si5351Freq_t freq);
   void writeRaw(byte data, byte chipno, si5351Freq_t freq);
 
-  // YM2612 FM channel mask (bit 0-5 = CH1-6). PCM/PSG are not included.
+  // YM2612 FM channel mask (bit 0-5 = CH1-6). PCM is not included.
   u8_t ym2612_chmask = 0x00;
 
  private:
@@ -63,6 +64,8 @@ class FMChip {
   u16_t _snTonePeriod[3][3] = {};
   u8_t _snVolume[3][4] = {};
   u8_t _snNoiseControl[3] = {};
+  si5351Freq_t _snClock[3] = {SI5351_1500, SI5351_1500, SI5351_1500};
+  u8_t _sn76489ChMask = 0x00;  // bit 0-3 = SN76489 (1) tone CH1-3/noise
   u8_t _ym2612TlReg[3][2][16] = {};
   bool _ym2612TlRegValid[3][2][16] = {};
   u8_t _ym2612FreqLow[3][2][3] = {};
@@ -74,9 +77,12 @@ class FMChip {
   volatile u8_t _ym2612OutputMode = 0;  // FMPCM_BOTH。設定変更時だけ同期する。
   volatile bool _ym2612OutputModeApplyPending = false;
   volatile u8_t _pendingYm2612ChToggle = 0x00;
-  volatile bool _pendingYm2612ChMaskReset = false;
+  volatile u8_t _pendingSn76489ChToggle = 0x00;
+  volatile bool _pendingChannelMaskReset = false;
 
+  byte _applySN76489ChannelMask(byte data, uint8_t chipno) const;
   byte _applyYM2612ChannelMask(byte bank, byte addr, byte data, uint8_t chipno) const;
+  void _writeCachedSN76489Volume(uint8_t ch);
   void _updateSN76489VisualState(byte data, uint8_t chipno, si5351Freq_t freq);
   void _updateSN76489ChannelNote(uint8_t chipno, uint8_t ch, si5351Freq_t freq);
   void _updateYM2612VisualState(byte bank, byte addr, byte data, uint8_t chipno);

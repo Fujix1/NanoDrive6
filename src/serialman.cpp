@@ -203,10 +203,12 @@ void trackMaskSerialTask(void* param) {
       if (key == '?') {
         sendIdentity();
         sendPendingTrack(true);
-      } else if (key == '0') {
+      } else if (key == 'r' || key == 'R') {
         FM.requestResetChannelMask();
-      } else if (key >= '1' && key <= '6') {
+      } else if (key >= '1' && key <= '9') {
         FM.requestToggleChannelMask((u8_t)(key - '1'));
+      } else if (key == '0') {
+        FM.requestToggleChannelMask(9);  // SN76489 noise
       } else if (key == ' ') {
         requestPlayHoldRelease();
       } else {
