@@ -48,7 +48,7 @@ class FMChip {
   void setYM2612DAC(byte data, uint8_t chipno);
   void requestApplyYM2612OutputMode();
   void applyPendingYM2612OutputMode();
-  // ch 0-5: YM2612 CH1-6, ch 6-9: SN76489 (1) tone CH1-3/noise
+  // ch 0-5: YM2612 CH1-6, ch 6-9/10-13: SN76489 (1)/(2) tone CH1-3/noise
   void requestToggleChannelMask(u8_t ch);
   void requestResetChannelMask();
   void applyPendingChannelMask();
@@ -66,7 +66,7 @@ class FMChip {
   u8_t _snVolume[3][4] = {};
   u8_t _snNoiseControl[3] = {};
   si5351Freq_t _snClock[3] = {SI5351_1500, SI5351_1500, SI5351_1500};
-  u8_t _sn76489ChMask = 0x00;  // bit 0-3 = SN76489 (1) tone CH1-3/noise
+  u8_t _sn76489ChMask = 0x00;  // bit 0-3/4-7 = SN76489 (1)/(2) tone CH1-3/noise
   u8_t _ym2612TlReg[3][2][16] = {};
   bool _ym2612TlRegValid[3][2][16] = {};
   u8_t _ym2612FreqLow[3][2][3] = {};

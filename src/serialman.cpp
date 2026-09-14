@@ -218,6 +218,10 @@ void trackMaskSerialTask(void* param) {
         FM.requestToggleChannelMask((u8_t)(key - '1'));
       } else if (key == '0') {
         FM.requestToggleChannelMask(9);  // SN76489 noise
+      } else if (key >= 'j' && key <= 'l') {
+        FM.requestToggleChannelMask((u8_t)(10 + key - 'j'));  // SN76489 (2) tone CH1-3
+      } else if (key == ';') {
+        FM.requestToggleChannelMask(13);  // SN76489 (2) noise
       } else if (key == ' ') {
         requestPlayHoldRelease();
       } else {

@@ -236,13 +236,13 @@ void FMChip::writeRaw(byte data, byte chipno, si5351Freq_t freq) {
 }
 
 byte FMChip::_applySN76489ChannelMask(byte data, uint8_t chipno) const {
-  // SN76489 (1) の音量ラッチだけを書き換える。周波数とノイズ設定は流し続け、
+  // SN76489 (1)/(2) の音量ラッチだけを書き換える。周波数とノイズ設定は流し続け、
   // マスク解除時には最新の音量で即座に再開できるようにする。
-  if (chipno != 1 || (data & 0x90) != 0x90) {
+  if ((chipno != 1 && chipno != 2) || (data & 0x90) != 0x90) {
     return data;
   }
 
-  const uint8_t ch = (data >> 5) & 0x03;
+  const uint8_t ch = ((data >> 5) & 0x03) + (chipno - 1) * 4;
   if (_sn76489ChMask & (u8_t)(1u << ch)) {
     return data | 0x0f;
   }
@@ -739,10 +739,12 @@ void FMChip::_writeCachedYM2612ChannelTl(uint8_t chipno, uint8_t ch) {
 }
 
 void FMChip::_writeCachedSN76489Volume(uint8_t ch) {
-  if (ch >= 4) return;
+  if (ch >= 8) return;
 
-  const byte data = (byte)(0x90 | (ch << 5) | (_snVolume[1][ch] & 0x0f));
-  writeRaw(data, 1, _snClock[1]);
+  const uint8_t chipno = 1 + ch / 4;
+  const uint8_t localCh = ch % 4;
+  const byte data = (byte)(0x90 | (localCh << 5) | (_snVolume[chipno][localCh] & 0x0f));
+  writeRaw(data, chipno, _snClock[chipno]);
 }
 
 void FMChip::requestApplyYM2612OutputMode() {
@@ -781,7 +783,7 @@ uint16_t FMChip::getChannelMask() {
 }
 
 void FMChip::requestToggleChannelMask(u8_t ch) {
-  if (ch >= 10) return;
+  if (ch >= 14) return;
 
   portENTER_CRITICAL(&channelMaskMux);
   if (ch < 6) {
@@ -820,7 +822,7 @@ void FMChip::applyPendingChannelMask() {
     }
     if (_sn76489ChMask != 0x00) {
       _sn76489ChMask = 0x00;
-      for (u8_t ch = 0; ch < 4; ch++) {
+      for (u8_t ch = 0; ch < 8; ch++) {
         _writeCachedSN76489Volume(ch);
       }
     }
@@ -835,7 +837,7 @@ void FMChip::applyPendingChannelMask() {
     }
   }
 
-  for (u8_t ch = 0; ch < 4; ch++) {
+  for (u8_t ch = 0; ch < 8; ch++) {
     if (pendingSn76489 & (u8_t)(1u << ch)) {
       _sn76489ChMask ^= (u8_t)(1u << ch);
       _writeCachedSN76489Volume(ch);
