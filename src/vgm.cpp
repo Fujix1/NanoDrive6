@@ -62,6 +62,8 @@ VGM::VGM() {
 // vgm 再生準備
 bool VGM::ready() {
   ND::canPlay = false;
+  _ssgToSn.reset();
+  _ssgToSnEnabled = false;
   ndFile.pos = 0;
 
   ND::freq.fill(SI5351_UNDEFINED);
@@ -270,6 +272,15 @@ bool VGM::ready() {
     }
   }
 
+  // Reserve SN chip 1 for the first YM2203 SSG only when native SN is absent.
+  if (CHIP0 == CHIP_YM2612 && CHIP1 == CHIP_SN76489_0 &&
+      ym2203_clock && !(ym2203_clock & 0x40000000) && !sn76489_clock) {
+    // 2 MHz extends the tone range down to ~61 Hz for SSG bass parts.
+    ND::freq[CHIP1_CLOCK] = SI5351_2000;
+    _ssgToSn.reset(ym2203_clock & 0x3fffffff, uint32_t(ND::freq[CHIP1_CLOCK]));
+    _ssgToSnEnabled = true;
+  }
+
   // 周波数設定
   if (ND::freq[0] != SI5351_UNDEFINED) {
     SI5351.setFreq(ND::freq[0], 0);
@@ -282,6 +293,11 @@ bool VGM::ready() {
   }
 
   SI5351.enableOutputs(true);
+
+  if (_ssgToSnEnabled) {
+    for (u8_t ch = 0; ch < 4; ++ch)
+      FM.writeRaw(0x9f | (ch << 5), 1, ND::freq[CHIP1_CLOCK]);
+  }
 
   // GD3 tags
   //_parseGD3(gd3Offset);
@@ -1053,8 +1069,13 @@ void VGM::vgmProcessMain() {
       reg = ndFile.get_ui8();
       dat = ndFile.get_ui8();
       if (CHIP0 == CHIP_YM2612) {
-        // YM2203のFM部だけをYM2612 port 0で代替再生する。
-        // YM2203 PSG/タイマ/プリスケーラはND6では扱わない。
+        // FM -> YM2612 port 0; fixed-volume SSG tones -> SN chip 1.
+        // Timers and FM prescaler changes remain unsupported.
+        if (_ssgToSnEnabled) {
+          _ssgToSn.write(reg, dat, [](uint8_t value) {
+            FM.writeRaw(value, 1, ND::freq[CHIP1_CLOCK]);
+          });
+        }
         if (isYM2203FmRegister(reg)) {
           if (reg >= 0xB4 && reg <= 0xB6) {
             dat |= 0xC0;

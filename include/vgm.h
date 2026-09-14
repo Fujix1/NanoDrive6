@@ -7,6 +7,7 @@
 #include "common.h"
 #include "disp.h"
 #include "nd.h"
+#include "ssg_to_sn.h"
 
 #define VGM_TIME_SCALE 10  // 10倍スケール0.1usで計測
 
@@ -98,6 +99,8 @@ class VGM {
   u64_t getCurrentTime();
 
  private:
+  SsgToSn _ssgToSn;
+  bool _ssgToSnEnabled = false;
   static const int VGM_STREAM_MAX = 4;
   struct t_vgmDataBlock {
     u32_t pos;
