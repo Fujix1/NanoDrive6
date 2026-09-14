@@ -4,7 +4,7 @@
 #ifndef ND_H
 #define ND_H
 
-#define ND_FIRMWARE_VERSION "3.1dev"
+#define ND_FIRMWARE_VERSION "3.1dev2"
 
 #include <Arduino.h>
 
@@ -58,8 +58,8 @@ typedef enum { nd_v60, nd_v61 } t_ndVersion;
 
 class ND {
  public:
-  static t_ndVersion version;     // 本体バージョン
-  static VolumeChip volumeChip;   // ボリュームチップ種別
+  static t_ndVersion version;    // 本体バージョン
+  static VolumeChip volumeChip;  // ボリュームチップ種別
   static FileFormat fileFormat;  //
   static bool canPlay;           // ファイル処理可能
   static bool isPaused;          // 再生ホールド中

@@ -98,6 +98,7 @@ void FMChip::reset(void) {
   }
   _ym2612DacLevelDecimator = 0;
   _ym2612DacLevelPeak = 0;
+  for (uint8_t chip = 0; chip < 3; chip++) _ym2612DacData[chip] = 0x80;
 
   CS0_LOW;
   CS1_LOW;
@@ -600,8 +601,9 @@ void FMChip::_updateYM2612VisualState(byte bank, byte addr, byte data, uint8_t c
 }
 
 void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
-  if (_ym2612OutputMode == FMPCM_FM && addr == 0x2A) {
-    return;  // DAC data off (FM only)
+  if (addr == 0x2A && bank == 0) {
+    setYM2612DAC(data, chipno);
+    return;
   }
 
   if (chipno >= 3 || bank >= 2) return;
@@ -767,7 +769,15 @@ void FMChip::applyPendingYM2612OutputMode() {
 
   for (uint8_t chipno = 0; chipno < 3; chipno++) {
     _writeCachedYM2612Tl(chipno);
+    setYM2612DAC(_ym2612DacData[chipno], chipno);
   }
+}
+
+uint16_t FMChip::getChannelMask() {
+  portENTER_CRITICAL(&channelMaskMux);
+  const uint16_t mask = _appliedChannelMask;
+  portEXIT_CRITICAL(&channelMaskMux);
+  return mask;
 }
 
 void FMChip::requestToggleChannelMask(u8_t ch) {
@@ -801,6 +811,7 @@ void FMChip::applyPendingChannelMask() {
   reset = _pendingChannelMaskReset;
   _pendingChannelMaskReset = false;
   portEXIT_CRITICAL(&channelMaskMux);
+  if (!reset && pendingYm2612 == 0 && pendingSn76489 == 0) return;
 
   if (reset) {
     if (ym2612_chmask != 0x00) {
@@ -813,7 +824,8 @@ void FMChip::applyPendingChannelMask() {
         _writeCachedSN76489Volume(ch);
       }
     }
-    return;
+    pendingYm2612 = 0;
+    pendingSn76489 = 0;
   }
 
   for (u8_t ch = 0; ch < 6; ch++) {
@@ -829,15 +841,23 @@ void FMChip::applyPendingChannelMask() {
       _writeCachedSN76489Volume(ch);
     }
   }
+  if (reset || (pendingYm2612 & 0x20)) {
+    setYM2612DAC(_ym2612DacData[0], 0);
+  }
+  portENTER_CRITICAL(&channelMaskMux);
+  _appliedChannelMask = ym2612_chmask | ((uint16_t)_sn76489ChMask << 6);
+  portEXIT_CRITICAL(&channelMaskMux);
 }
 
 // YM2612 の DAC データ送信専用
 void FMChip::setYM2612DAC(byte data, uint8_t chipno) {
-  if (_ym2612OutputMode == FMPCM_FM) {
-    return;  // DAC data off (FM only)
-  }
-
   if (chipno >= 3) return;
+  _ym2612DacData[chipno] = data;
+  // config の禁止とトラックマスクのどちらかが有効なら無音値を出す。
+  // DAC enable は曲の設定を維持し、FMへ切り替えない。
+  if (_ym2612OutputMode == FMPCM_FM || (chipno == 0 && (ym2612_chmask & 0x20))) {
+    data = 0x80;
+  }
 
   switch (chipno) {
     case 0:

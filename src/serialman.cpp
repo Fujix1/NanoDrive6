@@ -53,6 +53,14 @@ void sendIdentity() {
                ",\"protocol\":1}");
 }
 
+void sendChannelMask(bool force) {
+  static uint16_t lastMask = 0xffff;
+  const uint16_t mask = FM.getChannelMask();
+  if (!force && mask == lastMask) return;
+  lastMask = mask;
+  sendAppFrame(String("{\"event\":\"channel-mask\",\"mask\":") + String(mask) + "}");
+}
+
 void sendPendingTrack(bool force) {
   const auto mutex = metadataMutex();
   if (!mutex) return;
@@ -202,6 +210,7 @@ void trackMaskSerialTask(void* param) {
       const int key = Serial.read();
       if (key == '?') {
         sendIdentity();
+        sendChannelMask(true);
         sendPendingTrack(true);
       } else if (key == 'r' || key == 'R') {
         FM.requestResetChannelMask();
@@ -234,7 +243,10 @@ void trackMaskSerialTask(void* param) {
         }
       }
     }
-    if (Serial) sendPendingTrack(false);
+    if (Serial) {
+      sendPendingTrack(false);
+      sendChannelMask(false);
+    }
     vTaskDelay(TRACK_MASK_POLL_INTERVAL);
   }
 }

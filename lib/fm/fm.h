@@ -52,10 +52,11 @@ class FMChip {
   void requestToggleChannelMask(u8_t ch);
   void requestResetChannelMask();
   void applyPendingChannelMask();
+  uint16_t getChannelMask();
   void write(byte data, byte chipno, si5351Freq_t freq);
   void writeRaw(byte data, byte chipno, si5351Freq_t freq);
 
-  // YM2612 FM channel mask (bit 0-5 = CH1-6). PCM is not included.
+  // YM2612 channel mask (bit 0-5 = CH1-6). CH6 includes DAC.
   u8_t ym2612_chmask = 0x00;
 
  private:
@@ -74,6 +75,8 @@ class FMChip {
   u8_t _ym2612KeyOnSlots[3][6] = {};
   u8_t _ym2612DacLevelDecimator = 0;
   u8_t _ym2612DacLevelPeak = 0;
+  byte _ym2612DacData[3] = {0x80, 0x80, 0x80};
+  uint16_t _appliedChannelMask = 0;
   volatile u8_t _ym2612OutputMode = 0;  // FMPCM_BOTH。設定変更時だけ同期する。
   volatile bool _ym2612OutputModeApplyPending = false;
   volatile u8_t _pendingYm2612ChToggle = 0x00;
