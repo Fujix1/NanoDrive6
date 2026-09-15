@@ -517,6 +517,7 @@ si5351Freq_t VGM::normalizeFreq(u32_t freq, t_chip chip) {
           return SI5351_8000;
           break;
         case 7670453:
+        case 7670454:  // VGM header may round the Mega Drive clock up by 1 Hz.
           return SI5351_7670;
           break;
         case 1500000:  // YM2203 @ 1.5MHz
@@ -550,8 +551,10 @@ si5351Freq_t VGM::normalizeFreq(u32_t freq, t_chip chip) {
           return SI5351_1789;
           break;
         case 3579580:
+        case 3579575:
         case 3579545:
         case 0x40000000 + 3579580:
+        case 0x40000000 + 3579575:
         case 0x40000000 + 3579545:
           return SI5351_3579;
           break;

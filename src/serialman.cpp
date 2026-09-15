@@ -1,6 +1,9 @@
 #include "serialman.h"
 
 #include <Arduino.h>
+#include <esp_timer.h>
+#include "TimedStream.h"
+#include "ClockMatch.h"
 
 #include "NJU72341.h"
 #include "SI5351.hpp"
@@ -114,17 +117,67 @@ u8_t getSerial() {
   }
 }
 
-u32_t getSerial32() { return getSerial() + (getSerial() << 8) + (getSerial() << 16) + (getSerial() << 24); }
+u32_t getSerial32() {
+  u32_t value = 0;
+  for (unsigned i = 0; i < 4; ++i) value |= u32_t(getSerial()) << (8 * i);
+  return value;
+}
+
+struct TimedChips {
+  u32_t clock0 = SI5351_3579, clock1 = SI5351_2000;
+};
+void timedEmit(void* context, const uint8_t* cmd, unsigned size) {
+  (void)size;
+  const auto& chips = *static_cast<TimedChips*>(context);
+  switch (cmd[0]) {
+    case 0x30: FM.write(cmd[1], 2, (si5351Freq_t)chips.clock0); break;
+    case 0x50: FM.write(cmd[1], 1, (si5351Freq_t)chips.clock1); break;
+    case 0x52: case 0x53: FM.setYM2612(cmd[0] - 0x52, cmd[1], cmd[2], 0); break;
+    case 0x55: FM.setRegister(cmd[1], cmd[2], 0); break;
+    default: FM.setYM2612DAC(cmd[1], 0); break;
+  }
+}
+void timedReset(void*) { FM.reset(); }
 
 // シリアル受信用タスク
 void serialCheckerTask(void* param) {
   u8_t command, reg, dat;
-  u32_t clock0 = SI5351_3579, clock1 = SI5351_2000;
+  static TimedChips chips;
+  static nd6timed::Stream timed(timedEmit, timedReset, &chips);
+  u32_t& clock0 = chips.clock0;
+  u32_t& clock1 = chips.clock1;
+  uint64_t lastStatus = 0;
   lcd.setCursor(5, 77);
   // lcd.printf("%02x %02x %02x", 0x53, reg, dat);
 
   while (1) {
-    command = getSerial();
+    uint64_t now = uint64_t(esp_timer_get_time());
+    timed.tick(now);
+    if (timed.capabilityPending || timed.statusPending ||
+        (timed.active() && now - lastStatus >= 20000)) {
+      uint8_t reply[32];
+      if (Serial.availableForWrite() >= sizeof(reply)) {
+        const bool capability = timed.capabilityPending;
+        timed.status(reply, capability, now);
+        if (Serial.write(reply, sizeof(reply)) == sizeof(reply)) {
+          if (capability) timed.capabilityPending = false;
+          else timed.statusPending = false;
+          lastStatus = now;
+        }
+      }
+    }
+    if (!Serial.available()) {
+      if (!timed.active() || timed.remainingUS(now) > 2000) vTaskDelay(1);
+      continue;
+    }
+    // One byte per pass bounds receive work between scheduler ticks.
+    command = Serial.read();
+    if (timed.input(command, now)) continue;
+    if (timed.active()) {
+      if (command == 0) timed.stop();
+      else timed.fail(nd6timed::Stream::BadFrame);
+      continue;
+    }
     switch (command) {
       case 0x30: {  // SN76489 chip 2
         dat = getSerial();
@@ -170,7 +223,8 @@ void serialCheckerTask(void* param) {
 
       case 0xf0: {
         // クロック0の周波数設定
-        clock0 = getSerial32();
+        clock0 = nd6clock::match(getSerial32());
+        // VGM nominal clock often differs by 1 Hz; avoid SI5351's 4 MHz default.
         SI5351.setFreq((si5351Freq_t)clock0, 0);
         ND::freq[0] = (si5351Freq_t)clock0;
         serialModeDraw();
@@ -179,7 +233,7 @@ void serialCheckerTask(void* param) {
 
       case 0xf1: {
         // クロック1の周波数設定
-        clock1 = getSerial32();
+        clock1 = nd6clock::match(getSerial32());
         SI5351.setFreq((si5351Freq_t)clock1, 1);
         ND::freq[1] = (si5351Freq_t)clock1;
         serialModeDraw();
