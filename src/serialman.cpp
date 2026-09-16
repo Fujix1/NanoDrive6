@@ -153,6 +153,12 @@ void serialCheckerTask(void* param) {
   while (1) {
     uint64_t now = uint64_t(esp_timer_get_time());
     timed.tick(now);
+    // A PCM write can be due in 45 us. Finish the next write before servicing
+    // USB receive/status work if its deadline is within one short work slice.
+    // Use a fresh timestamp because the chip write in tick() takes time too.
+    now = uint64_t(esp_timer_get_time());
+    const uint64_t untilWrite = timed.remainingUS(now);
+    if (timed.state == nd6timed::Stream::Running && untilWrite <= 20) continue;
     if (timed.capabilityPending || timed.statusPending ||
         (timed.active() && now - lastStatus >= 20000)) {
       uint8_t reply[32];

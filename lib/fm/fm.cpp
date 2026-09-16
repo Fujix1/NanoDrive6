@@ -771,8 +771,9 @@ void FMChip::applyPendingYM2612OutputMode() {
 
   for (uint8_t chipno = 0; chipno < 3; chipno++) {
     _writeCachedYM2612Tl(chipno);
-    setYM2612DAC(_ym2612DacData[chipno], chipno);
   }
+  // The output mode applies to the YM2612 on CS0. CS1 and CS2 are PSGs.
+  setYM2612DAC(_ym2612DacData[0], 0);
 }
 
 uint16_t FMChip::getChannelMask() {

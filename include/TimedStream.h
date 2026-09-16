@@ -54,6 +54,7 @@ class Stream {
   uint32_t session = 0;
   uint64_t consumed = 0;
   uint64_t samples = 0;
+  uint64_t maxPCMLateUS = 0;
   bool capabilityPending = false;
   bool statusPending = false;
 
@@ -69,8 +70,7 @@ class Stream {
     return pos < samples ? pos : samples;
   }
   uint64_t remainingUS(uint64_t now) const {
-    const uint64_t due = origin_ + sampleUS(samples);
-    return state == Running && due > now ? due - now : 0;
+    return state == Running && deadline_ > now ? deadline_ - now : 0;
   }
   void stop() {
     state = Idle; error = None; count_ = head_ = 0;
@@ -116,7 +116,7 @@ class Stream {
     const uint8_t type = frame_[4];
     const uint8_t* payload = frame_ + 11;
     if (type == 1 && length == 0) {
-      stop(); session = id; consumed = samples = 0;
+      stop(); session = id; consumed = samples = maxPCMLateUS = 0;
       state = Preload; lastFrameAt_ = now; ended_ = false;
       return true;
     }
@@ -124,7 +124,8 @@ class Stream {
     lastFrameAt_ = now;
     if (type == 4 && length == 0) { stop(); return true; }
     if (type == 3 && length == 0 && state == Preload) {
-      origin_ = now; state = Running; statusPending = true; return true;
+      origin_ = now; deadline_ = origin_ + sampleUS(samples);
+      state = Running; statusPending = true; return true;
     }
     if (type == 5 && length == 0) { statusPending = true; return true; }
     if (type != 2 || !active() || !length || ended_) { fail(BadCommand); return true; }
@@ -168,10 +169,15 @@ class Stream {
       if (cmd[0] == 0x66) {
         state = Done; statusPending = true; reset_(context_); return;
       }
+      if (state == Running && cmd[0] >= 0x80 && cmd[0] <= 0x8f && now > deadline_) {
+        const uint64_t late = now - deadline_;
+        if (late > maxPCMLateUS) maxPCMLateUS = late;
+      }
       if (cmd[0] == 0x30 || cmd[0] == 0x50 || cmd[0] == 0x52 ||
           cmd[0] == 0x53 || cmd[0] == 0x55 || (cmd[0] >= 0x80 && cmd[0] <= 0x8f))
         emit_(context_, cmd, size);
       samples += wait;
+      if (wait) deadline_ = origin_ + sampleUS(samples);
     }
   }
 
@@ -179,7 +185,11 @@ class Stream {
     memcpy(out, "@TS1", 4); out[4] = capability ? 'C' : 'S';
     writeLE(out + 5, capability ? 0 : session, 4);
     writeLE(out + 9, consumed, 8); writeLE(out + 17, played(now), 8);
-    out[25] = state; out[26] = error; writeLE(out + 27, Capacity, 2); out[29] = 0;
+    out[25] = state; out[26] = error; writeLE(out + 27, Capacity, 2);
+    // Capability bit 0 enables the reserved status byte as maximum DAC
+    // lateness in 10 us steps; old v1 receivers simply ignore this byte.
+    out[29] = capability ? 1 :
+      uint8_t(maxPCMLateUS / 10 > 255 ? 255 : maxPCMLateUS / 10);
     writeLE(out + 30, crc16(out + 4, 26), 2);
   }
 
@@ -190,7 +200,7 @@ class Stream {
   uint8_t frame_[MaxPayload + 13] = {};
   unsigned frameSize_ = 0;
   uint16_t frameCRC_ = 0xffff;
-  uint64_t frameAt_ = 0, lastFrameAt_ = 0, origin_ = 0;
+  uint64_t frameAt_ = 0, lastFrameAt_ = 0, origin_ = 0, deadline_ = 0;
   bool ended_ = false;
 };
 }  // namespace nd6timed

@@ -4,7 +4,7 @@
 #ifndef ND_H
 #define ND_H
 
-#define ND_FIRMWARE_VERSION "3.1dev2"
+#define ND_FIRMWARE_VERSION "3.1dev3"
 
 #include <Arduino.h>
 
@@ -38,7 +38,11 @@ typedef enum {
 extern const std::array<String, 15> CHIP_LABEL;
 
 // クロック使用番号
-typedef enum { CLK_0, CLK_1, CLK_2, CLK_NONE, CLK_FIXED } t_clockSlot;
+typedef enum { CLK_0,
+               CLK_1,
+               CLK_2,
+               CLK_NONE,
+               CLK_FIXED } t_clockSlot;
 
 // 現在のファイルフォーマット
 enum class FileFormat {
@@ -54,7 +58,8 @@ enum class FileFormat {
 extern const std::array<String, 7> FORMAT_LABEL;
 
 // 本体バージョン
-typedef enum { nd_v60, nd_v61 } t_ndVersion;
+typedef enum { nd_v60,
+               nd_v61 } t_ndVersion;
 
 class ND {
  public:

@@ -34,6 +34,7 @@ void basicTests() {
   require(s.input(0xf8,0) && s.capabilityPending, "capability");
   uint8_t reply[32]; s.status(reply,true,0);
   require(readLE(reply+30,2)==crc16(reply+4,26) && reply[4]=='C', "status CRC");
+  require(reply[29]==1,"PCM timing capability");
   send(s,1,17);
   send(s,2,16,{0x50,0x99}); // stale session is ignored
   require(s.consumed==0 && s.state==Stream::Preload,"stale session");
@@ -64,6 +65,11 @@ void basicTests() {
   send(s,2,23,{0x70}); require(s.error==Stream::Overflow,"capacity limit");
   send(s,1,24); s.tick(3000001); require(s.error==Stream::HostTimeout,"lost host timeout");
   send(s,1,25); s.input(0xf9,0); s.input('N',500001); require(s.error==Stream::BadFrame,"partial frame timeout");
+  send(s,1,26); send(s,2,26,{0x82,0x80,0x82,0x81,0x66}); send(s,3,26);
+  s.tick(0); s.tick(Stream::sampleUS(2)+57);
+  require(s.maxPCMLateUS==57,"PCM deadline lateness");
+  s.status(reply,false,Stream::sampleUS(2)+57);
+  require(reply[29]==5 && readLE(reply+30,2)==crc16(reply+4,26),"PCM status timing/CRC");
   puts("PASS: protocol, CRC, sessions, waits, preload, stop, underrun, capacity, disconnect");
 }
 
