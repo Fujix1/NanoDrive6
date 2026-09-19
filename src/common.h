@@ -10,6 +10,16 @@
 #define USE_SN76489
 #define USE_YM2203_0
 
+// YM2203 / AY-3-8910 の SSG 3ch を SN76489 で簡易再生する実験機能。
+// PlatformIO の build_flags などで 1 を指定したビルドだけ有効にする。
+#ifndef ENABLE_SSG_TO_SN76489
+#ifdef ENABLE_YM2203_SSG_TO_SN76489
+#define ENABLE_SSG_TO_SN76489 ENABLE_YM2203_SSG_TO_SN76489
+#else
+#define ENABLE_SSG_TO_SN76489 0
+#endif
+#endif
+
 #define CHIP0_CLOCK CLK_0
 #define CHIP1_CLOCK CLK_1
 #define CHIP2_CLOCK CLK_0

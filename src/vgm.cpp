@@ -62,6 +62,11 @@ VGM::VGM() {
 // vgm 再生準備
 bool VGM::ready() {
   ND::canPlay = false;
+#if ENABLE_SSG_TO_SN76489
+  _ssgToSn.reset();
+  _ssgToSnEnabled = false;
+  _ssgToSnVgmCommand = 0;
+#endif
   ndFile.pos = 0;
 
   ND::freq.fill(SI5351_UNDEFINED);
@@ -270,6 +275,27 @@ bool VGM::ready() {
     }
   }
 
+#if ENABLE_SSG_TO_SN76489
+  // ネイティブ SN を使わない YM2203 / AY-3-8910 曲では、SN76489 (1) を
+  // SSG 変換用に予約する。両方のクロックがある場合は YM2203 を優先する。
+  if (CHIP0 == CHIP_YM2612 && CHIP1 == CHIP_SN76489_0 && !sn76489_clock &&
+      ym2203_clock && !(ym2203_clock & 0x40000000)) {
+    // 2 MHz にすると、SSG の低音を約 61 Hz まで SN の 10 bit 周期に収められる。
+    ND::freq[CHIP1_CLOCK] = SI5351_2000;
+    _ssgToSn.reset(ym2203_clock & 0x3fffffff, uint32_t(ND::freq[CHIP1_CLOCK]),
+                   SsgToSn::Source::YM2203);
+    _ssgToSnEnabled = true;
+    _ssgToSnVgmCommand = 0x55;
+  } else if (CHIP0 == CHIP_YM2612 && CHIP1 == CHIP_SN76489_0 && !sn76489_clock &&
+             ay8910_clock && !(ay8910_clock & 0x40000000)) {
+    ND::freq[CHIP1_CLOCK] = SI5351_2000;
+    _ssgToSn.reset(ay8910_clock & 0x3fffffff, uint32_t(ND::freq[CHIP1_CLOCK]),
+                   SsgToSn::Source::AY8910);
+    _ssgToSnEnabled = true;
+    _ssgToSnVgmCommand = 0xA0;
+  }
+#endif
+
   // 周波数設定
   if (ND::freq[0] != SI5351_UNDEFINED) {
     SI5351.setFreq(ND::freq[0], 0);
@@ -282,6 +308,14 @@ bool VGM::ready() {
   }
 
   SI5351.enableOutputs(true);
+
+#if ENABLE_SSG_TO_SN76489
+  if (_ssgToSnEnabled) {
+    for (u8_t ch = 0; ch < 4; ++ch) {
+      FM.writeRaw(0x9f | (ch << 5), 1, ND::freq[CHIP1_CLOCK]);
+    }
+  }
+#endif
 
   // GD3 tags
   //_parseGD3(gd3Offset);
@@ -678,6 +712,16 @@ void VGM::vgmProcess() {
 
   // VGMのウェイト中も入力処理へ制御を返す。
   const u64_t processStartTick = _micros10();
+#if ENABLE_SSG_TO_SN76489
+  if (_ssgToSnEnabled) {
+    const u64_t elapsedTicks = processStartTick - _vgmStart;
+    u64_t currentSample = (elapsedTicks * 44100) / (1000000ULL * VGM_TIME_SCALE);
+    if (currentSample > _vgmRealSamples) currentSample = _vgmRealSamples;
+    _ssgToSn.advanceTo(currentSample, [](uint8_t value) {
+      FM.writeRaw(value, 1, ND::freq[CHIP1_CLOCK]);
+    });
+  }
+#endif
   if (_vgmWaitUntil > processStartTick) {
     if (_vgmHasPlayingStream) {
       _vgmProcessStreams();
@@ -973,11 +1017,24 @@ void VGM::vgmProcessMain() {
   u8_t command = ndFile.get_ui8();
 
   switch (command) {
-#ifdef USE_AY8910
+#if defined(USE_AY8910) || ENABLE_SSG_TO_SN76489
     case 0xA0:  // AY8910, YM2203 PSG, YM2149, YMZ294D
       reg = ndFile.get_ui8();
       dat = ndFile.get_ui8();
+#if ENABLE_SSG_TO_SN76489
+      if (_ssgToSnEnabled && _ssgToSnVgmCommand == 0xA0) {
+        // Dual AY の register bit 7 側は ready() で対象外にしている。
+        if (!(reg & 0x80)) {
+          _ssgToSn.write(reg, dat, [](uint8_t value) {
+            FM.writeRaw(value, 1, ND::freq[CHIP1_CLOCK]);
+          });
+        }
+        break;
+      }
+#endif
+#ifdef USE_AY8910
       FM.setRegister(reg, dat, 0);
+#endif
       break;
 #endif
 
@@ -1056,8 +1113,18 @@ void VGM::vgmProcessMain() {
       reg = ndFile.get_ui8();
       dat = ndFile.get_ui8();
       if (CHIP0 == CHIP_YM2612) {
+#if ENABLE_SSG_TO_SN76489
+        // FM は YM2612 port 0、SSG tone / envelope は SN76489 (1) で代替再生する。
+        // タイマーと FM プリスケーラ変更は扱わない。
+        if (_ssgToSnEnabled && _ssgToSnVgmCommand == 0x55) {
+          _ssgToSn.write(reg, dat, [](uint8_t value) {
+            FM.writeRaw(value, 1, ND::freq[CHIP1_CLOCK]);
+          });
+        }
+#else
         // YM2203のFM部だけをYM2612 port 0で代替再生する。
         // YM2203 PSG/タイマ/プリスケーラはND6では扱わない。
+#endif
         if (isYM2203FmRegister(reg)) {
           if (reg >= 0xB4 && reg <= 0xB6) {
             dat |= 0xC0;
