@@ -31,6 +31,24 @@ static std::string wstringToUTF8(const std::wstring& src) {
   return converter.to_bytes(src);
 }
 
+// GD3 に混入した制御文字などを取り除く
+static std::string normalizeGD3Text(const std::string& src) {
+  std::string result;
+  result.reserve(src.size());
+  bool pendingSpace = false;
+
+  for (unsigned char c : src) {
+    if (c <= 0x20) {
+      pendingSpace = !result.empty();
+      continue;
+    }
+    if (pendingSpace) result += ' ';
+    result += static_cast<char>(c);
+    pendingSpace = false;
+  }
+  return result;
+}
+
 //---------------------------------------------------------------------
 static u32_t gd3p;
 
@@ -346,7 +364,7 @@ String VGM::_digGD3() {
     _gd3p += 2;
   }
   _gd3p += 2;
-  std::string sst = wstringToUTF8(wst);
+  std::string sst = normalizeGD3Text(wstringToUTF8(wst));
   return (String)sst.c_str();
 }
 
@@ -384,7 +402,7 @@ String VGM::_digGD3Cache() {
     _gd3p += 2;
   }
   _gd3p += 2;
-  std::string sst = wstringToUTF8(wst);
+  std::string sst = normalizeGD3Text(wstringToUTF8(wst));
   return (String)sst.c_str();
 }
 
@@ -713,8 +731,7 @@ void VGM::vgmProcess() {
     const bool timestampAdvanced = _vgmSamples > samplesBeforeCommand;
     // 同一VGM時刻の途中で中断すると、後方にあるPCM書き込みだけがタスク切替分遅れる。
     // コマンド予算を超えても、次の正ウェイトへ到達するまでは命令順のまま処理する。
-    if (++processedCommands >= kVgmCommandBudgetPerLoop && timestampAdvanced &&
-        _vgmSamples <= _vgmRealSamples) {
+    if (++processedCommands >= kVgmCommandBudgetPerLoop && timestampAdvanced && _vgmSamples <= _vgmRealSamples) {
       taskYIELD();
       return;
     }
@@ -1015,8 +1032,8 @@ void VGM::vgmProcessMain() {
     case 0x52:  // YM2612 port 0, write value dd to register aa
       reg = ndFile.get_ui8();
       dat = ndFile.get_ui8();
-      if ((reg >= 0x30 && reg <= 0xB6) || reg == 0x22 || reg == 0x27 || reg == 0x28 || reg == 0x2A ||
-          reg == 0x2B || reg == 0x2C) {  // 未ドキュメント命令
+      if ((reg >= 0x30 && reg <= 0xB6) || reg == 0x22 || reg == 0x27 || reg == 0x28 || reg == 0x2A || reg == 0x2B ||
+          reg == 0x2C) {  // 未ドキュメント命令
         if (_vgmAtInitialTimestamp && reg == 0x28) {
           _vgmBufferInitialKeyWrite(dat);
         } else if (reg == 0x2A) {
