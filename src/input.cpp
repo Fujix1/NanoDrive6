@@ -19,7 +19,7 @@ TaskHandle_t inputHandlerTaskHandle = nullptr;
 TimerHandle_t keyRepeatTimer = nullptr;
 QueueHandle_t inputEventQueue = nullptr;
 bool holdCountdownActive = false;
-volatile bool playHoldReleaseRequested = false;
+volatile bool playStartOrRestartRequested = false;
 int8_t holdCountdownSec = 0;
 uint32_t holdCountdownNextTick = 0;
 int lastPauseConfig = -1;
@@ -256,8 +256,8 @@ void cancelPlayHoldCountdown() { holdCountdownActive = false; }
 
 bool isPlayHoldCountdownActive() { return holdCountdownActive; }
 
-// 小さいシリアル受信タスクでは描画せず、入力処理タスクへ解除要求だけ渡す。
-void requestPlayHoldRelease() { playHoldReleaseRequested = true; }
+// 小さいシリアル受信タスクでは描画やファイル操作をせず、入力処理タスクへ要求だけ渡す。
+void requestPlayStartOrRestart() { playStartOrRestartRequested = true; }
 
 // ホールドを解除し、0:00から実再生が始まるようにする。
 static void finishPlayHold() {
@@ -413,9 +413,12 @@ bool Input::init() {
 void Input::inputHandler() {
   if (!_enabled) return;
 
-  if (playHoldReleaseRequested) {
-    playHoldReleaseRequested = false;
-    releasePlayHold();
+  if (playStartOrRestartRequested) {
+    playStartOrRestartRequested = false;
+    // SPACE はホールド中なら再生を開始し、再生中なら現在の曲を先頭から再生する。
+    if (!releasePlayHold() && ND::canPlay) {
+      ndFile.requestFilePlayIfIdle(0);
+    }
   }
 
   updateHoldCountdown();

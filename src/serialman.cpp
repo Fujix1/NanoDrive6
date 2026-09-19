@@ -283,7 +283,7 @@ void trackMaskSerialTask(void* param) {
       } else if (key == ';') {
         FM.requestToggleChannelMask(13);  // SN76489 (2) noise
       } else if (key == ' ') {
-        requestPlayHoldRelease();
+        requestPlayStartOrRestart();
       } else {
         switch (key) {
           case 'w':
