@@ -1080,8 +1080,8 @@ void serialModeDraw() {
 
 void PlayerWindow::publishMetadata() {
   const auto metadata = displayMetadata(dispData);
-  serialMan.setTrackMetadata(metadata.title, metadata.system, metadata.composer, dispData.date,
-                            ndFile.getCurrentFilePath(), dispData.type);
+  serialMan.setTrackMetadata(metadata.title, metadata.system, metadata.game, metadata.composer,
+                            dispData.date, ndFile.getCurrentFilePath(), dispData.type);
 }
 
 void PlayerWindow::updateDisp(tDispData data) {

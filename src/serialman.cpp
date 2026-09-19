@@ -78,11 +78,12 @@ void sendPendingTrack(bool force) {
 }
 }  // namespace
 
-void SerialMan::setTrackMetadata(const String& title, const String& system, const String& composer,
-                                 const String& date, const String& path, String type) {
+void SerialMan::setTrackMetadata(const String& title, const String& system, const String& game,
+                                 const String& composer, const String& date, const String& path, String type) {
   type.toLowerCase();
   const String json = String("{\"event\":\"track\",\"title\":") + jsonString(title) +
-      ",\"system\":" + jsonString(system) + ",\"composer\":" + jsonString(composer) +
+      ",\"system\":" + jsonString(system) + ",\"game\":" + jsonString(game) +
+      ",\"composer\":" + jsonString(composer) +
       ",\"date\":" + jsonString(date) + ",\"path\":" + jsonString(path) +
       ",\"type\":" + jsonString(type) + "}";
   const auto mutex = metadataMutex();
