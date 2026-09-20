@@ -2,7 +2,22 @@
 
 #include <cassert>
 #include <cstddef>
+#include <initializer_list>
 #include <vector>
+
+static bool containsBytes(const std::vector<uint8_t>& bytes,
+                          std::initializer_list<uint8_t> expected) {
+  if (expected.size() > bytes.size()) return false;
+  for (std::size_t start = 0; start + expected.size() <= bytes.size(); ++start) {
+    std::size_t offset = 0;
+    for (uint8_t value : expected) {
+      if (bytes[start + offset] != value) break;
+      ++offset;
+    }
+    if (offset == expected.size()) return true;
+  }
+  return false;
+}
 
 static uint8_t envelopeVolumeAt(uint8_t shape, uint64_t sample) {
   SsgToSn converter;
@@ -39,10 +54,10 @@ int main() {
   converter.write(8, 13, sink);
   assert((bytes == std::vector<uint8_t>{0x93}));
   bytes.clear();
-  converter.write(7, 1, sink);  // Mixer disables A, also initializes silent B/C.
+  converter.write(7, 0x39, sink);  // Mixer disables tone A and all noise.
   assert(bytes.front() == 0x9f);
   bytes.clear();
-  converter.write(7, 0, sink);
+  converter.write(7, 0x38, sink);
   assert((bytes == std::vector<uint8_t>{0x93}));
   bytes.clear();
   converter.write(8, 0, sink);
@@ -71,6 +86,51 @@ int main() {
   bytes.clear();
   converter.advanceTo(16, sink);
   assert((bytes == std::vector<uint8_t>{0x90}));
+
+  // Vampire Killer の主パターン: A/B tone + C noise。
+  // SN tone 3をnoise clockへ予約し、NP=10をSN period 6へ変換する。
+  converter.reset(1789773, 2000000, SsgToSn::Source::AY8910);
+  converter.write(0, 100, sink);
+  converter.write(2, 200, sink);
+  converter.write(4, 44, sink);
+  converter.write(5, 1, sink);  // C period = 300
+  converter.write(8, 15, sink);
+  converter.write(9, 15, sink);
+  converter.write(10, 15, sink);
+  converter.write(6, 10, sink);
+  bytes.clear();
+  converter.write(7, 0x1c, sink);
+  assert(containsBytes(bytes, {0xc6, 0x00}));
+  assert(containsBytes(bytes, {0xe7, 0xf1}));
+
+  // Bをnoise専用へ切り替える場合、C toneをSN tone 2へ移す。
+  bytes.clear();
+  converter.write(7, 0x2a, sink);
+  assert(containsBytes(bytes, {0xa8, 0x0a}));  // C period 300 -> SN period 168
+
+  // Aをnoise専用へ切り替える場合、B toneをSN tone 1へ移す。
+  bytes.clear();
+  converter.write(7, 0x31, sink);
+  assert(containsBytes(bytes, {0x80, 0x07}));  // B period 200 -> SN period 112
+
+  // 3 toneとnoiseが同時ならtone割り当てを維持し、最も近い固定noiseへ退避する。
+  bytes.clear();
+  converter.write(7, 0x00, sink);
+  assert(containsBytes(bytes, {0xe4}));
+
+  // Noise専用chのエンベロープもSN noise volumeへ反映する。
+  converter.reset(705600, 2000000, SsgToSn::Source::AY8910);
+  converter.write(6, 1, sink);
+  converter.write(11, 1, sink);
+  converter.write(13, 8, sink);
+  converter.write(8, 0x10, sink);
+  converter.write(7, 0x37, sink);  // tone全停止、noise Aのみ。
+  bytes.clear();
+  converter.advanceTo(15, sink);
+  assert((bytes == std::vector<uint8_t>{0xff}));
+  bytes.clear();
+  converter.advanceTo(16, sink);
+  assert((bytes == std::vector<uint8_t>{0xf1}));
 
   converter.reset();
   bytes.clear();
