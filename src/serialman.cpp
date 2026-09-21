@@ -273,6 +273,8 @@ void trackMaskSerialTask(void* param) {
         sendIdentity();
         sendChannelMask(true);
         sendPendingTrack(true);
+      } else if (key == 0x90 || key == 0x80) {
+        FM.requestMidiNote(getSerial(), key == 0x90);
       } else if (key == 'r' || key == 'R') {
         FM.requestResetChannelMask();
       } else if (key >= '1' && key <= '9') {

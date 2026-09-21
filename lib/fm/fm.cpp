@@ -26,6 +26,10 @@ static bool ym2612LastAddrValid[3] = {};
 //    READY -> No connect
 
 void FMChip::begin() {
+  if (_midiNoteQueue == nullptr) {
+    _midiNoteQueue = xQueueCreate(32, sizeof(MidiNoteEvent));
+  }
+
   // データバス用 GPIO バンドル
   const int bundleA_gpios[] = {D0, D1, D2, D3, D4, D5, D6, D7};
   gpio_config_t io_conf = {
@@ -67,6 +71,17 @@ void FMChip::begin() {
 }
 
 void FMChip::reset(void) {
+  _midiActiveMask = 0;
+  _midiVoiceCounter = 0;
+  for (uint8_t ch = 0; ch < 6; ch++) {
+    _midiChannelNote[ch] = -1;
+    _midiVoiceOrder[ch] = 0;
+    _ym2612PlaybackKeyOnSlots[ch] = 0;
+  }
+  if (_midiNoteQueue != nullptr) {
+    xQueueReset(_midiNoteQueue);
+  }
+
   for (uint8_t chip = 0; chip < 3; chip++) {
     _snLatchedReg[chip] = 0;
     _snNoiseControl[chip] = 0;
@@ -89,6 +104,10 @@ void FMChip::reset(void) {
       for (uint8_t ch = 0; ch < 3; ch++) {
         _ym2612FreqLow[chip][bank][ch] = 0;
         _ym2612FreqHigh[chip][bank][ch] = 0;
+        if (chip == 0) {
+          _ym2612PlaybackFreqLow[bank][ch] = 0;
+          _ym2612PlaybackFreqHigh[bank][ch] = 0;
+        }
         _ym2612Alg[chip][bank][ch] = 0;
       }
     }
@@ -407,6 +426,24 @@ static NoteInfo ym2612FreqToNote(uint16_t rawFreq) {
   return {noteIndexFromC0 / 12, noteIndexFromC0 % 12};
 }
 
+static uint16_t midiNoteToYM2612Freq(uint8_t note) {
+  double clock = ND::freq[0];
+  if (clock <= 0) {
+    clock = 7670453.0;
+  }
+
+  const double frequency = 440.0 * pow(2.0, ((int)note - 69) / 12.0);
+  for (uint8_t block = 0; block < 8; block++) {
+    const double scale = pow(2.0, 20 - block);
+    long fnum = lround(frequency * 144.0 * scale / clock);
+    if (fnum <= 0x7ff) {
+      if (fnum < 1) fnum = 1;
+      return (uint16_t)((block << 11) | fnum);
+    }
+  }
+  return (uint16_t)((7 << 11) | 0x7ff);
+}
+
 uint8_t FMChip::_getYM2612DisplayLevel(uint8_t chipno, uint8_t ch) const {
   static constexpr uint8_t kYm2612CarrierSlots[8] = {0x08, 0x08, 0x08, 0x08,
                                                      0x0a, 0x0e, 0x0e, 0x0f};
@@ -600,7 +637,46 @@ void FMChip::_updateYM2612VisualState(byte bank, byte addr, byte data, uint8_t c
   }
 }
 
+void FMChip::_cacheYM2612PlaybackControl(byte bank, byte addr, byte data, uint8_t chipno) {
+  if (chipno != 0 || bank >= 2) return;
+
+  if ((uint8_t)(addr - 0xA0) <= 2) {
+    _ym2612PlaybackFreqLow[bank][addr - 0xA0] = data;
+  } else if ((uint8_t)(addr - 0xA4) <= 2) {
+    _ym2612PlaybackFreqHigh[bank][addr - 0xA4] = data;
+  } else if (addr == 0x28) {
+    uint8_t ch = data & 0x03;
+    if (ch >= 3) return;
+    if ((data & 0x04) != 0) ch += 3;
+    _ym2612PlaybackKeyOnSlots[ch] = (data >> 4) & 0x0f;
+  }
+}
+
+bool FMChip::_holdYM2612PlaybackControl(byte bank, byte addr, byte data, uint8_t chipno) const {
+  if (chipno != 0 || bank >= 2) return false;
+
+  if ((uint8_t)(addr - 0xA0) <= 2) {
+    const uint8_t ch = bank * 3 + (addr - 0xA0);
+    return (_midiActiveMask & (u8_t)(1u << ch)) != 0;
+  }
+  if ((uint8_t)(addr - 0xA4) <= 2) {
+    const uint8_t ch = bank * 3 + (addr - 0xA4);
+    return (_midiActiveMask & (u8_t)(1u << ch)) != 0;
+  }
+  if (addr == 0x28) {
+    uint8_t ch = data & 0x03;
+    if (ch >= 3) return false;
+    if ((data & 0x04) != 0) ch += 3;
+    return (_midiActiveMask & (u8_t)(1u << ch)) != 0;
+  }
+  return false;
+}
+
 void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
+  _setYM2612(bank, addr, data, chipno, false);
+}
+
+void FMChip::_setYM2612(byte bank, byte addr, byte data, uint8_t chipno, bool midiWrite) {
   if (addr == 0x2A && bank == 0) {
     setYM2612DAC(data, chipno);
     return;
@@ -608,7 +684,12 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
 
   if (chipno >= 3 || bank >= 2) return;
 
-  if (addr >= 0x40 && addr <= 0x4F) {
+  if (!midiWrite) {
+    _cacheYM2612PlaybackControl(bank, addr, data, chipno);
+    if (_holdYM2612PlaybackControl(bank, addr, data, chipno)) return;
+  }
+
+  if (!midiWrite && addr >= 0x40 && addr <= 0x4F) {
     const uint8_t reg = addr - 0x40;
     _ym2612TlReg[chipno][bank][reg] = data;
     _ym2612TlRegValid[chipno][bank][reg] = true;
@@ -622,7 +703,9 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
     data = (data & 0x3F) | ((data & 0x80) >> 1) | ((data & 0x40) << 1);
   }
 
-  data = _applyYM2612ChannelMask(bank, addr, data, chipno);
+  if (!midiWrite) {
+    data = _applyYM2612ChannelMask(bank, addr, data, chipno);
+  }
   _updateYM2612VisualState(bank, addr, data, chipno);
 
   switch (chipno) {
@@ -705,13 +788,119 @@ byte FMChip::_applyYM2612ChannelMask(byte bank, byte addr, byte data, uint8_t ch
   }
 
   const uint8_t ch = bank * 3 + bankCh;
-  const u8_t outputModeMask = _ym2612OutputMode == FMPCM_PCM ? 0x3f : 0x00;
-  const u8_t effectiveMask = ym2612_chmask | outputModeMask;
-  if (effectiveMask & (u8_t)(1u << ch)) {
+  const bool outputModeMuted = _ym2612OutputMode == FMPCM_PCM;
+  const bool channelMuted = (ym2612_chmask & (u8_t)(1u << ch)) != 0;
+  const bool midiActive = (_midiActiveMask & (u8_t)(1u << ch)) != 0;
+  if (outputModeMuted || (channelMuted && !midiActive)) {
     return 0x7F;  // 対象chの全FMオペレータを最大減衰。DAC出力には影響しない。
   }
 
   return data;
+}
+
+bool FMChip::requestMidiNote(uint8_t note, bool keyOn) {
+  if (note > 127 || _midiNoteQueue == nullptr) return false;
+  const MidiNoteEvent event = {note, keyOn};
+  return xQueueSend(_midiNoteQueue, &event, 0) == pdTRUE;
+}
+
+void FMChip::_startMidiNote(uint8_t ch, uint8_t note) {
+  if (ch >= 6) return;
+
+  const uint8_t bank = ch / 3;
+  const uint8_t bankCh = ch % 3;
+  const uint8_t keyChannel = ch < 3 ? ch : ch + 1;
+  const uint16_t rawFreq = midiNoteToYM2612Freq(note);
+
+  _midiActiveMask |= (u8_t)(1u << ch);
+  _midiChannelNote[ch] = note;
+  _midiVoiceOrder[ch] = ++_midiVoiceCounter;
+  _setYM2612(0, 0x28, keyChannel, 0, true);
+  _setYM2612(bank, 0xA4 + bankCh, (rawFreq >> 8) & 0x3f, 0, true);
+  _setYM2612(bank, 0xA0 + bankCh, rawFreq & 0xff, 0, true);
+  _writeCachedYM2612ChannelTl(0, ch);
+  _setYM2612(0, 0x28, 0xf0 | keyChannel, 0, true);
+}
+
+void FMChip::_restoreYM2612PlaybackControl(uint8_t ch) {
+  if (ch >= 6) return;
+
+  const uint8_t bank = ch / 3;
+  const uint8_t bankCh = ch % 3;
+  const uint8_t keyChannel = ch < 3 ? ch : ch + 1;
+  _setYM2612(bank, 0xA4 + bankCh, _ym2612PlaybackFreqHigh[bank][bankCh], 0, true);
+  _setYM2612(bank, 0xA0 + bankCh, _ym2612PlaybackFreqLow[bank][bankCh], 0, true);
+  _setYM2612(0, 0x28, (_ym2612PlaybackKeyOnSlots[ch] << 4) | keyChannel, 0, true);
+}
+
+void FMChip::_stopMidiNote(uint8_t ch) {
+  if (ch >= 6 || (_midiActiveMask & (u8_t)(1u << ch)) == 0) return;
+
+  const uint8_t keyChannel = ch < 3 ? ch : ch + 1;
+  _setYM2612(0, 0x28, keyChannel, 0, true);
+  _midiActiveMask &= (u8_t)~(1u << ch);
+  _midiChannelNote[ch] = -1;
+  _writeCachedYM2612ChannelTl(0, ch);
+  _restoreYM2612PlaybackControl(ch);
+}
+
+void FMChip::applyPendingMidiNotes() {
+  for (uint8_t ch = 0; ch < 6; ch++) {
+    const bool usable = (ym2612_chmask & (u8_t)(1u << ch)) != 0 &&
+                        _ym2612OutputMode != FMPCM_PCM;
+    if (!usable) _stopMidiNote(ch);
+  }
+
+  if (_midiNoteQueue == nullptr) return;
+  MidiNoteEvent event;
+  while (xQueueReceive(_midiNoteQueue, &event, 0) == pdTRUE) {
+    if (!event.keyOn) {
+      for (uint8_t ch = 0; ch < 6; ch++) {
+        if (_midiChannelNote[ch] == event.note) {
+          _stopMidiNote(ch);
+          break;
+        }
+      }
+      continue;
+    }
+
+    bool handled = false;
+    for (uint8_t ch = 0; ch < 6; ch++) {
+      if (_midiChannelNote[ch] == event.note) {
+        _startMidiNote(ch, event.note);
+        handled = true;
+        break;
+      }
+    }
+    if (handled) continue;
+
+    // CH3 special mode and CH6 DAC can share per-operator/global state, so the
+    // first implementation reserves only CH1, CH2, CH4 and CH5.
+    static constexpr uint8_t kMidiChannels[] = {0, 1, 3, 4};
+    uint8_t oldestCh = 0xff;
+    uint32_t oldestOrder = 0;
+    for (uint8_t ch : kMidiChannels) {
+      if ((ym2612_chmask & (u8_t)(1u << ch)) == 0 ||
+          _ym2612OutputMode == FMPCM_PCM) {
+        continue;
+      }
+      if ((_midiActiveMask & (u8_t)(1u << ch)) == 0) {
+        _startMidiNote(ch, event.note);
+        handled = true;
+        break;
+      }
+      if (oldestCh == 0xff || _midiVoiceOrder[ch] < oldestOrder) {
+        oldestCh = ch;
+        oldestOrder = _midiVoiceOrder[ch];
+      }
+    }
+
+    if (!handled && oldestCh != 0xff) {
+      // _startMidiNote begins with Key Off, so the oldest voice is replaced
+      // without briefly restoring the VGM note between the two MIDI notes.
+      _startMidiNote(oldestCh, event.note);
+    }
+  }
 }
 
 void FMChip::_writeCachedYM2612Tl(uint8_t chipno) {

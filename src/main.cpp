@@ -253,6 +253,7 @@ static void playbackTask(void* param) {
   while (1) {
     FM.applyPendingChannelMask();
     FM.applyPendingYM2612OutputMode();
+    FM.applyPendingMidiNotes();
 
     if (ND::canPlay && !ND::isPaused) {
       switch (ND::fileFormat) {

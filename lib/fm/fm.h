@@ -53,6 +53,8 @@ class FMChip {
   void requestResetChannelMask();
   void applyPendingChannelMask();
   uint16_t getChannelMask();
+  bool requestMidiNote(uint8_t note, bool keyOn);
+  void applyPendingMidiNotes();
   void write(byte data, byte chipno, si5351Freq_t freq);
   void writeRaw(byte data, byte chipno, si5351Freq_t freq);
 
@@ -60,6 +62,11 @@ class FMChip {
   u8_t ym2612_chmask = 0x00;
 
  private:
+  struct MidiNoteEvent {
+    uint8_t note;
+    bool keyOn;
+  };
+
   u8_t _psgFrqLowByte = 0;
   u8_t _snLatchedReg[3] = {};
   u16_t _snTonePeriod[3][3] = {};
@@ -71,6 +78,9 @@ class FMChip {
   bool _ym2612TlRegValid[3][2][16] = {};
   u8_t _ym2612FreqLow[3][2][3] = {};
   u8_t _ym2612FreqHigh[3][2][3] = {};
+  u8_t _ym2612PlaybackFreqLow[2][3] = {};
+  u8_t _ym2612PlaybackFreqHigh[2][3] = {};
+  u8_t _ym2612PlaybackKeyOnSlots[6] = {};
   u8_t _ym2612Alg[3][2][3] = {};
   u8_t _ym2612KeyOnSlots[3][6] = {};
   u8_t _ym2612DacLevelDecimator = 0;
@@ -82,9 +92,20 @@ class FMChip {
   volatile u8_t _pendingYm2612ChToggle = 0x00;
   volatile u8_t _pendingSn76489ChToggle = 0x00;
   volatile bool _pendingChannelMaskReset = false;
+  QueueHandle_t _midiNoteQueue = nullptr;
+  u8_t _midiActiveMask = 0;
+  int8_t _midiChannelNote[6] = {-1, -1, -1, -1, -1, -1};
+  uint32_t _midiVoiceOrder[6] = {};
+  uint32_t _midiVoiceCounter = 0;
 
   byte _applySN76489ChannelMask(byte data, uint8_t chipno) const;
   byte _applyYM2612ChannelMask(byte bank, byte addr, byte data, uint8_t chipno) const;
+  void _setYM2612(byte bank, byte addr, byte data, uint8_t chipno, bool midiWrite);
+  void _cacheYM2612PlaybackControl(byte bank, byte addr, byte data, uint8_t chipno);
+  bool _holdYM2612PlaybackControl(byte bank, byte addr, byte data, uint8_t chipno) const;
+  void _startMidiNote(uint8_t ch, uint8_t note);
+  void _stopMidiNote(uint8_t ch);
+  void _restoreYM2612PlaybackControl(uint8_t ch);
   void _writeCachedSN76489Volume(uint8_t ch);
   void _updateSN76489VisualState(byte data, uint8_t chipno, si5351Freq_t freq);
   void _updateSN76489ChannelNote(uint8_t chipno, uint8_t ch, si5351Freq_t freq);
