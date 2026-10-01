@@ -150,6 +150,7 @@ bool VGM::ready() {
 
   // Setup Clocks
   u32_t sn76489_clock = ndFile.get_ui32_at_header(0x0c);
+  SN76489_NoiseShift16 = false;
   if (sn76489_clock) {
     if (CHIP0 == CHIP_SN76489_0) {
       ND::freq[CHIP0_CLOCK] = normalizeFreq(sn76489_clock, CHIP_SN76489_0);
@@ -186,6 +187,9 @@ bool VGM::ready() {
     if (version >= 0x151) {
       SN76489_Freq0is0X400 = ndFile.get_ui8_at_header(0x2b) & 0x0001;
     }
+    // 0x2a のノイズシフト幅は VGM 1.10 以降。旧形式／未指定は Sega の16段。
+    const u8_t noiseShiftWidth = (version >= 0x110) ? ndFile.get_ui8_at_header(0x2a) : 0;
+    SN76489_NoiseShift16 = (noiseShiftWidth == 0 || noiseShiftWidth == 16);
   }
 
   u32_t ym2413_clock = ndFile.get_ui32_at_header(0x10);
@@ -1060,7 +1064,7 @@ void VGM::vgmProcessMain() {
       if (SN76489_Freq0is0X400) {
         FM.writeRaw(ndFile.get_ui8(), 2, ND::freq[ND::chipSlot[CHIP_SN76489_1]]);
       } else {
-        FM.write(ndFile.get_ui8(), 2, ND::freq[ND::chipSlot[CHIP_SN76489_1]]);
+        FM.write(ndFile.get_ui8(), 2, ND::freq[ND::chipSlot[CHIP_SN76489_1]], SN76489_NoiseShift16);
       }
       break;
 
@@ -1071,7 +1075,7 @@ void VGM::vgmProcessMain() {
         if (SN76489_Freq0is0X400) {
           FM.writeRaw(ndFile.get_ui8(), 1, ND::freq[ND::chipSlot[CHIP_SN76489_0]]);
         } else {
-          FM.write(ndFile.get_ui8(), 1, ND::freq[ND::chipSlot[CHIP_SN76489_0]]);
+          FM.write(ndFile.get_ui8(), 1, ND::freq[ND::chipSlot[CHIP_SN76489_0]], SN76489_NoiseShift16);
         }
       }
       break;

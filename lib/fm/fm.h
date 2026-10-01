@@ -53,7 +53,7 @@ class FMChip {
   void requestResetChannelMask();
   void applyPendingChannelMask();
   uint16_t getChannelMask();
-  void write(byte data, byte chipno, si5351Freq_t freq);
+  void write(byte data, byte chipno, si5351Freq_t freq, bool noiseShift16 = false);
   void writeRaw(byte data, byte chipno, si5351Freq_t freq);
 
   // YM2612 channel mask (bit 0-5 = CH1-6). CH6 includes DAC.
@@ -61,6 +61,9 @@ class FMChip {
 
  private:
   u8_t _psgFrqLowByte = 0;
+  // 補正前の VGM レジスタ。writeRaw の表示用キャッシュと混ぜない。
+  u8_t _snSourceLatchedReg[3] = {};
+  u16_t _snSourceReg[3][8] = {};
   u8_t _snLatchedReg[3] = {};
   u16_t _snTonePeriod[3][3] = {};
   u8_t _snVolume[3][4] = {};
@@ -84,6 +87,8 @@ class FMChip {
   volatile bool _pendingChannelMaskReset = false;
 
   byte _applySN76489ChannelMask(byte data, uint8_t chipno) const;
+  void _writeSN76489Sega(byte data, uint8_t chipno, si5351Freq_t freq);
+  void _writeSN76489SegaTone(uint8_t ch, uint8_t chipno, si5351Freq_t freq);
   byte _applyYM2612ChannelMask(byte bank, byte addr, byte data, uint8_t chipno) const;
   void _writeCachedSN76489Volume(uint8_t ch);
   void _updateSN76489VisualState(byte data, uint8_t chipno, si5351Freq_t freq);

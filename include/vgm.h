@@ -80,6 +80,7 @@ class VGM {
   u32_t size;        // ファイルサイズ
   // u32_t totalSamples;  // 全サンプル数
   boolean SN76489_Freq0is0X400;  // SN76489 が Sega VDP ではない
+  bool SN76489_NoiseShift16 = false;  // Sega VDP の周期ノイズを実機15段へ補正
 
   u8_t XGMVersion;  // XGM バージョン 1 or 2
   std::vector<u32_t> XGMSampleAddressTable;

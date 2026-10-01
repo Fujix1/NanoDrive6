@@ -68,6 +68,10 @@ void FMChip::begin() {
 
 void FMChip::reset(void) {
   for (uint8_t chip = 0; chip < 3; chip++) {
+    _snSourceLatchedReg[chip] = 0;
+    for (uint8_t reg = 0; reg < 8; reg++) {
+      _snSourceReg[chip][reg] = (reg & 1) ? 15 : 0;
+    }
     _snLatchedReg[chip] = 0;
     _snNoiseControl[chip] = 0;
     for (uint8_t ch = 0; ch < 3; ch++) {
@@ -170,8 +174,11 @@ static byte applySN76489Attenuation(byte data) {
   return (data & 0xf0) | (attenuation & 0x0f);
 }
 
-void FMChip::write(byte data, byte chipno, si5351Freq_t freq) {
-  //
+void FMChip::write(byte data, byte chipno, si5351Freq_t freq, bool noiseShift16) {
+  if (noiseShift16 && chipno < 3) {
+    _writeSN76489Sega(data, chipno, freq);
+    return;
+  }
 
   if ((data & 0x90) == 0x80 && (data & 0x60) >> 5 != 3) {
     // Low byte 周波数 0x8n, 0xan, 0xcn
@@ -187,6 +194,46 @@ void FMChip::write(byte data, byte chipno, si5351Freq_t freq) {
   } else {
     writeRaw(data, chipno, freq);
   }
+}
+
+void FMChip::_writeSN76489SegaTone(uint8_t ch, uint8_t chipno, si5351Freq_t freq) {
+  uint16_t period = _snSourceReg[chipno][ch * 2];
+  // Sega VDP の周期ノイズは16段、実機 SN76489AN は15段。
+  // tone 3 が消音され、周期ノイズのクロック専用なら N * 16/15 に補正する。
+  // tone 3 自体も鳴っている場合は、その音程を優先する。
+  if (ch == 2 && _snSourceReg[chipno][6] == 3 && _snSourceReg[chipno][5] == 15 && period > 1) {
+    period = (period * 16 + 7) / 15;
+    if (period > 0x03ff) period = 0x03ff;
+  }
+  // Sega の周期0は定数出力。SN76489AN の 0x400 扱いを避ける。
+  if (period == 0) period = 1;
+  writeRaw((byte)(0x80 | (ch << 5) | (period & 0x0f)), chipno, freq);
+  writeRaw((byte)((period >> 4) & 0x3f), chipno, freq);
+}
+
+void FMChip::_writeSN76489Sega(byte data, uint8_t chipno, si5351Freq_t freq) {
+  if (data & 0x80) _snSourceLatchedReg[chipno] = (data >> 4) & 7;
+  const uint8_t reg = _snSourceLatchedReg[chipno];
+  uint16_t &value = _snSourceReg[chipno][reg];
+  if ((reg & 1) == 0 && reg < 6) {
+    if (data & 0x80) {
+      value = (value & 0x03f0) | (data & 0x0f);
+    } else {
+      value = (value & 0x000f) | ((data & 0x3f) << 4);
+    }
+    // 下位ニブルだけの更新にも対応し、補正で生じる桁上がりも反映する。
+    _writeSN76489SegaTone(reg >> 1, chipno, freq);
+    return;
+  }
+
+  value = data & ((reg == 6) ? 7 : 15);
+  if (reg == 6 || reg == 5) {
+    // ノイズモード・tone 3 の消音が変わったら、補正を適用／解除する。
+    // 補正の基準には常に元データを使い、再補正による累積を避ける。
+    _writeSN76489SegaTone(2, chipno, freq);
+  }
+  // 補正やチャンネルマスク操作が実機のラッチを変えても、元の宛先へ書く。
+  writeRaw((byte)(0x80 | (reg << 4) | value), chipno, freq);
 }
 
 void FMChip::writeRaw(byte data, byte chipno, si5351Freq_t freq) {
