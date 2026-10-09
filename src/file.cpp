@@ -120,7 +120,6 @@ void fillCacheTask(void* pvParameters) {
 
   fillCache(pos, cacheIndex);
   delete param;
-  Serial.printf("Task End.\n");
   vTaskDelete(NULL);
 }
 
@@ -141,7 +140,6 @@ bool initCache(String path) {
   }
   _cacheFile = SD.open(path.c_str());
   if (!_cacheFile) {
-    Serial.printf("ERROR: Failed to open cache file: %s\n", path.c_str());
     return false;
   }
 
@@ -166,7 +164,6 @@ bool NDFile::init() {
   xSemaphoreGive(spFileOpen);
   playbackStateMutex = xSemaphoreCreateMutex();
   if (!playbackStateMutex) {
-    Serial.println("ERROR: playback state mutex create failed!");
     return false;
   }
 
@@ -220,7 +217,6 @@ bool NDFile::init() {
   // キューを初期化
   cacheQueue = xQueueCreate(2, sizeof(CacheTaskParam));
   if (!cacheQueue) {
-    Serial.println("ERROR: cacheQueue create failed!");
     return false;
   }
 
@@ -228,7 +224,6 @@ bool NDFile::init() {
   // 初期段階ではスレッド分離せず、_openFile()/readFile()/vgm.ready() の所有者を loop() に寄せる。
   _playbackQueue = xQueueCreate(1, sizeof(PlaybackCommand));
   if (!_playbackQueue) {
-    Serial.println("ERROR: playbackQueue create failed!");
     return false;
   }
 
@@ -318,7 +313,7 @@ FileFormat NDFile::readFile(String path) {
     accessMode = ACCESS_PSRAM;
     hFile.seek(0);
     hFile.read(data, vgm.size);
-    Serial.printf("XGM1 file name: %s\n", path.c_str());
+    // Serial.printf("XGM1 file name: %s\n", path.c_str());
     hFile.close();
     return FileFormat::XGM1;
   }
@@ -327,7 +322,7 @@ FileFormat NDFile::readFile(String path) {
     accessMode = ACCESS_PSRAM;
     hFile.seek(0);
     hFile.read(data, vgm.size);
-    Serial.printf("XGM2 file name: %s\n", path.c_str());
+    // Serial.printf("XGM2 file name: %s\n", path.c_str());
     hFile.close();
     return FileFormat::XGM2;
   }
