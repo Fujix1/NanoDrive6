@@ -910,9 +910,43 @@ void PlayerWindow::drawBG() {
   frameBuffer.fillRoundRect(6, 301, 17, 14, 2, C_FOOTER_ACTIVE);
 }
 
+// USB モード共通ヘッダー
+static void drawUsbModeHeader() {
+  frameBuffer.pushImage(LCD_W - 2 - USB_ICON_WIDTH, 2, USB_ICON_WIDTH, USB_ICON_HEIGHT,
+                        usb_icon);  // usb icon
+  render.setUseRenderTask(false);
+  render.setDrawer(frameBuffer);
+  render.setAlignment(Align::TopLeft);
+  render.loadFont(nimbusBold, sizeof(nimbusBold));
+  render.setFontSize(13);
+  render.setFontColor(C_LIGHTGRAY, C_HEADER);
+  render.setCursor(4, 4);
+  render.printf("USB");
+  render.unloadFont();
+}
+
+// NDSIF 待機画面（通信処理は今後実装）
+static void ndsifModeDraw() {
+  xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
+  disp.stopTimerDrawing = true;
+  playerWindow.drawBG();
+  drawUsbModeHeader();
+  lblTitle.setCaption(ndConfig.get(CFG_LANG) == LANG_JA ? "NDSIFモード" : "NDSIF Mode");
+  lblGame.setCaption("API ver. " ND_NDSIF_API_VERSION);
+  lblAuthor.setCaption("--");
+  lblSystem.setCaption("--");
+  frameBuffer.pushSprite(0, 0);
+  xSemaphoreGive(spFrameBuffer);
+}
+
 // プレーヤー描画
 void PlayerWindow::redraw() {
-  if (ndConfig.currentMode == MODE_SERIAL) {
+  if (ND::currentMode == MODE_NDSIF) {
+    ndsifModeDraw();
+    return;
+  }
+
+  if (ND::currentMode == MODE_SERIAL) {
     serialModeDraw();
     return;
   }
@@ -930,7 +964,7 @@ void PlayerWindow::redraw() {
   render.setCursor(27, 256);
   render.printf(dispData.date.c_str());
 
-  const bool serialMode = ndConfig.currentMode == MODE_SERIAL;
+  const bool serialMode = ND::currentMode == MODE_SERIAL;
 
   // シャッフルアイコン
   if (!serialMode && ndConfig.get(CFG_SHUFFLE) != TRANDOM_NO) {
@@ -1029,8 +1063,7 @@ void serialModeDraw() {
   render.setUseRenderTask(false);
   render.setDrawer(frameBuffer);
 
-  frameBuffer.pushImage(170 - 2 - USB_ICON_WIDTH, 2, USB_ICON_WIDTH, USB_ICON_HEIGHT,
-                        usb_icon);  // usb icon
+  drawUsbModeHeader();
 
   render.setAlignment(Align::TopLeft);
 
@@ -1185,7 +1218,11 @@ void PlayerWindow::eventHandler(event ev) {
   if (ev == event::Option) {
     cfgWindow.show();
   } else if (ev == event::SwitchView) {
-    visualWindow.show();
+    if (ND::currentMode == MODE_NDSIF) {
+      cfgWindow.show();
+    } else {
+      visualWindow.show();
+    }
   }
 }
 
@@ -1404,7 +1441,7 @@ void CFGWindow::show() {
 }
 
 void CFGWindow::close(bool restoreLastView) {
-  const bool modeChanged = (tMode)ndConfig.get(CFG_MODE) != ndConfig.currentMode;
+  const bool modeChanged = (tMode)ndConfig.get(CFG_MODE) != ND::currentMode;
   if (_isChanged) {
     if (modeChanged) {
       // 動作モード変更時はこの直後に再起動するため、非同期保存キューを待たずに同期保存する。
@@ -1419,7 +1456,7 @@ void CFGWindow::close(bool restoreLastView) {
     return;
   }
   const bool shouldRestoreLastView = restoreLastView || ND::version == nd_v61;
-  if (shouldRestoreLastView && disp.lastView == ViewMode::Player) {
+  if (ND::currentMode == MODE_NDSIF || (shouldRestoreLastView && disp.lastView == ViewMode::Player)) {
     playerWindow.show();
   } else {
     visualWindow.show();

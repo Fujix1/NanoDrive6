@@ -200,7 +200,7 @@ void eventTask(void*) {
     if (xQueueReceive(inputEventQueue, &ev, portMAX_DELAY) != pdTRUE) continue;
 
     if (ev == event::Browser) {
-      if (ndConfig.currentMode == MODE_PLAYER) {
+      if (ND::currentMode == MODE_PLAYER) {
         if (disp.currentView == ViewMode::Browser) {
           browserWindow.eventHandler(event::Close);
         } else {
@@ -502,7 +502,7 @@ void Input::inputHandler() {
       default:
         break;
     }
-  } else if (ndConfig.currentMode == MODE_PLAYER) {
+  } else if (ND::currentMode == MODE_PLAYER) {
     switch (inputBuffer) {
       case btnUP:
         ndFile.requestDirPlay(playDirection);
@@ -528,10 +528,10 @@ void Input::inputHandler() {
   } else {
     switch (inputBuffer) {
       case btnUP:
-        serialMan.changeYM2612Clock();
+        if (ND::currentMode == MODE_SERIAL) serialMan.changeYM2612Clock();
         break;
       case btnDOWN:
-        serialMan.changeSN76489Clock();
+        if (ND::currentMode == MODE_SERIAL) serialMan.changeSN76489Clock();
         break;
       case btnSELECT:
         sendEvent(event::Option);

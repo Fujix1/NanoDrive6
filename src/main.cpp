@@ -155,7 +155,7 @@ void setup() {
 
   // 動作切り替え
   // プレイヤーモード
-  if (ndConfig.currentMode == MODE_PLAYER) {
+  if (ND::currentMode == MODE_PLAYER) {
     // SD読み込み
     if (ndFile.init() == true) {
       Serial.printf("SD init.\n");
@@ -199,21 +199,21 @@ void setup() {
     ndFile.processPlaybackQueue();
   }
 
-  else {
+  else if (ND::currentMode == MODE_SERIAL) {
     // シリアルモード
     serialMan.init();
     serialMan.startSerialTask();
   }
 
   cfgWindow.init();
-  if (ndConfig.currentMode == MODE_PLAYER) {
+  if (ND::currentMode == MODE_PLAYER) {
     browserWindow.init();
   }
 
   // ウインドウ初期化後に入力を有効化する。
   input.setEnabled(true);
 
-  if (ndConfig.currentMode == MODE_PLAYER) {
+  if (ND::currentMode == MODE_PLAYER) {
     if (savedLastView == LAST_VIEW_VISUAL) {
       visualWindow.show();
     } else {
@@ -227,6 +227,9 @@ void setup() {
       Serial.println("ERROR: playback task init failed.");
     }
     serialMan.startTrackMaskTask();
+  } else if (ND::currentMode == MODE_NDSIF) {
+    // NDSIF の通信処理は今後実装する。設定画面へ戻れる待機画面を表示する。
+    playerWindow.show();
   }
 
   Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
@@ -235,7 +238,7 @@ void setup() {
 }
 
 void loop() {
-  if (ndConfig.currentMode == MODE_PLAYER) {
+  if (ND::currentMode == MODE_PLAYER) {
     while (1) {
       vTaskDelay(1000);
     }

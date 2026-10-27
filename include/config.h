@@ -5,6 +5,8 @@
 
 #include <vector>
 
+#include "nd.h"
+
 typedef enum {
   LANG_JA,
   LANG_EN,
@@ -43,8 +45,6 @@ typedef enum { AMP_0 = 0,
 typedef enum { TRANDOM_NO,
                TRANDOM_FOLDER,
                TRANDOM_ALL } tRandom;
-typedef enum { MODE_PLAYER,
-               MODE_SERIAL } tMode;
 typedef enum { FMPCM_BOTH,
                FMPCM_FM,
                FMPCM_PCM } tFMPCM;
@@ -99,7 +99,6 @@ typedef struct {
 
 class NDConfig {
  public:
-  tMode currentMode;
   std::vector<sConfig> items;
   void init();
   void applyCfg();
