@@ -51,6 +51,7 @@
 #include "input.h"
 #include "nd.h"
 #include "serialman.h"
+#include "ndsif_serial.h"
 #include "vgm.h"
 
 static TaskHandle_t hPlaybackTask = nullptr;
@@ -82,7 +83,7 @@ void setup() {
   pinMode(D0, OUTPUT);
   digitalWrite(D0, HIGH);
 
-  Serial.begin(1500000);
+  NdsifSerial::beginUsb();
   Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
   Serial.printf("Flash - %'d Bytes at %'d\n", ESP.getFlashChipSize(), ESP.getFlashChipSpeed());
   Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(), ESP.getFreePsram());
@@ -155,7 +156,7 @@ void setup() {
 
   // 動作切り替え
   // プレイヤーモード
-  if (ndConfig.currentMode == MODE_PLAYER) {
+  if (ND::currentMode == MODE_PLAYER) {
     // SD読み込み
     if (ndFile.init() == true) {
       Serial.printf("SD init.\n");
@@ -199,21 +200,21 @@ void setup() {
     ndFile.processPlaybackQueue();
   }
 
-  else {
+  else if (ND::currentMode == MODE_SERIAL) {
     // シリアルモード
     serialMan.init();
     serialMan.startSerialTask();
   }
 
   cfgWindow.init();
-  if (ndConfig.currentMode == MODE_PLAYER) {
+  if (ND::currentMode == MODE_PLAYER) {
     browserWindow.init();
   }
 
   // ウインドウ初期化後に入力を有効化する。
   input.setEnabled(true);
 
-  if (ndConfig.currentMode == MODE_PLAYER) {
+  if (ND::currentMode == MODE_PLAYER) {
     if (savedLastView == LAST_VIEW_VISUAL) {
       visualWindow.show();
     } else {
@@ -227,15 +228,19 @@ void setup() {
       Serial.println("ERROR: playback task init failed.");
     }
     serialMan.startTrackMaskTask();
+  } else if (ND::currentMode == MODE_NDSIF) {
+    NdsifSerial::init();
+    playerWindow.show();
   }
 
   Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
   Serial.printf("Flash - %'d Bytes at %'d\n", ESP.getFlashChipSize(), ESP.getFlashChipSpeed());
   Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(), ESP.getFreePsram());
+  if (ND::currentMode == MODE_NDSIF) NdsifSerial::start();
 }
 
 void loop() {
-  if (ndConfig.currentMode == MODE_PLAYER) {
+  if (ND::currentMode == MODE_PLAYER || ND::currentMode == MODE_NDSIF) {
     while (1) {
       vTaskDelay(1000);
     }

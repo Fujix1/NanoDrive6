@@ -4,7 +4,8 @@
 #ifndef ND_H
 #define ND_H
 
-#define ND_FIRMWARE_VERSION "3.1dev5"
+#define ND_FIRMWARE_VERSION "3.1dev16"
+#define ND_NDSIF_API_VERSION "1.0"
 
 #include <Arduino.h>
 
@@ -57,12 +58,18 @@ enum class FileFormat {
 
 extern const std::array<String, 7> FORMAT_LABEL;
 
+// 動作モード（既存の設定値を維持するため、NDSIF は末尾に追加）
+typedef enum { MODE_PLAYER = 0,
+               MODE_SERIAL = 1,
+               MODE_NDSIF = 2 } tMode;
+
 // 本体バージョン
 typedef enum { nd_v60,
                nd_v61 } t_ndVersion;
 
 class ND {
  public:
+  static tMode currentMode;      // 現在の動作モード
   static t_ndVersion version;    // 本体バージョン
   static VolumeChip volumeChip;  // ボリュームチップ種別
   static FileFormat fileFormat;  //

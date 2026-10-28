@@ -197,7 +197,13 @@ void NDConfig::init() {
                    {"ND6.0", "ND6.1"},
                    {CTRL_1, CTRL_2}});
   items.push_back(
-      {"mode", 0, "動作モード", "Mode", {"プレーヤー", "シリアル"}, {"Player", "Serial"}, {MODE_PLAYER, MODE_SERIAL}});
+      {"mode",
+       0,
+       "動作モード",
+       "Mode",
+       {"プレーヤー", "シリアル", "NDSIF"},
+       {"Player", "Serial", "NDSIF"},
+       {MODE_PLAYER, MODE_SERIAL, MODE_NDSIF}});
   preferences.begin("NanoDrive");
 
   // キュー初期化
@@ -280,7 +286,7 @@ void NDConfig::loadCfg() {
   }
 
   // 現在の動作モード
-  currentMode = (tMode)get(CFG_MODE);
+  ND::currentMode = static_cast<tMode>(get(CFG_MODE));
 }
 
 // 最後に開いたフォルダ番号の照合

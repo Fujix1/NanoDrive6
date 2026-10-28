@@ -12,3 +12,4 @@ docs
 AGENTS.md
 test
 tests
+__pycache__/

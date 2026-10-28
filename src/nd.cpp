@@ -9,6 +9,7 @@ const std::array<String, 15> CHIP_LABEL = {"",       "SN76489", "SN76489", "YM24
 const std::array<String, 7> FORMAT_LABEL = {"--", "VGM", "VGZ", "MDX", "XGM1", "XGM2", "S98"};
 
 // ND ステートの初期化
+tMode ND::currentMode = MODE_PLAYER;
 t_ndVersion ND::version = nd_v60;
 VolumeChip ND::volumeChip = VolumeChip::None;
 FileFormat ND::fileFormat = FileFormat::Unknown;
