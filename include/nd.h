@@ -4,7 +4,7 @@
 #ifndef ND_H
 #define ND_H
 
-#define ND_FIRMWARE_VERSION "3.1dev4"
+#define ND_FIRMWARE_VERSION "3.1dev16"
 #define ND_NDSIF_API_VERSION "1.0"
 
 #include <Arduino.h>

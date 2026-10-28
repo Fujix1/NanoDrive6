@@ -8,9 +8,14 @@ namespace nd6clock {
 // Passing that value through unchanged would select SI5351's 4 MHz default.
 static constexpr uint32_t Supported[] = {
     1250000, 1500000, 1536000, 1789772, 2000000, 2578000, 3000000,
-    3072000, 3332000, 3375000, 3500000, 3579545, 4000000, 4500000,
+    3072000, 3332000, 3375000, 3500000, 3546895, 3579545, 4000000, 4500000,
     5000000, 6000000, 6144000, 7159000, 7600489, 7670453, 7987000,
     8000000, 9000000, 14318180};
+
+inline bool isSupported(uint32_t frequency) {
+  for (uint32_t candidate : Supported) if (candidate == frequency) return true;
+  return false;
+}
 
 inline uint32_t match(uint32_t requested) {
   if (!requested) return 0;

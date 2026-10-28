@@ -51,6 +51,7 @@
 #include "input.h"
 #include "nd.h"
 #include "serialman.h"
+#include "ndsif_serial.h"
 #include "vgm.h"
 
 static TaskHandle_t hPlaybackTask = nullptr;
@@ -82,7 +83,7 @@ void setup() {
   pinMode(D0, OUTPUT);
   digitalWrite(D0, HIGH);
 
-  Serial.begin(1500000);
+  NdsifSerial::beginUsb();
   Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
   Serial.printf("Flash - %'d Bytes at %'d\n", ESP.getFlashChipSize(), ESP.getFlashChipSpeed());
   Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(), ESP.getFreePsram());
@@ -228,17 +229,18 @@ void setup() {
     }
     serialMan.startTrackMaskTask();
   } else if (ND::currentMode == MODE_NDSIF) {
-    // NDSIF の通信処理は今後実装する。設定画面へ戻れる待機画面を表示する。
+    NdsifSerial::init();
     playerWindow.show();
   }
 
   Serial.printf("Heap - %'d Bytes free\n", ESP.getFreeHeap());
   Serial.printf("Flash - %'d Bytes at %'d\n", ESP.getFlashChipSize(), ESP.getFlashChipSpeed());
   Serial.printf("PSRAM - Total %'d, Free %'d\n", ESP.getPsramSize(), ESP.getFreePsram());
+  if (ND::currentMode == MODE_NDSIF) NdsifSerial::start();
 }
 
 void loop() {
-  if (ND::currentMode == MODE_PLAYER) {
+  if (ND::currentMode == MODE_PLAYER || ND::currentMode == MODE_NDSIF) {
     while (1) {
       vTaskDelay(1000);
     }

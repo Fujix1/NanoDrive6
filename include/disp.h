@@ -93,6 +93,8 @@ DisplayMetadata displayMetadata(const tDispData& data);
 bool initDisp();
 void redrawOnCore0();
 void serialModeDraw();
+// Called by the NDSIF I/O owner; drawing stays on the display task.
+void ndsifModeUpdateFooter(uint32_t ym2612Hz, uint32_t sn76489Hz);
 void startTimer();
 void stopTimer();
 

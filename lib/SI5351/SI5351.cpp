@@ -303,6 +303,11 @@ void SI5351_cls::setFreq(si5351Freq_t newFreq, uint8_t output) {
       setupPLL(targetPLL, 35, 0, 1);
       setupMultisynth(output, targetPLL, 250, 0, 1);
       break;
+    case SI5351_3546:  // Mega Drive PAL PSG: 3.546895 MHz
+      // 25 MHz * (28 + 9379/25000) / 200 = 3,546,895 Hz.
+      setupPLL(targetPLL, 28, 9379, 25000);
+      setupMultisynth(output, targetPLL, 200, 0, 1);
+      break;
     case SI5351_3579:  // 3.57954545 MHz
       setupPLL(targetPLL, 28, 15909, 250000);
       setupMultisynth(output, targetPLL, 196, 0, 1);

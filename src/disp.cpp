@@ -1,5 +1,7 @@
 #include "disp.h"
 
+#include <atomic>
+
 #include "input.h"
 #include "pics.h"
 #include "png_renderer.h"
@@ -169,6 +171,16 @@ static LGFX_Sprite panMarkerMute(&lcd);
 static OpenFontRender render;
 static TimerHandle_t hDispTimer;
 static TaskHandle_t hDispUpdateTask;
+static std::atomic<uint32_t> ndsifFooterClocks[2]{{0}, {0}};
+static std::atomic<bool> ndsifFooterPending{false};
+static void serviceNdsifFooter();
+
+void ndsifModeUpdateFooter(uint32_t ym2612Hz, uint32_t sn76489Hz) {
+  ndsifFooterClocks[0].store(ym2612Hz, std::memory_order_relaxed);
+  ndsifFooterClocks[1].store(sn76489Hz, std::memory_order_relaxed);
+  ndsifFooterPending.store(true, std::memory_order_release);
+  if (hDispUpdateTask != nullptr) xTaskNotifyGive(hDispUpdateTask);
+}
 static int currentPage = 0;
 
 #ifndef ND_VISUAL_ROTATE_180
@@ -885,6 +897,9 @@ void dispUpdateTask(void* param) {
     while (ulTaskNotifyTake(pdTRUE, 0) > 0) {
       // queue collapse: 最新状態だけ描画
     }
+    // The static NDSIF screen disables scrolling/timer drawing, but clock
+    // changes still need a footer-only refresh on this task.
+    if (ND::currentMode == MODE_NDSIF) serviceNdsifFooter();
     if (disp.stopTimerDrawing) {
       continue;
     }
@@ -919,13 +934,65 @@ static void drawUsbModeHeader() {
   render.setAlignment(Align::TopLeft);
   render.loadFont(nimbusBold, sizeof(nimbusBold));
   render.setFontSize(13);
-  render.setFontColor(C_LIGHTGRAY, C_HEADER);
+  render.setFontColor(C_YELLOW, C_HEADER);
   render.setCursor(4, 4);
   render.printf("USB");
   render.unloadFont();
 }
 
-// NDSIF 待機画面（通信処理は今後実装）
+static void drawNdsifFooter(bool toFrameBuffer) {
+  // Reuse the existing screen buffer. A separate 170x40 RGB565 sprite
+  // consumes 13,600 internal bytes and can prevent the NDSIF RX task stack
+  // from being allocated during boot.
+  frameBuffer.fillRect(0, 279, LCD_W, 40, C_BASEBG);
+  frameBuffer.fillRoundRect(1, 279, LCD_W - 2, 40, 2, C_DARK);
+  frameBuffer.fillRoundRect(6, 283, 17, 14, 2, C_FOOTER_ACTIVE);
+  frameBuffer.fillRoundRect(6, 301, 17, 14, 2, C_FOOTER_ACTIVE);
+  render.setUseRenderTask(false);
+  render.setDrawer(frameBuffer);
+  render.setAlignment(Align::TopLeft);
+  render.loadFont(nimbusBold, sizeof(nimbusBold));
+  render.setFontSize(13);
+  const char* names[] = {"YM2612", "SN76489"};
+  for (unsigned slot = 0; slot < 2; ++slot) {
+    const uint32_t hz = ndsifFooterClocks[slot].load(std::memory_order_relaxed);
+    render.setFontColor(C_YELLOW, C_DARK);
+    render.setCursor(27, slot == 0 ? 284 : 303);
+    if (hz != 0 && hz != uint32_t(SI5351_UNDEFINED)) {
+      render.printf("%s @ %.3f MHz", names[slot], hz / 1000000.0);
+    } else {
+      render.printf("%s @ -- MHz", names[slot]);
+    }
+    render.setFontColor(C_LIGHTGRAY, C_FOOTER_ACTIVE);
+    render.setCursor(11, slot == 0 ? 284 : 303);
+    render.printf("%u", slot + 1);
+  }
+  render.unloadFont();
+  if (!toFrameBuffer) {
+    int32_t clipX, clipY, clipW, clipH;
+    lcd.getClipRect(&clipX, &clipY, &clipW, &clipH);
+    // LovyanGFX clips pushImage before transfer, preserving source stride.
+    // Only these 40 rows reach the LCD; no additional pixel buffer is needed.
+    lcd.setClipRect(0, 279, LCD_W, 40);
+    frameBuffer.pushSprite(&lcd, 0, 0);
+    lcd.setClipRect(clipX, clipY, clipW, clipH);
+  }
+}
+
+static void serviceNdsifFooter() {
+  if (!ndsifFooterPending.load(std::memory_order_acquire) || disp.currentView != ViewMode::Player) return;
+  if (!tryLockDrawing()) return;
+  // Settings may have opened while this task was waiting for the drawing lock.
+  if (disp.currentView == ViewMode::Player && ND::currentMode == MODE_NDSIF &&
+      ndsifFooterPending.exchange(false, std::memory_order_acq_rel)) {
+    lcd.startWrite();
+    drawNdsifFooter(false);
+    lcd.endWrite();
+  }
+  unlockDrawing();
+}
+
+// NDSIF モード画面
 static void ndsifModeDraw() {
   xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
   disp.stopTimerDrawing = true;
@@ -935,6 +1002,8 @@ static void ndsifModeDraw() {
   lblGame.setCaption("API ver. " ND_NDSIF_API_VERSION);
   lblAuthor.setCaption("--");
   lblSystem.setCaption("--");
+  ndsifFooterPending.exchange(false, std::memory_order_acq_rel);
+  drawNdsifFooter(true);
   frameBuffer.pushSprite(0, 0);
   xSemaphoreGive(spFrameBuffer);
 }
