@@ -868,6 +868,10 @@ static void dispUpdateWorker() {
       break;
     }
     case ViewMode::Visual: {  // ビジュアルモードのとき
+      if (ND::currentMode == MODE_NDSIF) {
+        visualWindow.update();
+        return;
+      }
       int64_t sec = playerWindow.dispData.time;
       if (ND::canPlay == false || ND::isPaused) {
         if (ND::isPaused) {
@@ -904,6 +908,10 @@ void dispUpdateTask(void* param) {
       continue;
     }
     dispUpdateWorker();
+    if (ND::currentMode == MODE_NDSIF && disp.currentView == ViewMode::Visual) {
+      // Leave USB RX time even if LCD updates take longer than a timer period.
+      vTaskDelay(pdMS_TO_TICKS(20));
+    }
   }
 }
 
@@ -1287,18 +1295,14 @@ void PlayerWindow::eventHandler(event ev) {
   if (ev == event::Option) {
     cfgWindow.show();
   } else if (ev == event::SwitchView) {
-    if (ND::currentMode == MODE_NDSIF) {
-      cfgWindow.show();
-    } else {
-      visualWindow.show();
-    }
+    visualWindow.show();
   }
 }
 
 void PlayerWindow::show() {
   disp.currentView = ViewMode::Player;
   disp.lastView = ViewMode::Player;
-  ndConfig.saveLastView(LAST_VIEW_PLAYER);
+  if (ND::currentMode != MODE_NDSIF) ndConfig.saveLastView(LAST_VIEW_PLAYER);
   disp.playbackViewInitialized = true;
   redraw();
 }
@@ -1525,7 +1529,7 @@ void CFGWindow::close(bool restoreLastView) {
     return;
   }
   const bool shouldRestoreLastView = restoreLastView || ND::version == nd_v61;
-  if (ND::currentMode == MODE_NDSIF || (shouldRestoreLastView && disp.lastView == ViewMode::Player)) {
+  if (shouldRestoreLastView && disp.lastView == ViewMode::Player) {
     playerWindow.show();
   } else {
     visualWindow.show();
@@ -1883,14 +1887,20 @@ void VisualWindow::drawTimestamp(int64_t sec, bool toFrameBuffer, bool visible) 
   _lastTimestampVisible = visible;
 }
 
+static bool ndsifKeyboardValid = false;
+static NoteInfo ndsifYmNotes[6];
+static NoteInfo ndsifSnNotes[8];
+static uint16_t ndsifKeyboardColor;
+
 void VisualWindow::draw() {
   xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
   disp.stopTimerDrawing = true;
 
   frameBuffer.fillSprite(TFT_BLACK);
+  ndsifKeyboardValid = false;
   pushVisualImage(frameBuffer, 0, 0, keyboardWidth, keyboardHeight, keyboard);
 
-  switch (ND::fileFormat) {
+  switch (ND::currentMode == MODE_NDSIF ? FileFormat::Unknown : ND::fileFormat) {
     case FileFormat::VGM:
     case FileFormat::VGZ:
       drawLabelClip(frameBuffer, 2, kLabelVgmX, kLabelVgmY);
@@ -1906,7 +1916,9 @@ void VisualWindow::draw() {
   }
 
   String songTitle;
-  if (ndConfig.get(CFG_LANG) == LANG_JA) {
+  if (ND::currentMode == MODE_NDSIF) {
+    songTitle = ndConfig.get(CFG_LANG) == LANG_JA ? "NDSIFモード / API ver. " ND_NDSIF_API_VERSION : "NDSIF Mode / API ver. " ND_NDSIF_API_VERSION;
+  } else if (ndConfig.get(CFG_LANG) == LANG_JA) {
     songTitle = playerWindow.dispData.trackJp;
     if (playerWindow.dispData.gameJp != "") {
       songTitle += " / " + playerWindow.dispData.gameJp;
@@ -1920,15 +1932,17 @@ void VisualWindow::draw() {
   lblSongTitle.setCaption(songTitle);
 
   // シャッフル再生のアイコン表示
-  if (ndConfig.get(CFG_SHUFFLE) != TRANDOM_NO) {
-    pushVisualSpriteToFrameBuffer(_sprShuffleOn, 154, 113);
-  } else {
-    pushVisualSpriteToFrameBuffer(_sprShuffleOff, 154, 113);
+  if (ND::currentMode != MODE_NDSIF) {
+    if (ndConfig.get(CFG_SHUFFLE) != TRANDOM_NO) {
+      pushVisualSpriteToFrameBuffer(_sprShuffleOn, 154, 113);
+    } else {
+      pushVisualSpriteToFrameBuffer(_sprShuffleOff, 154, 113);
+    }
   }
 
   _lastTimestampSec = INT64_MAX;
   _lastTimestampVisible = false;
-  drawTimestamp(playerWindow.dispData.time, true, true);
+  if (ND::currentMode != MODE_NDSIF) drawTimestamp(playerWindow.dispData.time, true, true);
   frameBuffer.pushSprite(0, 0);
 
   for (int i = 0; i < kLevelTrackCount; i++) {
@@ -2009,13 +2023,26 @@ void VisualWindow::update() {
     return;
   }
 
-  keyboardBuffer.pushSprite(&keyboardBufferSub, 0, 0);
-  drawKeyboard(keyboardBufferSub, YM2612_KEY, keySnapshot);
-  pushVisualSpriteToLcd(keyboardBufferSub, 2, 0);
-
-  keyboardBuffer.pushSprite(&keyboardBufferSub, 0, 0);
-  drawKeyboard(keyboardBufferSub, SN76489_MIX_KEY, snKeySnapshot);
-  pushVisualSpriteToLcd(keyboardBufferSub, 30, 0);
+  if (disp.currentView != ViewMode::Visual || disp.stopTimerDrawing) {
+    unlockDrawing();
+    return;
+  }
+  const uint16_t keyColor = static_cast<uint16_t>(ndConfig.get(CFG_KEYON));
+  const bool full = ND::currentMode != MODE_NDSIF || !ndsifKeyboardValid || ndsifKeyboardColor != keyColor;
+  if (full || memcmp(ndsifYmNotes, keySnapshot, sizeof(keySnapshot)) != 0) {
+    keyboardBuffer.pushSprite(&keyboardBufferSub, 0, 0);
+    drawKeyboard(keyboardBufferSub, YM2612_KEY, keySnapshot);
+    pushVisualSpriteToLcd(keyboardBufferSub, 2, 0);
+    memcpy(ndsifYmNotes, keySnapshot, sizeof(keySnapshot));
+  }
+  if (full || memcmp(ndsifSnNotes, snKeySnapshot, sizeof(snKeySnapshot)) != 0) {
+    keyboardBuffer.pushSprite(&keyboardBufferSub, 0, 0);
+    drawKeyboard(keyboardBufferSub, SN76489_MIX_KEY, snKeySnapshot);
+    pushVisualSpriteToLcd(keyboardBufferSub, 30, 0);
+    memcpy(ndsifSnNotes, snKeySnapshot, sizeof(snKeySnapshot));
+  }
+  ndsifKeyboardColor = keyColor;
+  ndsifKeyboardValid = true;
 
   for (int i = 0; i < kLevelTrackCount; i++) {
     uint8_t displayLevel = updateTrackLevelWaterfall(i, levelSnapshot[i]);
@@ -2210,7 +2237,7 @@ void VisualWindow::show() {
   disp.stopTimerDrawing = true;
   disp.currentView = ViewMode::Visual;
   disp.lastView = ViewMode::Visual;
-  ndConfig.saveLastView(LAST_VIEW_VISUAL);
+  if (ND::currentMode != MODE_NDSIF) ndConfig.saveLastView(LAST_VIEW_VISUAL);
   disp.playbackViewInitialized = true;
   draw();
 }

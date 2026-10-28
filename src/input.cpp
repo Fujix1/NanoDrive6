@@ -479,6 +479,12 @@ void Input::inputHandler() {
       default:
         break;
     }
+  } else if (ND::currentMode == MODE_NDSIF) {
+    if (inputBuffer == btnSELECT) {
+      // ND6.1 MENU opens settings from either view; ND6 cycles the three views.
+      const bool closeVisual = ND::version != nd_v61 && disp.currentView == ViewMode::Visual;
+      sendEvent(closeVisual ? event::Close : event::Option);
+    }
   } else if (disp.currentView == ViewMode::Visual) {
     switch (inputBuffer) {
       case btnUP:
