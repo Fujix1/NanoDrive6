@@ -308,6 +308,9 @@ class VisualWindow {
 
 extern VisualWindow visualWindow;
 
+// Request a lightweight NDSIF visual history reset on the display task.
+void ndsifVisualReset();
+
 // ファイルブラウザ画面クラス
 class BrowserWindow {
  public:

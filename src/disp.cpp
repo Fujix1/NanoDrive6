@@ -1887,6 +1887,10 @@ void VisualWindow::drawTimestamp(int64_t sec, bool toFrameBuffer, bool visible) 
   _lastTimestampVisible = visible;
 }
 
+static std::atomic<bool> ndsifVisualResetPending{false};
+
+void ndsifVisualReset() { ndsifVisualResetPending.store(true, std::memory_order_release); }
+
 static bool ndsifKeyboardValid = false;
 static NoteInfo ndsifYmNotes[6];
 static NoteInfo ndsifSnNotes[8];
@@ -1980,6 +1984,10 @@ void VisualWindow::update() {
   if (xSemaphoreTake(KeyBoard.keyinfoMutex, 0) != pdTRUE) {
     return;
   }
+  // Consume the reset while holding the same mutex as the snapshot. A reset
+  // arriving later remains pending for the next frame. No LCD work is done here.
+  const bool resetHistory = ND::currentMode == MODE_NDSIF &&
+      ndsifVisualResetPending.exchange(false, std::memory_order_acquire);
   memcpy(keySnapshot, KeyBoard.keyInfo[YM2612_KEY], sizeof(keySnapshot));
   memcpy(sn0KeySnapshot, KeyBoard.keyInfo[SN76489_0_KEY], sizeof(sn0KeySnapshot));
   memcpy(sn1KeySnapshot, KeyBoard.keyInfo[SN76489_1_KEY], sizeof(sn1KeySnapshot));
@@ -1990,6 +1998,10 @@ void VisualWindow::update() {
   memset(KeyBoard.trackLevel, 0, sizeof(KeyBoard.trackLevel));
   xSemaphoreGive(KeyBoard.keyinfoMutex);
 
+  if (resetHistory) {
+    // Retained note labels must not outlive RESET; redraw only values that change.
+    memset(heldTrackNote, 0xff, sizeof(heldTrackNote));
+  }
   uint8_t noteSnapshot[kNoteTrackCount];
   memset(noteSnapshot, 0xff, sizeof(noteSnapshot));
   for (int i = 0; i < kFmTrackCount; i++) {

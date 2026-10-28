@@ -13,6 +13,7 @@
 #include "fm.h"
 #include "nd.h"
 #include "disp.h"
+#include "keyinfo.h"
 
 namespace {
 ndsif::Protocol protocol;
@@ -168,7 +169,10 @@ void playbackTask(void*) {
       switch (job.operation) {
         case Reset:
           portENTER_CRITICAL(&streamMux); stream->reset(); portEXIT_CRITICAL(&streamMux);
-          FM.reset(); job.result = true;
+          FM.reset();
+          KeyBoard.reset();
+          ndsifVisualReset();
+          job.result = true;
           break;
         case Start:
           portENTER_CRITICAL(&streamMux);
