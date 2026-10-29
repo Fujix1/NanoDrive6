@@ -7,7 +7,6 @@
 #include <hal/usb_serial_jtag_ll.h>
 #include "dac_stream.h"
 #include "ndsif.h"
-#include "ClockMatch.h"
 #include "NJU72341.h"
 #include "SI5351.hpp"
 #include "fm.h"
@@ -69,9 +68,9 @@ void writeRegisters(uint8_t id, uint8_t instance, uint8_t page, const uint8_t* d
 bool setClock(uint8_t id, uint8_t instance, uint32_t hz) {
   if (!((instance == 0 && (id == 0x52 || id == 0x53 || id == 0x50)) ||
         (id == 0x30 && instance == 1))) return false;
-  hz = nd6clock::match(hz);
-  if (!nd6clock::isSupported(hz)) return false;
-  Job job; job.operation = Clock; job.id = id; job.value = hz;
+  const si5351Freq_t frequency = SI5351_cls::normalizeFreq(hz);
+  if (frequency == SI5351_UNDEFINED) return false;
+  Job job; job.operation = Clock; job.id = id; job.value = frequency;
   return submit(job);
 }
 void setOutputVolume(uint8_t attenuation) {

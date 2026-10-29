@@ -113,6 +113,7 @@ class SI5351_cls {
   void setupMultisynth(uint8_t output, si5351PLL_t pllSource, uint32_t div, uint32_t num, uint32_t denom);
   void setupMultisynthInt(uint8_t output, si5351PLL_t pllSource, si5351MultisynthDiv_t div);
   void enableOutputs(bool enabled);
+  static si5351Freq_t normalizeFreq(uint32_t requested);
   void setFreq(si5351Freq_t newFreq, uint8_t output = 0);
 
  private:

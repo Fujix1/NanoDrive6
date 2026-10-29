@@ -3,7 +3,6 @@
 #include <Arduino.h>
 #include <esp_timer.h>
 #include "TimedStream.h"
-#include "ClockMatch.h"
 
 #include "NJU72341.h"
 #include "SI5351.hpp"
@@ -230,8 +229,10 @@ void serialCheckerTask(void* param) {
 
       case 0xf0: {
         // クロック0の周波数設定
-        clock0 = nd6clock::match(getSerial32());
-        // VGM nominal clock often differs by 1 Hz; avoid SI5351's 4 MHz default.
+        clock0 = getSerial32();
+        // Preserve the legacy fallback for clocks outside the supported table.
+        const si5351Freq_t normalized = SI5351_cls::normalizeFreq(clock0);
+        if (normalized != SI5351_UNDEFINED) clock0 = normalized;
         SI5351.setFreq((si5351Freq_t)clock0, 0);
         ND::freq[0] = (si5351Freq_t)clock0;
         serialModeDraw();
@@ -240,7 +241,9 @@ void serialCheckerTask(void* param) {
 
       case 0xf1: {
         // クロック1の周波数設定
-        clock1 = nd6clock::match(getSerial32());
+        clock1 = getSerial32();
+        const si5351Freq_t normalized = SI5351_cls::normalizeFreq(clock1);
+        if (normalized != SI5351_UNDEFINED) clock1 = normalized;
         SI5351.setFreq((si5351Freq_t)clock1, 1);
         ND::freq[1] = (si5351Freq_t)clock1;
         serialModeDraw();

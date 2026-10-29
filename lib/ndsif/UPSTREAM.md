@@ -1,14 +1,9 @@
-# 取り込み元と ND6 差分
+# NDSIF 共通コア
 
-ND7 の `lib/ndsif/ndsif.h` / `ndsif.cpp`（API 1.0 revision 39）を取り込んだ。
-ND7 の実装は ND8 の COBS、CRC、message_type、制御応答を基にし、ボード所有の identity / Capability / register callback を追加している。
+ND6・ND7・ND8の `lib/ndsif/ndsif.h` と `ndsif.cpp` は同じ通信コアを使用する。正本は `NanoDrive6/lib/ndsif` に置く。ND6プロジェクトで `python tools/sync_ndsif_core.py` を実行すると3機種の一致を確認し、`--write` を付けるとND7・ND8へバックアップ付きで反映する。同期後は各機種のビルドと該当機能の試験を行う。
 
-ND6 のローカル差分:
+フレーム、COBS、CRC、制御応答、能力通知と音源書き込みの振り分けを共通化する。機種名、搭載音源、クロック、リセット、音量、USB処理、再生タスクは各機種が設定する。`REVISION=40` は共通コアの規格改訂番号で、音源や任意プロファイルの対応を意味しない。能力通知と個別プロファイルの照会を使う。
 
-- revision 40、実験制御 callback と Capability control_features bit1 を追加。
-- SN76489 の 50/30 は instance + page + byte 列として register callback へ渡す。
-- DAC は新規 `dac_stream.h` / `dac_stream.cpp` へ分離。既存の B7/10～13 は変更せず ND6 では無効。
-- ボード callback、USB、単独所有の音源 I/O タスクは `src/ndsif_serial.cpp`。
-- 正式な共通規格との違い、wire、制約、試験手順はルートの `NDSIF_ND6.md` に記録。
+ND6のYM2612時間付きDACは `dac_stream` とボード側の拡張callbackで提供し、ND7・ND8では有効化しない。ND8のMSM6258 ADPCMは従来どおり `audio` callbackで提供する。共通コア内に搭載機種を決め打ちしない。
 
-ND7/ND8 の元ファイルへの書き戻しは行わない。
+ND7の回帰試験は `NanoDrive7/tests/run_native.py`、共通コアのND6・ND8互換試験は `NanoDrive6/tools/ndsif_core_test/test_core.py` で実行する。実機のPCM・ADPCM・複数音源再生も確認する。

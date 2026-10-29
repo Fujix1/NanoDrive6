@@ -8,7 +8,7 @@ namespace ndsif {
 // API identity and monotonically increasing specification revision.
 // Separate from the frame wire-version byte and the ND8 firmware version.
 constexpr char VERSION[] = "1.0";
-constexpr uint32_t REVISION = 40; // ND6 experimental DAC profile; see NDSIF_ND6.md.
+constexpr uint32_t REVISION = 40; // Protocol revision; optional profiles are capability-gated.
 
 // Logical input-clock capabilities, independent of the oscillator/clock IC.
 enum ClockMode : uint8_t { CLOCK_UNKNOWN = 0, CLOCK_FIXED = 1, CLOCK_VARIABLE = 2 };

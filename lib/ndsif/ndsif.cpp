@@ -250,10 +250,8 @@ void Protocol::reply(uint8_t opcode, uint16_t request, size_t payloadSize) {
   }
   tx_[codePos] = code;
   tx_[dst++] = 0;
-  // HWCDC on ND6 stalls on an exact 64-byte reply (GET_CAPABILITIES with
-  // four entries). An extra empty COBS delimiter ends it with a short USB
-  // packet without changing the frame, CRC or payload. Empty delimiters are
-  // already ignored by NDSIF receivers. The largest reply is 271 bytes.
+  // HWCDC may stall on an exact 64-byte reply. An empty COBS delimiter
+  // makes the last USB packet short without changing the reply frame.
   if (dst % 64 == 0 && dst < sizeof(tx_)) tx_[dst++] = 0;
   txSize_ = dst;
 }
