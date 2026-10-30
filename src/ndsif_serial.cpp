@@ -316,7 +316,8 @@ void start() {
   BaseType_t result = xTaskCreatePinnedToCore(playbackTask, "ndsifDAC", 6144, nullptr, 3,
                                              &playbackTaskHandle, APP_CPU_NUM);
   configASSERT(result == pdPASS && playbackTaskHandle);
-  result = xTaskCreatePinnedToCore(receiveTask, "ndsifRX", 6144, nullptr, 2,
+  // Share core 0 fairly with the priority-1 input and display event tasks.
+  result = xTaskCreatePinnedToCore(receiveTask, "ndsifRX", 6144, nullptr, 1,
                                    &receiveTaskHandle, PRO_CPU_NUM);
   configASSERT(result == pdPASS && receiveTaskHandle);
 }
