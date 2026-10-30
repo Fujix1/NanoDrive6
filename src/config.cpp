@@ -201,8 +201,8 @@ void NDConfig::init() {
        0,
        "動作モード",
        "Mode",
-       {"プレーヤー", "シリアル", "NDSIF"},
-       {"Player", "Serial", "NDSIF"},
+       {"プレーヤー", "旧シリアル", "NDSIF"},
+       {"Player", "Serial (old)", "NDSIF"},
        {MODE_PLAYER, MODE_SERIAL, MODE_NDSIF}});
   preferences.begin("NanoDrive");
 
