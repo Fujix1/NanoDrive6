@@ -7,6 +7,7 @@ void Protocol::configure(Reset reset, WriteYM write, const char* firmware, SetCl
   write_ = write;
   registerWrite_ = nullptr;
   extension_ = nullptr;
+  optionalControlFeatures_ = 0;
   model_ = "";
   dataCapacity_ = 4096;
   eventCapacity_ = 1024;
@@ -180,11 +181,12 @@ void Protocol::dispatch(size_t size) {
           const size_t limit = (MAX_PAYLOAD - HeaderSize) / EntrySize;
           const size_t count = remaining < limit ? remaining : limit;
           const uint16_t next = count == remaining ? 0xffff : uint16_t(offset + count);
+          const uint16_t controlFeatures = uint16_t((volume_ ? 1 : 0) | (extension_ ? 2 : 0)) | optionalControlFeatures_;
           const uint8_t header[] = {0, 0, 1,
               uint8_t(dataCapacity_), uint8_t(dataCapacity_ >> 8),
               uint8_t(dataCapacity_ >> 16), uint8_t(dataCapacity_ >> 24),
               uint8_t(eventCapacity_), uint8_t(eventCapacity_ >> 8),
-              uint8_t((volume_ ? 1 : 0) | (extension_ ? 2 : 0)), 0, uint8_t(next), uint8_t(next >> 8), uint8_t(count)};
+              uint8_t(controlFeatures), uint8_t(controlFeatures >> 8), uint8_t(next), uint8_t(next >> 8), uint8_t(count)};
           for (size_t i = 0; i < sizeof(header); ++i) payload[i] = header[i];
           size_t pos = HeaderSize;
           for (size_t i = 0; i < count; ++i) {

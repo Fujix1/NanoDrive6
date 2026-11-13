@@ -50,6 +50,7 @@ class DacStream {
   bool takeStop() { const bool result = stop_; stop_ = false; return result; }
   bool running() const { return state_ == Running; }
   bool pristine() const { return state_ == Ready && acceptedSequence_ == 0 && !sealed_; }
+  bool hasPendingEvents() const { return eventCount_ != 0; }
   bool writable() const { return state_ == Ready || state_ == Running; }
   uint64_t remainingUS(uint64_t now) const {
     return running() && deadline_ > now ? deadline_ - now : 0;

@@ -38,6 +38,8 @@ class Protocol {
   void configure(Reset reset, WriteYM write, const char* firmware, SetClock clock = nullptr,
                  Audio audio = nullptr, SetVolume volume = nullptr);
   void setExtension(Extension extension) { extension_ = extension; }
+  // Board-owned optional capability bits; bits 0 and 1 are core-managed.
+  void setOptionalControlFeatures(uint16_t features) { optionalControlFeatures_ = features & ~uint16_t(3); }
   void setRegisterWriter(WriteRegisters write) { registerWrite_ = write; }
   void setDeviceInfo(const char* model, uint32_t dataCapacity = 0, uint16_t eventCapacity = 0);
   // Board-owned stable table; must remain alive until replaced/configured.
@@ -64,6 +66,7 @@ class Protocol {
   const char* model_ = "";
   uint32_t dataCapacity_ = 4096;
   uint16_t eventCapacity_ = 1024;
+  uint16_t optionalControlFeatures_ = 0;
   SetClock clock_ = nullptr;
   Audio audio_ = nullptr;
   SetVolume volume_ = nullptr;

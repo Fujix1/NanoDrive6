@@ -6,6 +6,8 @@
 #include <new>
 #include <hal/usb_serial_jtag_ll.h>
 #include "dac_stream.h"
+#include "live_dac.h"
+#include "live_ordered.h"
 #include "ndsif.h"
 #include "NJU72341.h"
 #include "SI5351.hpp"
@@ -17,6 +19,8 @@
 namespace {
 ndsif::Protocol protocol;
 ndsif::DacStream* stream = nullptr; // Allocate the cache only in NDSIF mode.
+LiveDac* liveDac = nullptr;
+LiveOrdered* liveOrdered = nullptr;
 portMUX_TYPE streamMux = portMUX_INITIALIZER_UNLOCKED;
 portMUX_TYPE usbMux = portMUX_INITIALIZER_UNLOCKED;
 volatile bool busResetPending = false;
@@ -44,6 +48,7 @@ bool submit(Job& job) {
   Job* pointer = &job;
   // The RX task keeps the frame and this job alive until the I/O owner finishes.
   xQueueSend(jobs, &pointer, portMAX_DELAY);
+  if (playbackTaskHandle) xTaskNotifyGive(playbackTaskHandle);
   xSemaphoreTake(completed, portMAX_DELAY);
   return job.result;
 }
@@ -54,8 +59,15 @@ void writeRegisters(uint8_t id, uint8_t instance, uint8_t page, const uint8_t* d
   if ((!ym && !psg) || !count) return;
   portENTER_CRITICAL(&streamMux);
   const bool pristine = stream->pristine(), writable = stream->writable();
+  const bool liveMode = liveDac->enabled();
+  const bool orderedMode = liveOrdered->enabled();
   portEXIT_CRITICAL(&streamMux);
   if (!writable) return;
+  if ((ym || psg) && orderedMode) return; // Keep both chips on the ordered timeline.
+  // A live session owns DAC data; $2B and ordinary FM writes remain immediate.
+  if (ym && page == 0 && liveMode) {
+    for (size_t i = 0; i < count; ++i) if (data[i * 2] == 0x2a) return;
+  }
   // Reject the entire burst if it attempts to bypass buffered DAC/2B ordering.
   if (ym && page == 0 && !pristine) {
     for (size_t i = 0; i < count; ++i)
@@ -68,6 +80,11 @@ void writeRegisters(uint8_t id, uint8_t instance, uint8_t page, const uint8_t* d
 bool setClock(uint8_t id, uint8_t instance, uint32_t hz) {
   if (!((instance == 0 && (id == 0x52 || id == 0x53 || id == 0x50)) ||
         (id == 0x30 && instance == 1))) return false;
+  portENTER_CRITICAL(&streamMux);
+  const bool liveMode = liveDac->enabled();
+  const bool orderedMode = liveOrdered->enabled();
+  portEXIT_CRITICAL(&streamMux);
+  if (liveMode || orderedMode) return false;
   const si5351Freq_t frequency = SI5351_cls::normalizeFreq(hz);
   if (frequency == SI5351_UNDEFINED) return false;
   Job job; job.operation = Clock; job.id = id; job.value = frequency;
@@ -84,6 +101,58 @@ void usbBusReset(void*, esp_event_base_t, int32_t, void*) {
 
 size_t extension(uint8_t type, uint8_t id, const uint8_t* data, size_t size, uint8_t* out) {
   using S = ndsif::DacStream;
+  if (id == 0x21 && type == 1 && size == 0) return LiveOrdered::capabilities(out);
+  if (id == 0x22 && type == 0) {
+    // Retain the current frame while the ring is full. USB backpressure is
+    // allowed, but no status round trip is required for audio transmission.
+    while (true) {
+      portENTER_CRITICAL(&streamMux);
+      const auto result = (stream->pristine() && !stream->hasPendingEvents() && !liveDac->enabled())
+          ? liveOrdered->append(data, size) : LiveOrdered::Invalid;
+      portEXIT_CRITICAL(&streamMux);
+      if (result != LiveOrdered::Full) {
+        if (result == LiveOrdered::Accepted && playbackTaskHandle) xTaskNotifyGive(playbackTaskHandle);
+        return 0;
+      }
+      portENTER_CRITICAL(&usbMux);
+      const bool reset = busResetPending;
+      portEXIT_CRITICAL(&usbMux);
+      if (reset || !Serial.isConnected()) return 0;
+      if (playbackTaskHandle) xTaskNotifyGive(playbackTaskHandle);
+      vTaskDelay(1);
+    }
+  }
+  if (id == 0x23 && type == 1 && size == 0) {
+    portENTER_CRITICAL(&streamMux);
+    const size_t result = liveOrdered->status(out);
+    portEXIT_CRITICAL(&streamMux);
+    return result;
+  }
+  // Private ND6 diagnostic for local testing, not a standard NDSIF command.
+  if (id == 0x20 && type == 1 && size == 4 && data[0] == 'N' && data[1] == '6' && data[2] == 'D' && (data[3] == '1' || data[3] == '3')) {
+    const bool ordered = data[3] == '3';
+    portENTER_CRITICAL(&streamMux);
+    const size_t result = ordered ? liveOrdered->diagnostics(out) : liveDac->diagnostics(out);
+    portEXIT_CRITICAL(&streamMux);
+    return result;
+  }
+  if (id == 0x1e && type == 1 && size == 2) {
+    const uint16_t offset = uint16_t(data[0]) | (uint16_t(data[1]) << 8);
+    return LiveDac::capabilities(offset, out);
+  }
+  if (id == 0x1f && type == 0) {
+    portENTER_CRITICAL(&streamMux);
+    const bool accepted = stream->pristine() && !stream->hasPendingEvents() && !liveOrdered->enabled() && liveDac->accept(data, size);
+    portEXIT_CRITICAL(&streamMux);
+    if (accepted && playbackTaskHandle) xTaskNotifyGive(playbackTaskHandle);
+    return 0;
+  }
+  if (id >= 0x19 && id <= 0x1d) {
+    portENTER_CRITICAL(&streamMux);
+    const bool liveMode = liveDac->enabled() || liveOrdered->enabled();
+    portEXIT_CRITICAL(&streamMux);
+    if (liveMode) return SIZE_MAX;
+  }
   if (id == 0x18 && type == 1 && size == 0) return S::capabilities(out);
   if (id == 0x19 && type == 0) {
     // Decode/validate outside the critical section. Only the bounded ring copy
@@ -147,27 +216,62 @@ void emit(const ndsif::DacStream::Action& action) {
 
 void playbackTask(void*) {
   Job* pending = nullptr;
+  unsigned liveStreak = 0;
   while (true) {
     ndsif::DacStream::Action action;
+    LiveOrdered::Record orderedAction;
+    uint8_t liveValue = 0;
     const uint64_t now = esp_timer_get_time();
+    if (!pending) xQueueReceive(jobs, &pending, 0);
     portENTER_CRITICAL(&streamMux);
     const bool hasAction = stream->next(now, action);
     const bool stop = stream->takeStop();
     const bool running = stream->running();
     const uint64_t remaining = stream->remainingUS(now);
+    const bool liveMode = liveDac->enabled();
+    const bool orderedMode = liveOrdered->enabled();
+    const bool hasOrderedAction = orderedMode && !(pending && pending->operation != Registers) &&
+                                  liveOrdered->next(now, orderedAction);
+    const bool orderedPending = liveOrdered->pending();
+    const uint64_t orderedRemaining = liveOrdered->remaining(now);
+    const uint32_t liveGeneration = liveDac->generation();
+    const bool preferJob = pending && (pending->operation != Registers || liveStreak >= 16);
+    const bool hasLiveAction = liveMode && !preferJob && liveDac->next(now, liveValue);
+    const bool livePending = liveDac->pending();
+    const uint64_t liveRemaining = liveDac->remaining(now);
     portEXIT_CRITICAL(&streamMux);
     if (stop) FM.reset();
     if (hasAction) { emit(action); continue; }
+    if (hasOrderedAction) {
+      if (orderedAction.page == 2)
+        FM.write(orderedAction.value, 1, ND::freq[1], true);
+      else if (orderedAction.page == 0 && orderedAction.reg == 0x2a)
+        FM.setYM2612DAC(orderedAction.value, 0);
+      else
+        FM.setYM2612(orderedAction.page, orderedAction.reg, orderedAction.value, 0);
+      continue;
+    }
+    if (hasLiveAction) {
+      // Anchor the next wait to this write's start, not to the completion of
+      // chip I/O and display bookkeeping. Otherwise that work lengthens every
+      // sample interval and lowers PCM pitch. No catch-up bursts are added.
+      const uint64_t liveWriteStarted = esp_timer_get_time();
+      FM.setYM2612DAC(liveValue, 0);
+      portENTER_CRITICAL(&streamMux); liveDac->didWrite(liveWriteStarted, liveGeneration); portEXIT_CRITICAL(&streamMux);
+      ++liveStreak;
+      continue;
+    }
     // Idle FM-only playback waits ON the queue, so a new BURST wakes this
     // owner immediately. Polling and then delaying one tick adds that tick
     // to every inter-core handoff and makes dense register streams fall behind.
-    if (!pending) xQueueReceive(jobs, &pending, running ? 0 : 1);
-    if (pending && (pending->operation != Registers || !running || remaining >= 20)) {
+    if (!pending && !running && !liveMode && !orderedMode) xQueueReceive(jobs, &pending, 1);
+    if (pending && (pending->operation != Registers ||
+                    ((!running || remaining >= 20) && (!livePending || liveRemaining >= 20 || liveStreak >= 16)))) {
       Job& job = *pending;
       bool done = true;
       switch (job.operation) {
         case Reset:
-          portENTER_CRITICAL(&streamMux); stream->reset(); portEXIT_CRITICAL(&streamMux);
+          portENTER_CRITICAL(&streamMux); stream->reset(); liveDac->reset(); liveOrdered->reset(); portEXIT_CRITICAL(&streamMux);
           FM.reset();
           KeyBoard.reset();
           ndsifVisualReset();
@@ -188,6 +292,7 @@ void playbackTask(void*) {
               job.page, uint8_t(psg ? 0 : job.data[job.offset * 2]),
               job.data[psg ? job.offset : job.offset * 2 + 1], job.instance};
           emit(write);
+          liveStreak = 0;
           done = ++job.offset == job.count; job.result = true;
           break;
         }
@@ -205,13 +310,17 @@ void playbackTask(void*) {
       if (done) { pending = nullptr; xSemaphoreGive(completed); }
       continue;
     }
-    if (!running) {
+    if (!running && (!liveMode || !livePending) && (!orderedMode || !orderedPending)) {
       FM.applyPendingChannelMask();
       FM.applyPendingYM2612OutputMode();
     }
     // The idle receive above already yields for one tick and can be woken.
     // Keep the existing long-wait yield unchanged while DAC is running.
     if (running && remaining > 2000) vTaskDelay(1);
+    if (liveMode && !livePending && !pending) ulTaskNotifyTake(pdTRUE, 1);
+    else if (liveMode && livePending && liveRemaining > 2000) vTaskDelay(1);
+    if (orderedMode && !orderedPending && !pending) ulTaskNotifyTake(pdTRUE, 1);
+    else if (orderedMode && orderedPending && orderedRemaining > 2000) vTaskDelay(1);
     // While DAC is active, this dedicated core owns the clock and chip bus.
     // USB parsing and UI work run on the other core.
   }
@@ -234,7 +343,7 @@ void receiveTask(void*) {
     const bool reset = busResetPending; busResetPending = false;
     portEXIT_CRITICAL(&usbMux);
     if (reset) {
-      portENTER_CRITICAL(&streamMux); stream->fail(ndsif::DacStream::Transport); portEXIT_CRITICAL(&streamMux);
+      portENTER_CRITICAL(&streamMux); stream->fail(ndsif::DacStream::Transport); liveDac->reset(); liveOrdered->reset(); portEXIT_CRITICAL(&streamMux);
       protocol.clear(true);
       const int discard = Serial.available();
       for (int i = 0; i < discard; ++i) Serial.read();
@@ -297,10 +406,19 @@ void init() {
   configASSERT(memory);
   stream = new (memory) ndsif::DacStream;
   stream->reset();
+  void* liveMemory = heap_caps_malloc(sizeof(LiveDac), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  configASSERT(liveMemory);
+  liveDac = new (liveMemory) LiveDac;
+  liveDac->reset();
+  void* orderedMemory = heap_caps_malloc(sizeof(LiveOrdered), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  configASSERT(orderedMemory);
+  liveOrdered = new (orderedMemory) LiveOrdered;
+  liveOrdered->reset();
   protocol.configure(resetChips, nullptr, ND_FIRMWARE_VERSION, setClock, nullptr,
                      ND::volumeChip != VolumeChip::None ? setOutputVolume : nullptr);
   protocol.setRegisterWriter(writeRegisters);
   protocol.setExtension(extension);
+  protocol.setOptionalControlFeatures(4 | 8);
   protocol.setDeviceInfo(ND::version == nd_v61 ? "NanoDrive 6.1" : "NanoDrive 6");
   const bool ready = protocol.setCapabilities(capabilities, sizeof(capabilities) / sizeof(capabilities[0]));
   configASSERT(ready);
