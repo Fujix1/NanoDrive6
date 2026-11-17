@@ -701,7 +701,7 @@ void FMChip::setYM2612(byte bank, byte addr, byte data, uint8_t chipno) {
 
   // アドレスライト後の待ちサイクル
   // アドレス＄21-＄B6 待ちサイクル 17 = 2.21us
-  ets_delay_us(5);  // 3 は一部足りない
+  ets_delay_us(4);  // 3 は一部足りない
 
   // data
   dedic_gpio_bundle_write(dataBus, 0xff, data);
@@ -931,7 +931,7 @@ void FMChip::setYM2612DAC(byte data, uint8_t chipno) {
     A0_LOW;
     dedic_gpio_bundle_write(dataBus, 0xff, 0x2a);
     WR_LOW;
-    ets_delay_us(3);
+    //ets_delay_us(2);
     WR_HIGH;
     A0_HIGH;
     // アドレスライト後の待ちサイクル
