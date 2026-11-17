@@ -434,8 +434,9 @@ void start() {
   BaseType_t result = xTaskCreatePinnedToCore(playbackTask, "ndsifDAC", 6144, nullptr, 3,
                                              &playbackTaskHandle, APP_CPU_NUM);
   configASSERT(result == pdPASS && playbackTaskHandle);
-  // Share core 0 fairly with the priority-1 input and display event tasks.
-  result = xTaskCreatePinnedToCore(receiveTask, "ndsifRX", 6144, nullptr, 1,
+  // Keep USB input ahead of potentially long priority-1 display updates.
+  // receiveTask blocks for one tick each pass, leaving time for the UI.
+  result = xTaskCreatePinnedToCore(receiveTask, "ndsifRX", 6144, nullptr, 2,
                                    &receiveTaskHandle, PRO_CPU_NUM);
   configASSERT(result == pdPASS && receiveTaskHandle);
 }

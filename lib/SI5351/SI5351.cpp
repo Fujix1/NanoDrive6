@@ -245,16 +245,20 @@ si5351Freq_t SI5351_cls::normalizeFreq(uint32_t requested) {
   static constexpr si5351Freq_t supported[] = {
       SI5351_1250, SI5351_1500, SI5351_1536, SI5351_1789, SI5351_2000,
       SI5351_2578, SI5351_3000, SI5351_3072, SI5351_3332, SI5351_3375,
-      SI5351_3500, SI5351_3546, SI5351_3579, SI5351_4000, SI5351_4500,
-      SI5351_5000, SI5351_6000, SI5351_6144, SI5351_7159, SI5351_7600,
-      SI5351_7670, SI5351_7987, SI5351_8000, SI5351_9000, SI5351_14318};
+      SI5351_3500, SI5351_3546, SI5351_3579, SI5351_4000, SI5351_4027,
+      SI5351_4500, SI5351_5000, SI5351_6000, SI5351_6144, SI5351_7159,
+      SI5351_7600, SI5351_7670, SI5351_7987, SI5351_8000, SI5351_9000,
+      SI5351_14318};
   if (requested == 0) return SI5351_UNDEFINED;
   si5351Freq_t best = SI5351_UNDEFINED;
   uint32_t delta = UINT32_MAX;
   for (si5351Freq_t candidate : supported) {
     const uint32_t value = static_cast<uint32_t>(candidate);
     const uint32_t diff = requested > value ? requested - value : value - requested;
-    if (diff < delta) { delta = diff; best = candidate; }
+    if (diff < delta) {
+      delta = diff;
+      best = candidate;
+    }
   }
   return uint64_t(delta) * 1000000 <= uint64_t(requested) * 1000 ? best : SI5351_UNDEFINED;
 }
@@ -335,6 +339,10 @@ void SI5351_cls::setFreq(si5351Freq_t newFreq, uint8_t output) {
     case SI5351_4000:              // 4MHz
       setupPLLInt(targetPLL, 32);  // 25MHz * 32 = 800
       setupMultisynth(output, targetPLL, 200, 0, 1);
+      break;
+    case SI5351_4027:  // 4.026987 MHz
+      setupPLL(targetPLL, 27, 110261, 156250);
+      setupMultisynth(output, targetPLL, 172, 0, 1);
       break;
     case SI5351_4500:  // 4.5 MHz
       setupPLL(targetPLL, 27, 0, 1);

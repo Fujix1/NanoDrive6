@@ -546,6 +546,8 @@ si5351Freq_t VGM::normalizeFreq(u32_t freq, t_chip chip) {
         case 4000000:
           return SI5351_4000;
           break;
+        case 4026987:
+          return SI5351_4027;
         default:
           return SI5351_3579;
           break;

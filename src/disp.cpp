@@ -168,6 +168,8 @@ static LGFX_Sprite panMarkerLeft(&lcd);
 static LGFX_Sprite panMarkerRight(&lcd);
 static LGFX_Sprite panMarkerMute(&lcd);
 
+static constexpr unsigned long kFontCacheSize = 8 * 1024;  // OpenFontRender キャッシュ上限（バイト）
+
 static OpenFontRender render;
 static TimerHandle_t hDispTimer;
 static TaskHandle_t hDispUpdateTask;
@@ -1212,6 +1214,8 @@ void PlayerWindow::updateDisp(tDispData data) {
 
 // Init Display
 bool initDisp() {
+  render.setCacheSize(1, 1, kFontCacheSize);
+
   lcd.init();
   lcd.setRotation(0);
   lcd.fillScreen(C_BASEBG);
@@ -1450,6 +1454,16 @@ void Panel::update(LGFX_Sprite& targetBuffer) {
 ConfigPanelRenderer configRenderer;
 static Panel pnlConfig(0, 26, LCD_W, 264, CFG_ITEM_HEIGHT, &configRenderer);
 
+// Reuse the font and glyph cache throughout each settings screen update.
+class ScopedConfigFont {
+ public:
+  ScopedConfigFont() {
+    render.setUseRenderTask(false);
+    render.loadFont(fontMain, sizeof(fontMain));
+  }
+  ~ScopedConfigFont() { render.unloadFont(); }
+};
+
 void ConfigPanelRenderer::onDrawItem(LGFX_Sprite& target, int itemIndex, int x, int y, int width, bool selected) {
   cfgWindow.drawItem(target, itemIndex, x, y, width, selected);
 }
@@ -1606,20 +1620,23 @@ void CFGWindow::drawPanelView() {
   if (currentItemIndex >= ndConfig.items.size()) currentItemIndex = ndConfig.items.size() - 1;
 
   xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
-  frameBuffer.fillSprite(TFT_WHITE);
-  if (ndConfig.get(CFG_LANG) == LANG_JA) {
-    _sprHeaderJP.pushSprite(&frameBuffer, 0, 0);
-  } else {
-    _sprHeaderEN.pushSprite(&frameBuffer, 0, 0);
+  {
+    ScopedConfigFont font;
+    frameBuffer.fillSprite(TFT_WHITE);
+    if (ndConfig.get(CFG_LANG) == LANG_JA) {
+      _sprHeaderJP.pushSprite(&frameBuffer, 0, 0);
+    } else {
+      _sprHeaderEN.pushSprite(&frameBuffer, 0, 0);
+    }
+    pnlConfig.setItemCount(ndConfig.items.size());
+    pnlConfig.currentIndex = currentItemIndex;
+    pnlConfig.ensureVisible();
+    pnlConfig.invalidate();
+    pnlConfig.update(frameBuffer);
+    currentItemIndex = pnlConfig.currentIndex;
+    drawFooter(true);
+    frameBuffer.pushSprite(0, 0);
   }
-  pnlConfig.setItemCount(ndConfig.items.size());
-  pnlConfig.currentIndex = currentItemIndex;
-  pnlConfig.ensureVisible();
-  pnlConfig.invalidate();
-  pnlConfig.update(frameBuffer);
-  currentItemIndex = pnlConfig.currentIndex;
-  drawFooter(true);
-  frameBuffer.pushSprite(0, 0);
   xSemaphoreGive(spFrameBuffer);
 }
 
@@ -1630,34 +1647,37 @@ void CFGWindow::selectItem(int index) {
   if (index == currentItemIndex) return;
 
   xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
-  const int previousItemIndex = currentItemIndex;
-  const int previousScrollTop = pnlConfig.scrollTop;
-  currentItemIndex = index;
-  pnlConfig.setItemCount(ndConfig.items.size());
-  pnlConfig.currentIndex = currentItemIndex;
-  pnlConfig.ensureVisible();
+  {
+    ScopedConfigFont font;
+    const int previousItemIndex = currentItemIndex;
+    const int previousScrollTop = pnlConfig.scrollTop;
+    currentItemIndex = index;
+    pnlConfig.setItemCount(ndConfig.items.size());
+    pnlConfig.currentIndex = currentItemIndex;
+    pnlConfig.ensureVisible();
 
-  const int previousItemY = pnlConfig.y + previousItemIndex * CFG_ITEM_HEIGHT - pnlConfig.scrollTop;
-  const int currentItemY = pnlConfig.y + currentItemIndex * CFG_ITEM_HEIGHT - pnlConfig.scrollTop;
-  const bool scrollUnchanged = pnlConfig.scrollTop == previousScrollTop;
-  const bool previousFullyVisible =
-      previousItemY >= pnlConfig.y && previousItemY + CFG_ITEM_HEIGHT <= pnlConfig.y + pnlConfig.height;
-  const bool currentFullyVisible =
-      currentItemY >= pnlConfig.y && currentItemY + CFG_ITEM_HEIGHT <= pnlConfig.y + pnlConfig.height;
+    const int previousItemY = pnlConfig.y + previousItemIndex * CFG_ITEM_HEIGHT - pnlConfig.scrollTop;
+    const int currentItemY = pnlConfig.y + currentItemIndex * CFG_ITEM_HEIGHT - pnlConfig.scrollTop;
+    const bool scrollUnchanged = pnlConfig.scrollTop == previousScrollTop;
+    const bool previousFullyVisible =
+        previousItemY >= pnlConfig.y && previousItemY + CFG_ITEM_HEIGHT <= pnlConfig.y + pnlConfig.height;
+    const bool currentFullyVisible =
+        currentItemY >= pnlConfig.y && currentItemY + CFG_ITEM_HEIGHT <= pnlConfig.y + pnlConfig.height;
 
-  if (scrollUnchanged && previousFullyVisible && currentFullyVisible) {
-    // スクロール不要な上下移動では全画面 frameBuffer 転送を避ける。
-    // XGM PCM送信中は長いLCD転送だけでもタイミング揺れになるため、更新は2行+フッタに限定する。
-    drawItem(frameBuffer, previousItemIndex, pnlConfig.x, previousItemY, pnlConfig.itemWidth(), false);
-    _sprite.pushSprite(&lcd, pnlConfig.x, previousItemY);
-    drawItem(frameBuffer, currentItemIndex, pnlConfig.x, currentItemY, pnlConfig.itemWidth(), true);
-    _sprite.pushSprite(&lcd, pnlConfig.x, currentItemY);
-    drawFooter(false);
-  } else {
-    pnlConfig.update(frameBuffer);
-    currentItemIndex = pnlConfig.currentIndex;
-    drawFooter(true);
-    frameBuffer.pushSprite(0, 0);
+    if (scrollUnchanged && previousFullyVisible && currentFullyVisible) {
+      // スクロール不要な上下移動では全画面 frameBuffer 転送を避ける。
+      // XGM PCM送信中は長いLCD転送だけでもタイミング揺れになるため、更新は2行+フッタに限定する。
+      drawItem(frameBuffer, previousItemIndex, pnlConfig.x, previousItemY, pnlConfig.itemWidth(), false);
+      _sprite.pushSprite(&lcd, pnlConfig.x, previousItemY);
+      drawItem(frameBuffer, currentItemIndex, pnlConfig.x, currentItemY, pnlConfig.itemWidth(), true);
+      _sprite.pushSprite(&lcd, pnlConfig.x, currentItemY);
+      drawFooter(false);
+    } else {
+      pnlConfig.update(frameBuffer);
+      currentItemIndex = pnlConfig.currentIndex;
+      drawFooter(true);
+      frameBuffer.pushSprite(0, 0);
+    }
   }
   xSemaphoreGive(spFrameBuffer);
 }
@@ -1666,23 +1686,26 @@ void CFGWindow::refreshCurrentItem() {
   if (ndConfig.items.empty()) return;
 
   xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
-  pnlConfig.setItemCount(ndConfig.items.size());
-  pnlConfig.currentIndex = currentItemIndex;
-  pnlConfig.ensureVisible();
-  currentItemIndex = pnlConfig.currentIndex;
+  {
+    ScopedConfigFont font;
+    pnlConfig.setItemCount(ndConfig.items.size());
+    pnlConfig.currentIndex = currentItemIndex;
+    pnlConfig.ensureVisible();
+    currentItemIndex = pnlConfig.currentIndex;
 
-  const int itemY = pnlConfig.y + currentItemIndex * CFG_ITEM_HEIGHT - pnlConfig.scrollTop;
-  const bool fullyVisible = itemY >= pnlConfig.y && itemY + CFG_ITEM_HEIGHT <= pnlConfig.y + pnlConfig.height;
-  if (fullyVisible) {
-    drawItem(frameBuffer, currentItemIndex, pnlConfig.x, itemY, pnlConfig.itemWidth(), true);
-    _sprite.pushSprite(&lcd, pnlConfig.x, itemY);
-    drawFooter(true);
-    _sprFooter.pushSprite(&lcd, 0, 293);
-  } else {
-    pnlConfig.invalidate();
-    pnlConfig.update(frameBuffer);
-    drawFooter(true);
-    frameBuffer.pushSprite(0, 0);
+    const int itemY = pnlConfig.y + currentItemIndex * CFG_ITEM_HEIGHT - pnlConfig.scrollTop;
+    const bool fullyVisible = itemY >= pnlConfig.y && itemY + CFG_ITEM_HEIGHT <= pnlConfig.y + pnlConfig.height;
+    if (fullyVisible) {
+      drawItem(frameBuffer, currentItemIndex, pnlConfig.x, itemY, pnlConfig.itemWidth(), true);
+      _sprite.pushSprite(&lcd, pnlConfig.x, itemY);
+      drawFooter(true);
+      _sprFooter.pushSprite(&lcd, 0, 293);
+    } else {
+      pnlConfig.invalidate();
+      pnlConfig.update(frameBuffer);
+      drawFooter(true);
+      frameBuffer.pushSprite(0, 0);
+    }
   }
   xSemaphoreGive(spFrameBuffer);
 }
@@ -1699,9 +1722,8 @@ void CFGWindow::drawItem(LGFX_Sprite& target, int index, int x, int y, int width
   const uint16_t optionColor = selected ? C_YELLOW : C_MID;
   const uint16_t background = selected ? C_ACCENT_DARK : TFT_WHITE;
 
-  OpenFontRender ofr;
+  OpenFontRender& ofr = render;
   ofr.setDrawer(_sprite);
-  ofr.loadFont(fontMain, sizeof(fontMain));
   const int fontSize = ndConfig.get(CFG_LANG) == LANG_JA ? 17 : 16;
   const String label =
       ndConfig.get(CFG_LANG) == LANG_JA ? ndConfig.items[index].labelJp : ndConfig.items[index].labelEn;
@@ -1720,8 +1742,9 @@ void CFGWindow::drawItem(LGFX_Sprite& target, int index, int x, int y, int width
   ofr.setFontColor(optionColor, background);
   ofr.setCursor(width - 5, (CFG_ITEM_HEIGHT - fontSize) / 2);
   ofr.printf(option.c_str());
-  ofr.unloadFont();
   _sprite.pushSprite(&target, x, y);
+  // Give NDSIF USB reception time between the expensive font-rendered rows.
+  if (ND::currentMode == MODE_NDSIF) vTaskDelay(1);
 }
 
 void CFGWindow::drawFooter(bool toFrameBuffer) {
@@ -1741,16 +1764,13 @@ void CFGWindow::drawFooter(bool toFrameBuffer) {
   if (left) _sprFooter.pushImage(72, 6, CFG_ICON_ARROR_WIDTH, CFG_ICON_ARROR_HEIGHT, cfgLEFT);
   if (right) _sprFooter.pushImage(101, 6, CFG_ICON_ARROR_WIDTH, CFG_ICON_ARROR_HEIGHT, cfgRIGHT);
 
-  OpenFontRender ofr;
-  ofr.setUseRenderTask(false);
+  OpenFontRender& ofr = render;
   ofr.setDrawer(_sprFooter);
-  ofr.loadFont(fontMain, sizeof(fontMain));
   ofr.setFontSize(18);
   ofr.setAlignment(Align::TopCenter);
   ofr.setFontColor(C_LIGHTGRAY, C_FOOTER_ACTIVE);
   ofr.setCursor(124 + 42 / 2, 4);
   ofr.printf("OK");
-  ofr.unloadFont();
   if (toFrameBuffer) {
     _sprFooter.pushSprite(&frameBuffer, 0, 293);
   } else {
@@ -2324,6 +2344,7 @@ static void printBrowserText(OpenFontRender& render, const char* text, int x, in
 
 void BrowserPanelRenderer::init() {
   deinit();
+  _render.setCacheSize(1, 1, kFontCacheSize);
   _render.setUseRenderTask(false);
   _fontLoaded = _render.loadFont(fontMain, sizeof(fontMain)) == 0;
   if (!_fontLoaded) return;
