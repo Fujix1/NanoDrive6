@@ -1,8 +1,8 @@
 # NanoDrive 6 / 6.1 NDSIF 実装
 
-共通フレーム・制御とYM2612時間付きDACのwire仕様は `NDSIF_API.md`、全体方針は `NDSIF.md`、ホストの手順は `NDSIF_HOST_GUIDE.md` を参照する。本書はND6の対応範囲とハードウェア固有の制約を記載する。API 1.0 / revision 40の共通通信コアと、任意のYM2612時間付きDAC profile 1を使用する。
+更新日 2026-11-20。FW `3.1dev26`。API `1.0` / 共通コア revision `40`。
 
-firmware `3.1dev17` のソースには、NDSIF v1策定中のライブDAC profile 2を追加する。profile 2の能力照会とwire形式は `NDSIF_API.md` 第10節の草案に従う。profile 1とは別機能であり、この追記は実機での音質・遅延・長時間再生の検証完了を意味しない。
+共通仕様は `NDSIF.md`、wire仕様は `NDSIF_API.md`、ホスト手順は `NDSIF_HOST_GUIDE.md` を参照する。ND6 / ND6.1は即時BURSTと、時間付きDAC profile 1、ライブDAC profile 2、順序付きライブ profile 3を提供する。
 
 ## 対応音源と制御
 
@@ -25,19 +25,7 @@ DAC対象は `52/instance=0`。時刻付きFM/PSGイベントの対象は上記4
 
 DACと `$2B` は同じFIFOで順序を保ち、指定された値・waitを間引きや補間なしに実行する。FM/PSGは別イベントFIFOで処理し、DACと同じ精度や全音源間の同時刻順序を保証しない。末尾tickは `UINT64_MAX / 1000000` 以下。供給不足、位置不正、容量超過、USB reset、2msを超えるDAC遅延などのfaultでは音止めし、RESETからやり直す。接続断watchdogはない。
 
-## ライブDAC（profile 2 / 草案）
-
-firmware `3.1dev20` は、FM と DAC を同じ FIFO と時間軸で扱う NDSIF v1 追加草案 profile 3 に対応する。能力は control_features bit3 および `21`、順序付きフレームは応答付き `22`。512 件の FIFO、1 フレーム最大 35 件。空き不足の応答はフレーム全体が未受理であることを示し、同じ sequence で再試行する。従来の profile 2 と同時には使わず RESET で切り替える。開発中の試作であり、音質・実時間性能は未検証。
-
-firmware `3.1dev22` の profile 3 は revision 2 の試作へ変更し、`22` を無応答バーストとする。`23` の状態照会は次の受理 sequence・累積受理数・キュー数・空き数を返す。ホストは既知の空き枠を超えない範囲で複数バーストを連続送信し、必要なときだけ `23` を照会する。revision 1 のフレームごとの応答方式は使用しない。音質・実時間性能は未検証。
-
-firmware `3.1dev23` の profile 3 revision 3 は、再生中に状態照会を必要としない。FIFO 満杯時は受信中フレームを保持し、DAC/FM 出力タスクで空きができたら全体を受理する。ホスト側へのバックプレッシャーは起こり得る。USB reset・切断時は待機を中断する。`23` と `20` / `N6D3` は診断用として残すが通常再生中には要求しない。実機性能・音質は未検証。
-
-firmware `3.1dev24` の profile 3 revision 4 は、短い DAC wait と値を 2 byte とする可変長レコードを採用する。FM と長い wait も同じ無応答バースト・同じ FIFO 内に保持する。各フレームは最大 100 レコードかつ payload 256 byte 以下。欠落した sequence は `23` の `missing_frames` へ記録し、より新しいフレームから再開する。古いフレームの再送は行わない。形式・検証方法は `NDSIF_API.md` 第10.4節。実機性能・音質は未検証。
-
-firmware `3.1dev21` は原因調査用に ND6 固有の暫定診断 `20` / `N6D3` を追加する。status 後の形式は `version:u8=3, queued:u16, peak:u16, accepted:u32, dequeued:u32, full_responses:u32, late_over_100us:u32, late_after_empty:u32, worst_late_us:u32, first_us:u64, last_us:u64, source_ticks:u64`。時刻は物理 I/O の読戻しではなくイベント取り出し時のスケジューラ時刻である。キュー空の後の 500 µs 超の遅い再開には意図的な無音期間も含まれ得る。計測処理による負荷があり、NDSIF v1 の標準機能ではない。
-
-firmware `3.1dev19` では切り分け用に、ND6 固有の一時診断 `20` を応答付き要求、payload `N6D1` で提供する。NDSIF v1 の標準機能ではない。応答 status の後に `version:u8=1, queued:u16, peak:u16, accepted:u32, dequeued:u32, dropped_frames:u32, dropped_records:u32, late_after_empty:u32, worst_late_us:u32` が続く。満杯破棄と空の後に予定時刻を 500 µs 以上過ぎて再開した回数を数える。意図的な無音期間・一時停止などでも後者は増え得るため、音声障害の確定件数ではない。RESET で初期化し、音源の動作・fault の扱いは変えない。diagnostics のカウント処理は測定対象の負荷を多少増やす。
+## ライブDAC（profile 2 / revision 1）
 
 GET_CAPABILITIESのcontrol_features bit2と `1E` で対応を通知する。対象は `52` / instance 0、時間単位は44,100 tick/秒、キューは512レコード、`1F` 1フレームの最大50レコード。各レコードは前のDAC値からのwait:u32と値:u8で、最初に受理した値は前の値がないため直ちに適用する。固定の先行供給やSTARTは必要としない。
 
@@ -45,9 +33,23 @@ GET_CAPABILITIESのcontrol_features bit2と `1E` で対応を通知する。対�
 
 FMと `$2B` は即時 `52` / `53` を使用できるが、ライブDACとの厳密な前後関係は保証しない。ライブ中の即時 `$2A` はフレーム全体を実行しない。profile 1とは同一物理YM2612で同時に使えず、切り替えにはRESETが必要。RESETとUSBバスリセットはライブキューと過去時刻を破棄する。
 
+## 順序付きライブ（profile 3 / revision 5）
+
+GET_CAPABILITIESのcontrol_features bit3と `21` で対応を通知する。44,100 tick/秒、FIFO 512件、1フレーム最大100件かつpayload 256 byte以下。YM2612のFM・DAC・DAC有効切替と1個目のSN76489を、単一FIFOで受理順に処理する。PSGは `FF` レコードのpage 2・register `00` で指定する。現行の順序付き形式が扱うPSGは1個目のみで、profile 1と即時BURSTでは2個目も利用できる。
+
+受信FIFOが満杯の場合は当該フレームを保持して空きを待つ。空の場合は次の受理データで再開する。`22` は無応答で、`23` は受理連番・件数・空き・欠落フレーム数を照会する。モード切替やクロックを再設定する場合はRESETする。現行のMAMEブリッジはこの方式を既定で使用する。DelphiのYM2612 DAC付きVGM再生はprofile 1を使用する。
+
+profile 3はFW `3.1dev20` で導入し、`3.1dev22` で無応答バースト、`3.1dev23` で満杯時の待機、`3.1dev24` で可変長レコード、`3.1dev25` で順序付きPSGに対応した。
+
+## ND6固有の診断
+
+profile 3は原因調査用の応答付き要求 `20` / payload `N6D3` で調べられる。status 後の形式は `version:u8=3, queued:u16, peak:u16, accepted:u32, dequeued:u32, full_retries:u32, late_over_100us:u32, late_after_empty:u32, worst_late_us:u32, first_us:u64, last_us:u64, source_ticks:u64`。時刻は物理 I/O の読戻しではなくイベント取り出し時のスケジューラ時刻である。キュー空の後の 500 µs 超の遅い再開には意図的な無音期間も含まれ得る。計測処理による負荷があり、NDSIF v1 の標準機能ではない。
+
+profile 2は応答付き要求 `20` / payload `N6D1` で調べられる。NDSIF v1 の標準機能ではない。応答 status の後に `version:u8=1, queued:u16, peak:u16, accepted:u32, dequeued:u32, dropped_frames:u32, dropped_records:u32, late_after_empty:u32, worst_late_us:u32` が続く。満杯破棄と空の後に予定時刻を 500 µs 以上過ぎて再開した回数を数える。意図的な無音期間・一時停止などでも後者は増え得るため、音声障害の確定件数ではない。RESET で初期化し、音源の動作・fault の扱いは変えない。diagnostics のカウント処理は測定対象の負荷を多少増やす。
+
 ## 実行構成と表示
 
-NDSIFモードではDACリング32 KiBとイベントリングを確保し、USB RX 8192 byte・TX 512 byteを使用する。core 0でUSB受信・フレーム処理、core 1の出力タスクでDAC・FM/PSG・RESET・クロック変更を実行する。DACの期限と描画を分離する。即時FM/PSGのみの再生ではDAC STARTは不要。
+NDSIFモードの起動時に、時間付きDAC用の32 KiBのDACリングとイベントリング、および各ライブ方式の512件のFIFOを確保する。USB RX 8192 byte・TX 512 byteを使用する。core 0でUSB受信・フレーム処理、core 1の出力タスクでDAC・FM/PSG・RESET・クロック変更を実行する。DACの期限と描画を分離する。即時FM/PSGのみの再生ではDAC STARTは不要。
 
 NDSIF画面のフッタはYM2612と1個目のSN76489のクロックを表示する。Visual画面は音源の鍵盤・レベルを表示し、RESET後に鍵盤情報を更新する。
 
@@ -57,4 +59,4 @@ NDSIF画面のフッタはYM2612と1個目のSN76489のクロックを表示す�
 
 再生中のWindows `GetCommState` によるUSB CDC制御要求と受信破損が同時に観測されたため、現行ホストは再生中の呼び出しを避ける。通信状態が不明になった場合は古いDATAを再送せずRESETから再開する。
 
-共通コアは `lib/ndsif/UPSTREAM.md` の方法でND7・ND8と同期する。USB CDCの送信停止を避けるため、64 byteの整数倍となる応答には空のCOBS区切りを1 byte追加する。フレーム本体・CRC・payloadは変わらず、受信側は空の区切りを無視する。
+共通コアの由来と差分の確認方法は `lib/ndsif/UPSTREAM.md` を参照する。USB CDCの送信停止を避けるため、64 byteの整数倍となる応答には空のCOBS区切りを1 byte追加する。フレーム本体・CRC・payloadは変わらず、受信側は空の区切りを無視する。
