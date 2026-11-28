@@ -2458,7 +2458,7 @@ void BrowserWindow::initHeaders() {
 void BrowserWindow::draw() {
   if (_browseDirNode == nullptr) return;
   xSemaphoreTake(spFrameBuffer, portMAX_DELAY);
-  // OpenFontRender/FreeTypeはBrowser内で単一インスタンスを共有し、描画ロック中に初期化する。
+  // 一覧描画と現在のディレクトリ表示で使うフォントを、描画ロック中に読み込む。
   browserRenderer.init();
   frameBuffer.fillSprite(TFT_WHITE);
   if (ndConfig.get(CFG_LANG) == LANG_JA) {

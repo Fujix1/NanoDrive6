@@ -52,7 +52,13 @@ long int OFR_ftell(FT_FILE *stream);
 
 #endif
 
-#ifdef CONFIG_SPIRAM_SUPPORT
+#if defined(ARDUINO_ARCH_ESP32) && defined(BOARD_HAS_PSRAM)
+	#include <esp_heap_caps.h>
+	// フォント用の作業領域は PSRAM を優先し、確保できなければ内部ヒープを使う。
+	#define ft_scalloc(n, size) heap_caps_calloc_prefer((n), (size), 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+	#define ft_smalloc(size) heap_caps_malloc_prefer((size), 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+	#define ft_srealloc(ptr, size) heap_caps_realloc_prefer((ptr), (size), 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+#elif defined(CONFIG_SPIRAM_SUPPORT)
 	#define ft_scalloc ps_calloc
 	#define ft_smalloc ps_malloc
 	#define ft_srealloc ps_realloc

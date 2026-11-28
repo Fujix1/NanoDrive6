@@ -19,11 +19,6 @@
 /*! \cond PRIVATE */
 
 typedef struct {
-	enum OFR::LoadFontFrom from; // data source
-	uint8_t debug_level;         // debug level
-} FontDataInfo;
-
-typedef struct {
 	FT_Glyph glyph;
 	FT_Vector pos;
 } RenderStringInfo;
@@ -77,8 +72,6 @@ void RenderTask(void *pvParameters);
 /*_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/_/*/
 /*! \cond PRIVATE */
 
-FT_Library g_FtLibrary;
-bool g_NeedInitialize                     = true;
 std::function<void(const char *)> g_Print = [](const char *s) { return; };
 
 #ifdef FREERTOS_CONFIG_H
@@ -422,6 +415,7 @@ void OpenFontRender::setCacheSize(unsigned int max_faces, unsigned int max_sizes
  * @ingroup rendering_api
  */
 FT_Error OpenFontRender::loadFont(const unsigned char *data, size_t size, uint8_t target_face_index) {
+	unloadFont();
 	_face_id.data_size = size;
 	_face_id.data      = (unsigned char *)data;
 
@@ -440,6 +434,7 @@ FT_Error OpenFontRender::loadFont(const unsigned char *data, size_t size, uint8_
  * @note Any better solutions are welcome.
  */
 FT_Error OpenFontRender::loadFont(const char *fpath, uint8_t target_face_index) {
+	unloadFont();
 	size_t len = strlen(fpath);
 
 	_face_id.filepath = new char[len + 1]; // Release on unloadFont method
@@ -454,16 +449,26 @@ FT_Error OpenFontRender::loadFont(const char *fpath, uint8_t target_face_index) 
  * @brief Unload font data.
  * @ingroup rendering_api
  */
-void OpenFontRender::unloadFont() {
-	if (!g_NeedInitialize) {
-		FTC_Manager_RemoveFaceID(_ftc_manager, &_face_id);
-		FTC_Manager_Reset(_ftc_manager);
-		FTC_Manager_Done(_ftc_manager);
-		FT_Done_FreeType(g_FtLibrary);
+OpenFontRender::~OpenFontRender() {
+	unloadFont();
+}
 
-		delete[] _face_id.filepath;
+void OpenFontRender::unloadFont() {
+	// The manager must be destroyed before its owning FreeType library.
+	if (_ftc_manager) {
+		FTC_Manager_Done(_ftc_manager);
 	}
-	g_NeedInitialize = true;
+	_ftc_manager = nullptr;
+	_ftc_cmap_cache = nullptr;
+	_ftc_image_cache = nullptr;
+	if (_ft_library) {
+		FT_Done_FreeType(_ft_library);
+		_ft_library = nullptr;
+	}
+	delete[] _face_id.filepath;
+	_face_id = {};
+	_saved_state = {};
+	_flags.support_vertical = false;
 }
 
 /*!
@@ -579,11 +584,8 @@ uint16_t OpenFontRender::drawHString(const char *str,
 
 				FT_Glyph_Get_CBox(aglyph, FT_GLYPH_BBOX_PIXELS, &glyph_bbox);
 				if (isLineFirstChar == true) {
-					// Get bearing X
-					FT_Face aface;
-					FTC_Manager_LookupFace(_ftc_manager, &_face_id, &aface);
-					bearing_left.x = (aface->glyph->metrics.horiBearingX >> 6);
-					// nothing to do for bearing.y
+					// The face's glyph slot may still hold a different glyph on a cache hit.
+					bearing_left.x = glyph_bbox.xMin;
 					isLineFirstChar = false;
 				}
 
@@ -1384,39 +1386,41 @@ void OpenFontRender::set_printFunc(std::function<void(const char *)> user_func) 
 FT_Error OpenFontRender::loadFont(enum OFR::LoadFontFrom from) {
 	FT_Face face;
 	FT_Error error;
-	FontDataInfo info = {from, _debug_level};
+	_font_source = from;
 
-	if (g_NeedInitialize) {
-		error = FT_Init_FreeType(&g_FtLibrary);
-		if (error) {
-			debugPrintf((_debug_level & OFR_ERROR), "FT_Init_FreeType error: 0x%02X\n", error);
-			return error;
-		}
-		g_NeedInitialize = false;
+	error = FT_Init_FreeType(&_ft_library);
+	if (error) {
+		debugPrintf((_debug_level & OFR_ERROR), "FT_Init_FreeType error: 0x%02X\n", error);
+		unloadFont();
+		return error;
 	}
 
-	// 現在の引数は適当
-	error = FTC_Manager_New(g_FtLibrary, _cache.max_faces, _cache.max_sizes, _cache.max_bytes, &ftc_face_requester, &info, &_ftc_manager);
+	// Callback data must remain valid for the entire manager lifetime.
+	error = FTC_Manager_New(_ft_library, _cache.max_faces, _cache.max_sizes, _cache.max_bytes, &ftc_face_requester, this, &_ftc_manager);
 	if (error) {
 		debugPrintf((_debug_level & OFR_ERROR), "FTC_Manager_New error: 0x%02X\n", error);
+		unloadFont();
 		return error;
 	}
 
 	error = FTC_Manager_LookupFace(_ftc_manager, &_face_id, &face);
 	if (error) {
 		debugPrintf((_debug_level & OFR_ERROR), "FTC_Manager_LookupFace error: 0x%02X\n", error);
+		unloadFont();
 		return error;
 	}
 
 	error = FTC_CMapCache_New(_ftc_manager, &_ftc_cmap_cache);
 	if (error) {
 		debugPrintf((_debug_level & OFR_ERROR), "FTC_CMapCache_New error: 0x%02X\n", error);
+		unloadFont();
 		return error;
 	}
 
 	error = FTC_ImageCache_New(_ftc_manager, &_ftc_image_cache);
 	if (error) {
 		debugPrintf((_debug_level & OFR_ERROR), "FTC_ImageCache_New error: 0x%02X\n", error);
+		unloadFont();
 		return error;
 	}
 
@@ -1612,30 +1616,30 @@ uint16_t OpenFontRender::alphaBlend(uint8_t alpha, uint16_t fgc, uint16_t bgc) {
 FT_Error ftc_face_requester(FTC_FaceID face_id, FT_Library library, FT_Pointer request_data, FT_Face *aface) {
 	FT_Error error     = FT_Err_Ok;
 	OFR::Face face     = (OFR::Face)face_id;
-	FontDataInfo *info = (FontDataInfo *)request_data;
+	OpenFontRender *renderer = static_cast<OpenFontRender *>(request_data);
 
-	debugPrintf((info->debug_level & OFR_INFO), "Font load required. FaceId: 0x%p\n", face_id);
+	debugPrintf((renderer->_debug_level & OFR_INFO), "Font load required. FaceId: 0x%p\n", face_id);
 
-	if (info->from == OFR::FROM_FILE) {
-		debugPrintf((info->debug_level & OFR_INFO), "Load from file.\n");
+	if (renderer->_font_source == OFR::FROM_FILE) {
+		debugPrintf((renderer->_debug_level & OFR_INFO), "Load from file.\n");
 		const uint8_t FACE_INDEX = 0;
 
 		error = FT_New_Face(library, face->filepath, FACE_INDEX, aface); // create face object
 		if (error) {
-			debugPrintf((info->debug_level & OFR_ERROR), "Font load Failed: 0x%02X\n", error);
+			debugPrintf((renderer->_debug_level & OFR_ERROR), "Font load Failed: 0x%02X\n", error);
 		} else {
-			debugPrintf((info->debug_level & OFR_INFO), "Font load Success!\n");
+			debugPrintf((renderer->_debug_level & OFR_INFO), "Font load Success!\n");
 		}
 
-	} else if (info->from == OFR::FROM_MEMORY) {
-		debugPrintf((info->debug_level & OFR_INFO), "Load from memory.\n");
+	} else if (renderer->_font_source == OFR::FROM_MEMORY) {
+		debugPrintf((renderer->_debug_level & OFR_INFO), "Load from memory.\n");
 		const uint8_t FACE_INDEX = 0;
 
 		error = FT_New_Memory_Face(library, face->data, face->data_size, FACE_INDEX, aface); // create face object
 		if (error) {
-			debugPrintf((info->debug_level & OFR_ERROR), "Font load Failed: 0x%02X\n", error);
+			debugPrintf((renderer->_debug_level & OFR_ERROR), "Font load Failed: 0x%02X\n", error);
 		} else {
-			debugPrintf((info->debug_level & OFR_INFO), "Font load Success!\n");
+			debugPrintf((renderer->_debug_level & OFR_INFO), "Font load Success!\n");
 		}
 	}
 	return error;

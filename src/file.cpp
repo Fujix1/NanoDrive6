@@ -791,7 +791,7 @@ bool NDFile::processPlaybackQueue() {
   const bool browserSelection =
       command.type == PlaybackCommandType::PlayNode && previousView == ViewMode::Browser;
   if (browserSelection) {
-    // 別のOpenFontRenderが描画を始める前にBrowser側のFreeType状態を解放する。
+    // Browserを閉じ、一覧描画用のフォントキャッシュを解放する。
     browserWindow.close();
     disp.stopTimerDrawing = true;
     disp.currentView = disp.lastView == ViewMode::Visual ? ViewMode::Visual : ViewMode::Player;

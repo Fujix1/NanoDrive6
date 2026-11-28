@@ -191,6 +191,9 @@ public:
 	static const unsigned char CREDIT_STRING_SIZE     = 128; ///< Minimum string length for FreeType credit.
 
 	OpenFontRender();
+	~OpenFontRender();
+	OpenFontRender(const OpenFontRender&) = delete;
+	OpenFontRender& operator=(const OpenFontRender&) = delete;
 	void setUseRenderTask(bool enable);
 	void setRenderTaskStackSize(unsigned int stack_size);
 
@@ -332,6 +335,9 @@ public:
 	};
 
 private:
+	friend FT_Error ftc_face_requester(FTC_FaceID, FT_Library, FT_Pointer, FT_Face*);
+	FT_Library _ft_library = nullptr;
+	OFR::LoadFontFrom _font_source = OFR::FROM_MEMORY;
 	FT_Error loadFont(enum OFR::LoadFontFrom from);
 	uint32_t getFontMaxHeight();
 	void draw2screen(FT_BitmapGlyph glyph, uint32_t x, uint32_t y, uint16_t fg, uint16_t bg);
